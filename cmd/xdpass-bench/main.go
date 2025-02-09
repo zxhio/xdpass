@@ -8,6 +8,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type benchOpt struct {
+	IfaceName        string
+	QueueId          int
+	BenchNum         int
+	BatchSize        uint32
+	RateLimit        int
+	RateLimitPrecStr string
+	AffinityCPU      int
+	Stats            uint
+	layerOpt
+}
+
+var opt benchOpt
+
 var root = cobra.Command{
 	Use:   "xdpass-bench",
 	Short: "TCP/IP packet maker in Go",
@@ -42,21 +56,9 @@ var icmpv4 = &cobra.Command{
 	},
 }
 
-type Opt struct {
-	IfaceName        string
-	BenchNum         int
-	BatchSize        uint32
-	RateLimit        int
-	RateLimitPrecStr string
-	AffinityCPU      int
-	Stats            uint
-	layerOpt
-}
-
-var opt Opt
-
 func init() {
 	root.PersistentFlags().StringVarP(&opt.IfaceName, "iface", "i", "", "Interface name")
+	root.PersistentFlags().IntVarP(&opt.QueueId, "queue-id", "q", -1, "Interface queue id, -1 all queue id")
 	root.PersistentFlags().StringVar(&opt.SrcMACStr, "src-mac", "", "MAC source address")
 	root.PersistentFlags().StringVar(&opt.DstMACStr, "dst-mac", "", "MAC destination address")
 	root.PersistentFlags().Uint16Var(&opt.VlanId, "vlan", 0, "Vlan id")
@@ -66,7 +68,7 @@ func init() {
 	root.PersistentFlags().Uint32Var(&opt.BatchSize, "batch-size", 64, "Packet send batch size")
 	root.PersistentFlags().IntVar(&opt.RateLimit, "rate-limit", 1, "Packet send rate limit (s), -1 not limit")
 	root.PersistentFlags().StringVar(&opt.RateLimitPrecStr, "rate-limit-prec", "low", "Packet send rate limit precision, low|mid|high")
-	root.PersistentFlags().UintVarP(&opt.Stats, "stats", "s", 0, "Statistics duration (s)")
+	root.PersistentFlags().UintVarP(&opt.Stats, "stats", "s", 0, "Statistics output duration (s)")
 	root.PersistentFlags().IntVar(&opt.AffinityCPU, "cpu", -1, "Affinity cpu, -1 not set")
 	root.MarkFlagRequired("iface")
 	root.MarkFlagRequired("dst-ip")

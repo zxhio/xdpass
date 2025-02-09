@@ -95,9 +95,9 @@ func (l4MakerTCP) MakePayload(opt *layerOpt) (gopacket.Payload, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "hex.Decode")
 		}
-		return gopacket.Payload(data), nil
+		return gopacket.Payload(data[:min(len(data), 1400)]), nil
 	}
-	return gopacket.Payload(opt.tcp.Payload), nil
+	return gopacket.Payload(opt.tcp.Payload[:min(len(opt.tcp.Payload), 1400)]), nil
 }
 
 func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, error) {

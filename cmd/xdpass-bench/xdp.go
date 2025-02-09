@@ -1,31 +1,92 @@
 package main
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"github.com/zxhio/xdpass/pkg/xdp"
 	"golang.org/x/sys/unix"
 )
+
+type xdpTxBenchPool struct {
+	idx        int
+	benchmarks []*xdpTxBench
+}
+
+func newXDPTxBenchPool(ifaceName string, queueId int) (*xdpTxBenchPool, error) {
+	link, err := netlink.LinkByName(ifaceName)
+	if err != nil {
+		return nil, errors.Wrap(err, "netlink.LinkByName")
+	}
+	logrus.WithFields(logrus.Fields{
+		"name":   link.Attrs().Name,
+		"index":  link.Attrs().Index,
+		"num_tx": link.Attrs().NumTxQueues,
+	}).Info("Found link")
+
+	var pool xdpTxBenchPool
+	if queueId != -1 {
+		b, err := newXDPTxBench(ifaceName, uint32(queueId))
+		if err != nil {
+			return nil, err
+		}
+		pool.benchmarks = append(pool.benchmarks, b)
+	} else {
+		for id := 0; id < link.Attrs().NumTxQueues; id++ {
+			rxQueuePath := fmt.Sprintf("/sys/class/net/%s/queues/tx-%d", ifaceName, id)
+			_, err = os.Stat(rxQueuePath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return nil, errors.Wrap(err, "os.Stat")
+			}
+
+			b, err := newXDPTxBench(ifaceName, uint32(id))
+			if err != nil {
+				return nil, err
+			}
+			pool.benchmarks = append(pool.benchmarks, b)
+		}
+	}
+	return &pool, nil
+}
+
+func (b *xdpTxBenchPool) benchmarkTx(bd *txBenchData) {
+	b.benchmarks[b.idx%len(b.benchmarks)].benchmarkTx(bd)
+	b.idx++
+}
+
+func (b *xdpTxBenchPool) waitTxDone(bd *txBenchData) {
+	for _, bb := range b.benchmarks {
+		for bb.standing != 0 {
+			bb.complete(bd)
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+}
 
 type xdpTxBench struct {
 	*xdp.XDPSocket
 	standing uint32
 }
 
-func newXDPTxBench(ifaceName string) (*xdpTxBench, error) {
+func newXDPTxBench(ifaceName string, queueId uint32) (*xdpTxBench, error) {
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		return nil, errors.Wrap(err, "net.InterfaceByName")
 	}
 
-	s, err := xdp.NewXDPSocket(uint32(iface.Index), 0, xdp.WithXDPBindFlags(unix.XDP_FLAGS_SKB_MODE))
+	s, err := xdp.NewXDPSocket(uint32(iface.Index), queueId, xdp.WithXDPBindFlags(unix.XDP_FLAGS_SKB_MODE))
 	if err != nil {
 		return nil, err
 	}
-	logrus.WithField("fd", s.SocketFd()).Info("New xdp socket")
+	logrus.WithFields(logrus.Fields{"fd": s.SocketFd(), "queue_id": queueId}).Info("New xdp socket")
 
 	return &xdpTxBench{XDPSocket: s}, nil
 }

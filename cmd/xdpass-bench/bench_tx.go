@@ -31,7 +31,7 @@ type txBenchmark interface {
 	waitTxDone(*txBenchData)
 }
 
-func benchTx(ctx context.Context, opt *Opt, data []byte) error {
+func benchTx(ctx context.Context, opt *benchOpt, data []byte) error {
 	done := false
 	go func() {
 		<-ctx.Done()
@@ -61,7 +61,7 @@ func benchTx(ctx context.Context, opt *Opt, data []byte) error {
 		b   txBenchmark
 		err error
 	)
-	b, err = newXDPTxBench(opt.IfaceName)
+	b, err = newXDPTxBenchPool(opt.IfaceName, opt.QueueId)
 	if err != nil {
 		logrus.WithError(err).Warn("Not use xdp socket")
 		b, err = newRawSockTxBench(opt.IfaceName)
@@ -163,11 +163,18 @@ func dumpTxStatsRecord(stats *txStatsRecord, d time.Duration) {
 
 		bytes := stats.txBytes - prev.txBytes
 		bps := float64(bytes*8) / period
+
+		sends := stats.sendCount - prev.sendCount
+		sps := float64(sends*8) / period
+
+		fsends := stats.sendFailCount - prev.sendFailCount
+		fsps := float64(fsends*8) / period
+
 		prev = *stats
 		tm = time.Now()
 
-		logrus.Infof("Tx: %12d pkts  (%10.0f pps)  %s  %s  period:%fs",
-			stats.txPackets, pps, bytesWithUnit(stats.txBytes), bpsWithUnit(bps), period)
+		logrus.Infof("Tx: %12d pkts  (%8.0f pps)  %s  %s (%6.0f %6.0f sendto) period:%fs",
+			stats.txPackets, pps, bytesWithUnit(stats.txBytes), bpsWithUnit(bps), sps, fsps, period)
 	}
 }
 
@@ -197,6 +204,6 @@ func bpsWithUnit(bits float64) string {
 	} else if bits < unitSize*1000*1000*1000 {
 		return fmt.Sprintf("%4.0f Gbits/s", bits/1000/1000/1000)
 	} else {
-		return fmt.Sprintf("%4.0f PBits/s", bits/1000/1000/1000/1000)
+		return fmt.Sprintf("%4.0f Pbits/s", bits/1000/1000/1000/1000)
 	}
 }
