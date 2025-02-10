@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -11,77 +12,131 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type txStatsRecord struct {
+type txStats struct {
 	txPackets     int
 	txBytes       int
 	sendCount     int
 	sendFailCount int
 }
 
-type txBenchData struct {
-	stats     txStatsRecord
+type txBenchmark interface {
+	runBatch(*txBenchmarkData)
+	wait(*txBenchmarkData)
+}
+
+type txBenchmarkData struct {
+	stats     *txStats
 	data      []byte
 	n         int
 	batchSize uint32
 	done      *bool
 }
 
-type txBenchmark interface {
-	benchmarkTx(*txBenchData)
-	waitTxDone(*txBenchData)
+type txBenchmarkDataGroup struct {
+	txBenchmarkData
+	core       int
+	benchmarks []txBenchmark
 }
 
-func benchTx(ctx context.Context, opt *benchOpt, data []byte) error {
+func runTxBenchmark(ctx context.Context, opt *benchOpt, data []byte) error {
 	done := false
 	go func() {
 		<-ctx.Done()
 		done = true
 	}()
 
-	if opt.AffinityCPU != -1 {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		logrus.WithField("cpu", opt.AffinityCPU).Info("Set affinity cpu")
-		setAffinityCPU(opt.AffinityCPU)
-	}
-
-	bd := txBenchData{data: data, n: opt.BenchNum, done: &done}
-	if opt.RateLimit == -1 {
-		bd.batchSize = uint32(opt.BatchSize)
-	} else {
-		bd.batchSize = 1
-	}
-
-	if opt.Stats > 0 {
-		go dumpTxStatsRecord(&bd.stats, time.Duration(opt.Stats)*time.Second)
-	}
-
 	var (
-		b   txBenchmark
-		err error
+		benchmarks []txBenchmark
+		err        error
 	)
-	b, err = newXDPTxBenchPool(opt.IfaceName, opt.QueueId)
+
+	benchmarks, err = newXDPTxBenchmarks(opt.IfaceName, opt.QueueId)
 	if err != nil {
-		logrus.WithError(err).Warn("Not use xdp socket")
-		b, err = newRawSockTxBench(opt.IfaceName)
+		b, err := newRawSockTxBench(opt.IfaceName)
 		if err != nil {
 			return err
 		}
+		benchmarks = append(benchmarks, b)
 	}
+
+	var (
+		batchSize uint32
+		cores     []int
+	)
+	if opt.RateLimit == -1 {
+		batchSize = uint32(opt.BatchSize)
+		cores = opt.Cores
+	} else {
+		batchSize = 1
+		cores = opt.Cores[:1]
+	}
+	// cpu num should not greater than tx queue num
+	if len(cores) > len(benchmarks) {
+		cores = cores[:len(benchmarks)]
+	}
+
+	var groups []*txBenchmarkDataGroup
+	for _, c := range cores {
+		groups = append(groups, &txBenchmarkDataGroup{
+			txBenchmarkData: txBenchmarkData{
+				stats:     &txStats{},
+				data:      data,
+				batchSize: batchSize,
+				done:      &done,
+			},
+			core: c,
+		})
+	}
+
+	for k, b := range benchmarks {
+		groups[k%len(groups)].benchmarks = append(groups[k%len(groups)].benchmarks, b)
+	}
+	for k := range opt.BenchNum {
+		groups[k%len(groups)].n++
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(cores))
+
+	var stats []*txStats
+	for _, group := range groups {
+		stats = append(stats, group.stats)
+		go func() {
+			defer wg.Done()
+			runTxBenchmarkGroup(group)
+		}()
+	}
+	if opt.Stats > 0 {
+		go dumpTxStatsRecords(ctx, stats, time.Duration(opt.Stats)*time.Second)
+	}
+
+	wg.Wait()
+
+	return nil
+}
+
+func runTxBenchmarkGroup(bd *txBenchmarkDataGroup) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	logrus.WithFields(logrus.Fields{"core": bd.core, "benchmarks": len(bd.benchmarks)}).Info("Set affinity cpu")
+	setAffinityCPU(bd.core)
 
 	limiter := newRateLimiter(opt.RateLimit, rateLimitPrecisionFrom(opt.RateLimitPrecStr))
 	remain := opt.BenchNum
-	for opt.BenchNum == -1 || remain > 0 {
+
+	for idx := 0; opt.BenchNum == -1 || remain > 0; idx++ {
 		if opt.RateLimit != -1 && !limiter.allow() {
 			continue
 		}
-		b.benchmarkTx(&bd)
+
+		bd.benchmarks[idx%len(bd.benchmarks)].runBatch(&bd.txBenchmarkData)
 		remain -= int(bd.batchSize)
 	}
-	b.waitTxDone(&bd)
 
-	return nil
+	for _, b := range bd.benchmarks {
+		b.wait(&bd.txBenchmarkData)
+	}
 }
 
 func setAffinityCPU(cpu int) error {
@@ -149,32 +204,59 @@ func (r *rateLimiter) allow() bool {
 	return true
 }
 
-func dumpTxStatsRecord(stats *txStatsRecord, d time.Duration) {
-	prev := txStatsRecord{}
+func dumpTxStatsRecords(ctx context.Context, stats []*txStats, d time.Duration) {
+	prev := txStats{}
+	stat := txStats{}
 	tm := time.Now()
 	t := time.NewTicker(d)
 	for {
-		<-t.C
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+
+		joinStatsRecord(stats, &stat)
 
 		period := float64(time.Since(tm)) / float64(time.Second)
 
-		packets := stats.txPackets - prev.txPackets
+		packets := stat.txPackets - prev.txPackets
 		pps := float64(packets) / period
 
-		bytes := stats.txBytes - prev.txBytes
+		bytes := stat.txBytes - prev.txBytes
 		bps := float64(bytes*8) / period
 
-		sends := stats.sendCount - prev.sendCount
+		sends := stat.sendCount - prev.sendCount
 		sps := float64(sends*8) / period
 
-		fsends := stats.sendFailCount - prev.sendFailCount
+		fsends := stat.sendFailCount - prev.sendFailCount
 		fsps := float64(fsends*8) / period
 
-		prev = *stats
+		prev = stat
 		tm = time.Now()
 
 		logrus.Infof("Tx: %12d pkts  (%8.0f pps)  %s  %s (%6.0f %6.0f sendto) period:%fs",
-			stats.txPackets, pps, bytesWithUnit(stats.txBytes), bpsWithUnit(bps), sps, fsps, period)
+			stat.txPackets, pps, bytesWithUnit(stat.txBytes), bpsWithUnit(bps), sps, fsps, period)
+	}
+}
+
+func joinStatsRecord(stats []*txStats, stat *txStats) {
+	stat.txPackets = 0
+	stat.txBytes = 0
+	stat.sendCount = 0
+	stat.sendFailCount = 0
+
+	for _, s := range stats {
+		stat.txPackets += s.txPackets
+	}
+	for _, s := range stats {
+		stat.txBytes += s.txBytes
+	}
+	for _, s := range stats {
+		stat.sendCount += s.sendCount
+	}
+	for _, s := range stats {
+		stat.sendFailCount += s.sendFailCount
 	}
 }
 

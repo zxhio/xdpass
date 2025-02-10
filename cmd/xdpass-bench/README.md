@@ -56,10 +56,10 @@ $ xdpass-bench <l4_proto> -i <iface> --dst-ip <dst-ip> \
     --rate-limit <rate-limit> --rate-limit-prec <low|mid|high>
 ```
 
-Specify affinity cpu number with **--cpu**.
+Specify affinity cpu cores with **--cpu**.
 ```shell
 $ xdpass-bench <l4_proto> -i <iface> --dst-ip <dst-ip> \
-    --cpu <cpu>
+    --cpu <core1,core2,...>
 ```
 
 Specify statistics output duration with **--stats**.
@@ -150,7 +150,5 @@ $ xdpass-bench tcp -i <iface> --dst-ip <dst-ip> \
     --payload-hex <hex-payload>
 ```
 
-
 ## TODO
 - Add RX benchmark
-- Add multiple thread support

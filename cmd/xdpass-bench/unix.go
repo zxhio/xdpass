@@ -37,7 +37,7 @@ func newRawSockTxBench(ifaceName string) (*rawSockTxBench, error) {
 	}, nil
 }
 
-func (r *rawSockTxBench) benchmarkTx(b *txBenchData) {
+func (r *rawSockTxBench) runBatch(b *txBenchmarkData) {
 	for i := uint32(0); i < b.batchSize; i++ {
 		err := unix.Sendto(r.fd, b.data, 0, &r.addr)
 		if err != nil {
@@ -50,4 +50,4 @@ func (r *rawSockTxBench) benchmarkTx(b *txBenchData) {
 	}
 }
 
-func (r *rawSockTxBench) waitTxDone(b *txBenchData) {}
+func (r *rawSockTxBench) wait(b *txBenchmarkData) {}

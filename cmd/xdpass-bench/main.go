@@ -15,7 +15,7 @@ type benchOpt struct {
 	BatchSize        uint32
 	RateLimit        int
 	RateLimitPrecStr string
-	AffinityCPU      int
+	Cores            []int
 	Stats            uint
 	layerOpt
 }
@@ -39,7 +39,7 @@ var tcp = &cobra.Command{
 			return err
 		}
 		logrus.Infof("Packet hexdump %d bytes:\n%v", len(data), hex.Dump(data))
-		return benchTx(context.Background(), &opt, data)
+		return runTxBenchmark(context.Background(), &opt, data)
 	},
 }
 
@@ -52,7 +52,8 @@ var icmpv4 = &cobra.Command{
 			return err
 		}
 		logrus.Infof("Packet hexdump %d bytes:\n%v", len(data), hex.Dump(data))
-		return benchTx(context.Background(), &opt, data)
+		// return benchTx(context.Background(), &opt, data)
+		return runTxBenchmark(context.Background(), &opt, data)
 	},
 }
 
@@ -69,7 +70,7 @@ func init() {
 	root.PersistentFlags().IntVar(&opt.RateLimit, "rate-limit", 1, "Packet send rate limit (s), -1 not limit")
 	root.PersistentFlags().StringVar(&opt.RateLimitPrecStr, "rate-limit-prec", "low", "Packet send rate limit precision, low|mid|high")
 	root.PersistentFlags().UintVarP(&opt.Stats, "stats", "s", 0, "Statistics output duration (s)")
-	root.PersistentFlags().IntVar(&opt.AffinityCPU, "cpu", -1, "Affinity cpu, -1 not set")
+	root.PersistentFlags().IntSliceVar(&opt.Cores, "cpu", []int{0}, "Affinity cpu, -1 not set")
 	root.MarkFlagRequired("iface")
 	root.MarkFlagRequired("dst-ip")
 
