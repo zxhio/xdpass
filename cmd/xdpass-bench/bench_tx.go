@@ -130,6 +130,7 @@ func runTxBenchmarkGroup(bd *txBenchmarkDataGroup) {
 			continue
 		}
 
+		bd.batchSize = min(bd.batchSize, uint32(remain))
 		bd.benchmarks[idx%len(bd.benchmarks)].runBatch(&bd.txBenchmarkData)
 		remain -= int(bd.batchSize)
 	}
