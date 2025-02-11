@@ -52,7 +52,19 @@ var icmpv4 = &cobra.Command{
 			return err
 		}
 		logrus.Infof("Packet hexdump %d bytes:\n%v", len(data), hex.Dump(data))
-		// return benchTx(context.Background(), &opt, data)
+		return runTxBenchmark(context.Background(), &opt, data)
+	},
+}
+
+var udp = &cobra.Command{
+	Use:   "udp",
+	Short: "Send UDP packets",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		data, err := makePacketData(opt.IfaceName, &opt.layerOpt, l4MakerUDP{})
+		if err != nil {
+			return err
+		}
+		logrus.Infof("Packet hexdump %d bytes:\n%v", len(data), hex.Dump(data))
 		return runTxBenchmark(context.Background(), &opt, data)
 	},
 }
@@ -90,8 +102,15 @@ func init() {
 	icmpv4.Flags().Uint16Var(&opt.icmp4.Id, "id", 0, "ICMPv4 echo request id")
 	icmpv4.Flags().Uint16Var(&opt.icmp4.Seq, "seq", 0, "ICMPv4 echo request sequence")
 
+	// UDP
+	udp.Flags().Uint16Var(&opt.udp.SrcPort, "src-port", 0, "UDP source port")
+	udp.Flags().Uint16Var(&opt.udp.DstPort, "dst-port", 0, "UDP destination port")
+	udp.Flags().StringVar(&opt.udp.Payload, "payload", "", "UDP payload")
+	udp.Flags().StringVar(&opt.udp.PayloadHex, "payload-hex", "", "UDP hex payload")
+
 	root.AddCommand(tcp)
 	root.AddCommand(icmpv4)
+	root.AddCommand(udp)
 }
 
 func main() {

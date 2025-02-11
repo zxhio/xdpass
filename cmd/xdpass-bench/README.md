@@ -7,6 +7,7 @@ RX/TX benchmark tool.
 l4 protoco as *subcommand*.
 - icmp
 - tcp
+- udp
 
 Basic command option
 - **--iface** network interface name.
@@ -147,6 +148,25 @@ $ xdpass-bench tcp -i <iface> --dst-ip <dst-ip> \
     --src-port <src-port> --dst-port <dst-port> \
     --PSH --ACK \
     --seq <seq> \
+    --payload-hex <hex-payload>
+```
+
+#### Packet build for udp
+
+Specify udp port with **--src-port** and **--dst-port**.
+```shell
+$ xdpass-bench udp -i <iface> --dst-ip <dst-ip> \
+    --src-mac <src-mac> --dst-mac <dst-mac> \
+    --src-ip <src-ip> \
+    --src-port <src-port> --dst-port <dst-port>
+```
+
+Specify tcp payload with **--payload** or **--payload-hex**.
+```shell
+$ xdpass-bench udp -i <iface> --dst-ip <dst-ip> \
+    --src-mac <src-mac> --dst-mac <dst-mac> \
+    --src-ip <src-ip> \
+    --src-port <src-port> --dst-port <dst-port>
     --payload-hex <hex-payload>
 ```
 

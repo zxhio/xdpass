@@ -11,23 +11,23 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-type layerEthernetOpt struct {
+type layerOptEthernet struct {
 	SrcMACStr string
 	DstMACStr string
 	VlanId    uint16
 }
 
-type layerIPv4Opt struct {
+type layerOptIPv4 struct {
 	SrcIPStr string
 	DstIPStr string
 }
 
-type layerICMPv4Opt struct {
+type layerOptICMPv4 struct {
 	Id  uint16
 	Seq uint16
 }
 
-type layerTCPOpt struct {
+type layerOptTCP struct {
 	SYN        bool
 	ACK        bool
 	PSH        bool
@@ -40,11 +40,20 @@ type layerTCPOpt struct {
 	PayloadHex string
 }
 
+type layerOptUDP struct {
+	SrcPort     uint16
+	DstPort     uint16
+	Payload     string
+	PayloadHex  string
+	PayloadHex2 []byte
+}
+
 type layerOpt struct {
-	layerEthernetOpt
-	layerIPv4Opt
-	icmp4 layerICMPv4Opt
-	tcp   layerTCPOpt
+	layerOptEthernet
+	layerOptIPv4
+	icmp4 layerOptICMPv4
+	tcp   layerOptTCP
+	udp   layerOptUDP
 }
 
 type l4DMaker interface {
@@ -100,6 +109,29 @@ func (l4MakerTCP) MakePayload(opt *layerOpt) (gopacket.Payload, error) {
 	return gopacket.Payload(opt.tcp.Payload[:min(len(opt.tcp.Payload), 1400)]), nil
 }
 
+type l4MakerUDP struct{}
+
+func (l4MakerUDP) MakeLayer(opt *layerOpt, ipv4 *layers.IPv4) gopacket.SerializableLayer {
+	ipv4.Protocol = layers.IPProtocolUDP
+	udp := &layers.UDP{
+		SrcPort: layers.UDPPort(valueOr(opt.udp.SrcPort, 54321)),
+		DstPort: layers.UDPPort(valueOr(opt.udp.SrcPort, 54321)),
+	}
+	udp.SetNetworkLayerForChecksum(ipv4)
+	return udp
+}
+
+func (l4MakerUDP) MakePayload(opt *layerOpt) (gopacket.Payload, error) {
+	if len(opt.udp.Payload) == 0 && len(opt.udp.PayloadHex) != 0 {
+		data, err := hex.DecodeString(opt.udp.PayloadHex)
+		if err != nil {
+			return nil, errors.Wrap(err, "hex.Decode")
+		}
+		return gopacket.Payload(data[:min(len(data), 1400)]), nil
+	}
+	return gopacket.Payload(opt.udp.Payload[:min(len(opt.udp.Payload), 1400)]), nil
+}
+
 func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, error) {
 	link, err := netlink.LinkByName(ifaceName)
 	if err != nil {
@@ -107,13 +139,13 @@ func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, 
 	}
 	logrus.WithFields(logrus.Fields{"name": link.Attrs().Name, "index": link.Attrs().Index, "hwaddr": link.Attrs().HardwareAddr}).Debug("Found link")
 
-	srcIP, dstIP, err := getIPPair(link, &opt.layerIPv4Opt)
+	srcIP, dstIP, err := getIPPair(link, &opt.layerOptIPv4)
 	if err != nil {
 		return nil, err
 	}
 	logrus.WithFields(logrus.Fields{"src_ip": srcIP, "dst_ip": dstIP}).Debug("Found ip address")
 
-	srcMAC, dstMAC, err := getMACPair(link, &opt.layerEthernetOpt, dstIP)
+	srcMAC, dstMAC, err := getMACPair(link, &opt.layerOptEthernet, dstIP)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +177,7 @@ func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, 
 	return b.Bytes(), nil
 }
 
-func getIPPair(link netlink.Link, opt *layerIPv4Opt) (net.IP, net.IP, error) {
+func getIPPair(link netlink.Link, opt *layerOptIPv4) (net.IP, net.IP, error) {
 	var srcIP net.IP
 	if opt.SrcIPStr != "" {
 		srcIP = net.ParseIP(opt.SrcIPStr)
@@ -170,7 +202,7 @@ func getIPPair(link netlink.Link, opt *layerIPv4Opt) (net.IP, net.IP, error) {
 	return srcIP, dstIP, nil
 }
 
-func getMACPair(link netlink.Link, opt *layerEthernetOpt, dstIP net.IP) (net.HardwareAddr, net.HardwareAddr, error) {
+func getMACPair(link netlink.Link, opt *layerOptEthernet, dstIP net.IP) (net.HardwareAddr, net.HardwareAddr, error) {
 	var (
 		srcMAC net.HardwareAddr
 		err    error
