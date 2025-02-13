@@ -2,22 +2,15 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/zxhio/xdpass/internal/stats"
 	"golang.org/x/sys/unix"
 	"golang.org/x/time/rate"
 )
-
-type txStats struct {
-	txPackets     int
-	txBytes       int
-	sendCount     int
-	sendFailCount int
-}
 
 type txBenchmark interface {
 	runBatch(*txBenchmarkData)
@@ -25,7 +18,7 @@ type txBenchmark interface {
 }
 
 type txBenchmarkData struct {
-	stats     *txStats
+	stat      *stats.Statistics
 	data      []byte
 	n         int
 	batchSize uint32
@@ -79,7 +72,7 @@ func runTxBenchmark(ctx context.Context, opt *benchOpt, data []byte) error {
 	for _, c := range cores {
 		groups = append(groups, &txBenchmarkDataGroup{
 			txBenchmarkData: txBenchmarkData{
-				stats:     &txStats{},
+				stat:      &stats.Statistics{},
 				data:      data,
 				batchSize: batchSize,
 				done:      &done,
@@ -98,16 +91,16 @@ func runTxBenchmark(ctx context.Context, opt *benchOpt, data []byte) error {
 	wg := sync.WaitGroup{}
 	wg.Add(len(cores))
 
-	var stats []*txStats
+	var statsList []*stats.Statistics
 	for _, group := range groups {
-		stats = append(stats, group.stats)
+		statsList = append(statsList, group.stat)
 		go func() {
 			defer wg.Done()
 			runTxBenchmarkGroup(group)
 		}()
 	}
 	if opt.Stats > 0 {
-		go dumpTxStatsRecords(ctx, stats, time.Duration(opt.Stats)*time.Second)
+		go stats.DumpStatisticsListLoop(ctx, "TX:", statsList, time.Duration(opt.Stats)*time.Second, logrus.Info)
 	}
 
 	wg.Wait()
@@ -203,90 +196,4 @@ func (r *rateLimiter) allow() bool {
 
 	time.Sleep(time.Second / time.Duration(opt.RateLimit))
 	return true
-}
-
-func dumpTxStatsRecords(ctx context.Context, stats []*txStats, d time.Duration) {
-	prev := txStats{}
-	stat := txStats{}
-	tm := time.Now()
-	t := time.NewTicker(d)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-
-		joinStatsRecord(stats, &stat)
-
-		period := float64(time.Since(tm)) / float64(time.Second)
-
-		packets := stat.txPackets - prev.txPackets
-		pps := float64(packets) / period
-
-		bytes := stat.txBytes - prev.txBytes
-		bps := float64(bytes*8) / period
-
-		sends := stat.sendCount - prev.sendCount
-		sps := float64(sends*8) / period
-
-		fsends := stat.sendFailCount - prev.sendFailCount
-		fsps := float64(fsends*8) / period
-
-		prev = stat
-		tm = time.Now()
-
-		logrus.Infof("Tx: %12d pkts  (%8.0f pps)  %s  %s (%6.0f %6.0f sendto) period:%fs",
-			stat.txPackets, pps, bytesWithUnit(stat.txBytes), bpsWithUnit(bps), sps, fsps, period)
-	}
-}
-
-func joinStatsRecord(stats []*txStats, stat *txStats) {
-	stat.txPackets = 0
-	stat.txBytes = 0
-	stat.sendCount = 0
-	stat.sendFailCount = 0
-
-	for _, s := range stats {
-		stat.txPackets += s.txPackets
-	}
-	for _, s := range stats {
-		stat.txBytes += s.txBytes
-	}
-	for _, s := range stats {
-		stat.sendCount += s.sendCount
-	}
-	for _, s := range stats {
-		stat.sendFailCount += s.sendFailCount
-	}
-}
-
-const unitSize = 10000
-
-func bytesWithUnit(bytes int) string {
-	if bytes < unitSize {
-		return fmt.Sprintf("%4d Bytes ", bytes)
-	} else if bytes < unitSize*1000 {
-		return fmt.Sprintf("%4d KBytes", bytes/1000)
-	} else if bytes < unitSize*1000*1000 {
-		return fmt.Sprintf("%4d MBytes", bytes/1000/1000)
-	} else if bytes < unitSize*1000*1000*1000 {
-		return fmt.Sprintf("%4d GBytes", bytes/1000/1000/1000)
-	} else {
-		return fmt.Sprintf("%4d PBytes", bytes/1000/1000/1000/1000)
-	}
-}
-
-func bpsWithUnit(bits float64) string {
-	if bits < unitSize {
-		return fmt.Sprintf("%4.0f bits/s ", bits)
-	} else if bits < unitSize*1000 {
-		return fmt.Sprintf("%4.0f Kbits/s", bits/1000)
-	} else if bits < unitSize*1000*1000 {
-		return fmt.Sprintf("%4.0f Mbits/s", bits/1000/1000)
-	} else if bits < unitSize*1000*1000*1000 {
-		return fmt.Sprintf("%4.0f Gbits/s", bits/1000/1000/1000)
-	} else {
-		return fmt.Sprintf("%4.0f Pbits/s", bits/1000/1000/1000/1000)
-	}
 }

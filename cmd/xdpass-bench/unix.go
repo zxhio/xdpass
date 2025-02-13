@@ -41,12 +41,12 @@ func (r *rawSockTxBench) runBatch(b *txBenchmarkData) {
 	for i := uint32(0); i < b.batchSize; i++ {
 		err := unix.Sendto(r.fd, b.data, 0, &r.addr)
 		if err != nil {
-			b.stats.sendFailCount++
+			b.stat.IOFailCount++
 		} else {
-			b.stats.txPackets++
-			b.stats.txBytes += int(b.batchSize)
+			b.stat.Packets++
+			b.stat.Bytes += uint64(b.batchSize)
 		}
-		b.stats.sendCount++
+		b.stat.IOCount++
 	}
 }
 

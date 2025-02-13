@@ -101,9 +101,9 @@ func (b *xdpTxBenchmark) complete(bd *txBenchmarkData) {
 
 	err := unix.Sendto(b.SocketFd(), nil, unix.MSG_DONTWAIT, nil)
 	if err != nil {
-		bd.stats.sendFailCount++
+		bd.stat.IOFailCount++
 	}
-	bd.stats.sendCount++
+	bd.stat.IOCount++
 
 	var (
 		idx       uint32
@@ -114,8 +114,8 @@ func (b *xdpTxBenchmark) complete(bd *txBenchmarkData) {
 		return
 	}
 	for i := uint32(0); i < completed; i++ {
-		bd.stats.txPackets++
-		bd.stats.txBytes += len(bd.data)
+		bd.stat.Packets++
+		bd.stat.Bytes += uint64(len(bd.data))
 		b.FreeUmemFrame(*b.Umem.Comp.GetAddr(idx + i))
 	}
 	b.Umem.Comp.Release(completed)
