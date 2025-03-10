@@ -5,13 +5,34 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
+	"github.com/sirupsen/logrus"
+	"github.com/zxhio/xdpass/pkg/logs"
 	"github.com/zxhio/xdpass/pkg/xdp"
+)
+
+const (
+	DefaultLogPath          = "/var/log/xdpass/xdpassd.log"
+	DefaultLogLevel         = logrus.InfoLevel
+	DefaultCheckPath        = "/etc/xdpass/xdpassd.log.level"
+	DefaultCheckIntervalSec = 30
 )
 
 type Config struct {
 	PollTimeoutMs int               `toml:"poll_timeout_ms"`
 	Cores         []int             `toml:"cores"`
 	Interfaces    []InterfaceConfig `toml:"interfaces"`
+	Log           LogConfig         `toml:"log"`
+}
+
+type LogConfig struct {
+	Path             string `toml:"path"`
+	Level            string `toml:"level"`
+	CheckPath        string `toml:"level_check_path"`
+	CheckIntervalSec int    `toml:"level_check_interval_sec"`
+	MaxSize          int    `toml:"max_size"`
+	MaxBackups       int    `toml:"max_backups"`
+	MaxAge           int    `toml:"max_age"`
+	Compress         bool   `toml:"compress"`
 }
 
 type InterfaceConfig struct {
@@ -28,33 +49,48 @@ type InterfaceConfig struct {
 	XDPOpts []xdp.XDPOpt `toml:"-"`
 }
 
+var (
+	defaultInterfaceConfigOffload = InterfaceConfig{
+		Name:          "br1",
+		QueueID:       -1,
+		AttachMode:    xdp.XDPAttachModeNative,
+		ForceZeroCopy: true,
+		NoNeedWakeup:  false,
+	}
+
+	defaultInterfaceConfigGeneric = InterfaceConfig{
+		Name:         "eth0",
+		QueueID:      0,
+		AttachMode:   xdp.XDPAttachModeGeneric,
+		ForceCopy:    true,
+		NoNeedWakeup: false,
+	}
+
+	defaultLogConfig = LogConfig{
+		Path:             DefaultLogPath,
+		Level:            DefaultLogLevel.String(),
+		CheckPath:        DefaultCheckPath,
+		CheckIntervalSec: DefaultCheckIntervalSec,
+		MaxSize:          logs.DefaultMaxSize,
+		MaxBackups:       logs.DefaultMaxBackups,
+		MaxAge:           logs.DefaultMaxAge,
+		Compress:         logs.DefaultCompress,
+	}
+)
+
 func DefaultConfigOffload() *Config {
 	return &Config{
-		Cores: []int{0, 2},
-		Interfaces: []InterfaceConfig{
-			{
-				Name:          "br1",
-				QueueID:       -1,
-				AttachMode:    xdp.XDPAttachModeNative,
-				ForceZeroCopy: true,
-				NoNeedWakeup:  false,
-			},
-		},
+		Cores:      []int{0, 2},
+		Interfaces: []InterfaceConfig{defaultInterfaceConfigOffload},
+		Log:        defaultLogConfig,
 	}
 }
 
 func DefaultConfigGeneric() *Config {
 	return &Config{
 		PollTimeoutMs: 10,
-		Interfaces: []InterfaceConfig{
-			{
-				Name:         "eth0",
-				QueueID:      0,
-				AttachMode:   xdp.XDPAttachModeGeneric,
-				ForceCopy:    true,
-				NoNeedWakeup: false,
-			},
-		},
+		Interfaces:    []InterfaceConfig{defaultInterfaceConfigGeneric},
+		Log:           defaultLogConfig,
 	}
 }
 

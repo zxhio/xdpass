@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/sirupsen/logrus"
@@ -18,17 +19,16 @@ import (
 	"github.com/zxhio/xdpass/internal/commands/statscmd"
 	"github.com/zxhio/xdpass/internal/config"
 	"github.com/zxhio/xdpass/pkg/builder"
+	"github.com/zxhio/xdpass/pkg/logs"
 )
 
 var opt struct {
-	verbose    bool
 	version    bool
 	config     string
 	dumpConfig string
 }
 
 func main() {
-	pflag.BoolVarP(&opt.verbose, "verbose", "v", false, "Verbose output")
 	pflag.BoolVarP(&opt.version, "version", "V", false, "Prints the build information")
 	pflag.StringVarP(&opt.config, "config", "c", "/etc/xdpass/xdpassd.toml", "Config file path")
 	pflag.StringVar(&opt.dumpConfig, "dump-config", "", "Dump default config [generic|native]")
@@ -46,8 +46,13 @@ func main() {
 		return
 	}
 
-	if opt.verbose {
-		logrus.SetLevel(logrus.DebugLevel)
+	cfg, err := config.NewConfig(opt.config)
+	if err != nil {
+		logrus.WithField("err", err).Fatal("Fail to load config")
+	}
+
+	if err := setLogger(&cfg.Log); err != nil {
+		logrus.WithField("err", err).Fatal("Fail to set logger")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,11 +72,6 @@ func main() {
 	}
 	defer server.Close()
 	go server.Serve(ctx)
-
-	cfg, err := config.NewConfig(opt.config)
-	if err != nil {
-		logrus.WithField("err", err).Fatal("Fail to load config")
-	}
 
 	links := make([]*internal.LinkHandle, len(cfg.Interfaces))
 	for i, iface := range cfg.Interfaces {
@@ -117,5 +117,45 @@ func dumpConfig(dumpType string) error {
 		return err
 	}
 	fmt.Println(string(data))
+	return nil
+}
+
+func setLogger(cfg *config.LogConfig) error {
+	opts := []logs.LogOpt{}
+
+	if cfg.Level != "" {
+		level, err := logrus.ParseLevel(cfg.Level)
+		if err != nil {
+			return err
+		}
+		logrus.SetLevel(level)
+	}
+
+	if cfg.CheckPath != "" {
+		if cfg.CheckIntervalSec > 0 {
+			opts = append(opts, logs.WithLevelCheckPath(cfg.CheckPath, time.Duration(cfg.CheckIntervalSec)*time.Second))
+		} else {
+			opts = append(opts, logs.WithLevelCheckPath(cfg.CheckPath, config.DefaultCheckIntervalSec*time.Second))
+		}
+	}
+
+	if cfg.MaxSize > 0 {
+		opts = append(opts, logs.WithMaxSize(cfg.MaxSize))
+	}
+	if cfg.MaxBackups > 0 {
+		opts = append(opts, logs.WithMaxBackups(cfg.MaxBackups))
+	}
+	if cfg.MaxAge > 0 {
+		opts = append(opts, logs.WithMaxAge(cfg.MaxAge))
+	}
+	if cfg.Compress {
+		opts = append(opts, logs.WithCompress())
+	}
+
+	logpath := cfg.Path
+	if logpath == "" {
+		logpath = config.DefaultLogPath
+	}
+	logs.NewDynLoggerWith(logrus.StandardLogger(), logpath, opts...)
 	return nil
 }

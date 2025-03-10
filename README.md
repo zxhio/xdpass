@@ -9,6 +9,40 @@ Using XDP to filter or redirect packets to user space.
 
 Specific features, see **xdpass**.
 
+### usage
+
+Edit the config file in `/etc/xdpass/xdpassd.toml`.
+```toml
+poll_timeout_ms = 10
+
+[[interfaces]]
+  name = "eth0"
+  queue_id = 0
+  attach_mode = "generic"
+  force_copy = true
+  no_need_wakeup = false
+
+[log]
+  path = "/var/log/xdpass/xdpassd.log"
+  level = "info"
+  level_check_path = "/etc/xdpass/xdpassd.log.level"
+  level_check_interval_sec = 30
+  max_size = 100
+  max_backups = 3
+  max_age = 30
+  compress = true
+```
+
+Interface config:
+- `name`: specify the interface name.
+- `queue_id`: specify the queue id for the interface, -1 means using all queues.
+- `attach_mode`: specify the attach mode for the interface, could be `generic`(aka skb), `native` or `offload`.
+- `force_copy`: force the copy mode for the interface.
+- `force_zero_copy`: force the zero copy mode for the interface.
+- `no_need_wakeup`: specify whether the interface needs to wakeup the kernel.
+
+Log config `level_check_path` could be a file path, allow dynamic change log level.
+
 ## xdpass
 
 A tool for interacting with **xdpassd**.
@@ -184,7 +218,6 @@ $ ./scripts/make_test_env.sh add
 ```
 
 ## TODO
-- Add xdpassd systemd service support
 - Add xdpassd redirect traffic to remote support
 - Add whitelist and blacklist firewall support
 - Add IPv6 support
