@@ -50,13 +50,14 @@ func (StatsCommandClient) DoReq(opt StatsOpt) error {
 	timer := time.NewTicker(opt.StatsDur)
 	for range timer.C {
 		tbl := tablewriter.NewWriter(os.Stdout)
-		tbl.SetHeader([]string{"interface", "queue", "rx_pkts", "rx_pps", "tx_pkts", "tx_pps", "rx_bytes", "rx_bps", "rx_iops", "rx_err_iops"})
+		tbl.SetHeader([]string{"interface", "queue", "rx_pkts", "tx_pkts", "rx_pps", "tx_pps", "rx_bytes", "tx_bytes", "rx_bps", "tx_bps", "rx_iops", "tx_iops"})
 		tbl.SetAutoMergeCellsByColumnIndex([]int{0})
 		tbl.SetAlignment(tablewriter.ALIGN_CENTER)
 
 		sum := struct {
 			netutil.Statistics
 			netutil.StatisticsRate
+			numQueues int
 		}{}
 
 		req := &protos.StatsReq{Interface: opt.Interface}
@@ -74,38 +75,35 @@ func (StatsCommandClient) DoReq(opt StatsOpt) error {
 				tbl.Append([]string{
 					iface.Interface,
 					fmt.Sprintf("%d", queue.QueueID),
-					fmt.Sprintf("%d", stat.RxPackets),
-					fmt.Sprintf("%.0f", rate.RxPPS),
-					fmt.Sprintf("%d", stat.TxPackets),
-					fmt.Sprintf("%.0f", rate.TxPPS),
-					humanize.Bytes(int(stat.RxBytes)),
-					humanize.BitsRate(int(rate.RxBPS)),
-					fmt.Sprintf("%.0f", rate.RxIOPS),
-					fmt.Sprintf("%.0f", rate.RxErrorPS),
+					fmt.Sprintf("%d", stat.RxPackets), fmt.Sprintf("%d", stat.TxPackets),
+					fmt.Sprintf("%.0f", rate.RxPPS), fmt.Sprintf("%.0f", rate.TxPPS),
+					humanize.Bytes(int(stat.RxBytes)), humanize.Bytes(int(stat.TxBytes)),
+					humanize.BitsRate(int(rate.RxBPS)), humanize.BitsRate(int(rate.TxBPS)),
+					fmt.Sprintf("%.0f", rate.RxIOPS), fmt.Sprintf("%.0f", rate.TxIOPS),
 				})
 
 				sum.RxPackets += stat.RxPackets
 				sum.TxPackets += stat.TxPackets
 				sum.RxBytes += stat.RxBytes
+				sum.TxBytes += stat.TxBytes
 				sum.RxPPS += rate.RxPPS
 				sum.TxPPS += rate.TxPPS
 				sum.RxBPS += rate.RxBPS
+				sum.TxBPS += rate.TxBPS
 				sum.RxIOPS += rate.RxIOPS
-				sum.RxErrorPS += rate.RxErrorPS
+				sum.TxIOPS += rate.TxIOPS
+				sum.numQueues++
 			}
 		}
 
 		tbl.SetFooter([]string{
 			"SUM",
-			fmt.Sprintf("%d", len(resp.Interfaces)),
-			fmt.Sprintf("%d", sum.RxPackets),
-			fmt.Sprintf("%.0f", sum.RxPPS),
-			fmt.Sprintf("%d", sum.TxPackets),
-			fmt.Sprintf("%.0f", sum.TxPPS),
-			humanize.Bytes(int(sum.RxBytes)),
-			humanize.BitsRate(int(sum.RxBPS)),
-			fmt.Sprintf("%.0f", sum.RxIOPS),
-			fmt.Sprintf("%.0f", sum.RxErrorPS),
+			fmt.Sprintf("%d", sum.numQueues),
+			fmt.Sprintf("%d", sum.RxPackets), fmt.Sprintf("%d", sum.TxPackets),
+			fmt.Sprintf("%.0f", sum.RxPPS), fmt.Sprintf("%.0f", sum.TxPPS),
+			humanize.Bytes(int(sum.RxBytes)), humanize.Bytes(int(sum.TxBytes)),
+			humanize.BitsRate(int(sum.RxBPS)), humanize.BitsRate(int(sum.TxBPS)),
+			fmt.Sprintf("%.0f", sum.RxIOPS), fmt.Sprintf("%.0f", sum.TxIOPS),
 		})
 		tbl.Render()
 		fmt.Println()
