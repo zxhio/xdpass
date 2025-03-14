@@ -105,19 +105,20 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	for _, cfg := range cfg.Interfaces {
-		if err := validateInterfaceConfig(&cfg); err != nil {
+	for k, iface := range cfg.Interfaces {
+		if err := validateInterfaceConfig(&iface); err != nil {
 			return nil, err
 		}
 
-		if cfg.ForceZeroCopy {
-			cfg.XDPOpts = append(cfg.XDPOpts, xdp.WithZeroCopy())
-		} else if cfg.ForceCopy {
-			cfg.XDPOpts = append(cfg.XDPOpts, xdp.WithCopy())
+		if iface.ForceZeroCopy {
+			iface.XDPOpts = append(iface.XDPOpts, xdp.WithZeroCopy())
+		} else if iface.ForceCopy {
+			iface.XDPOpts = append(iface.XDPOpts, xdp.WithCopy())
 		}
-		if cfg.NoNeedWakeup {
-			cfg.XDPOpts = append(cfg.XDPOpts, xdp.WithNoNeedWakeup())
+		if iface.NoNeedWakeup {
+			iface.XDPOpts = append(iface.XDPOpts, xdp.WithNoNeedWakeup())
 		}
+		cfg.Interfaces[k] = iface
 	}
 
 	return &cfg, nil
