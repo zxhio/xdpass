@@ -45,18 +45,10 @@ type Packet struct {
 	TxData []byte // Raw data to be sent to the network
 }
 
+var emptyPacket = Packet{}
+
 func (pkt *Packet) Clear() {
-	pkt.L3Proto = 0
-	pkt.L4Proto = 0
-	pkt.SrcIP = 0
-	pkt.DstIP = 0
-	pkt.SrcPort = 0
-	pkt.DstPort = 0
-	pkt.L2Len = 0
-	pkt.L3Len = 0
-	pkt.L4Len = 0
-	pkt.RxData = nil
-	pkt.TxData = nil
+	*pkt = emptyPacket
 }
 
 func (pkt *Packet) DecodeFromData(data []byte) error {

@@ -125,6 +125,32 @@ func TestDecodePacketICMP(t *testing.T) {
 	assert.Equal(t, uint8(SizeofICMP), pkt.L4Len)
 }
 
+func BenchmarkPacketClear(b *testing.B) {
+	pkt := &Packet{}
+
+	b.Run("assign_empty_struct", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pkt.Clear()
+		}
+	})
+
+	b.Run("assign_one_by_one", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pkt.DstIP = 0
+			pkt.SrcIP = 0
+			pkt.DstPort = 0
+			pkt.SrcPort = 0
+			pkt.L2Len = 0
+			pkt.L3Len = 0
+			pkt.L4Len = 0
+			pkt.RxData = nil
+			pkt.TxData = nil
+		}
+	})
+}
+
 func BenchmarkDecodePacket(b *testing.B) {
 	testLayerEth.EthernetType = layers.EthernetTypeIPv4
 	testLayerIPv4.Protocol = layers.IPProtocolTCP
