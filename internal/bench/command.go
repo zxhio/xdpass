@@ -104,7 +104,7 @@ func init() {
 	tcp.Flags().Uint16Var(&opt.tcp.DstPort, "dst-port", 0, "TCP destination port")
 	tcp.Flags().Uint32Var(&opt.tcp.Seq, "seq", 0, "TCP sequence")
 	tcp.Flags().StringVar(&opt.tcp.Payload, "payload", "", "TCP payload")
-	tcp.Flags().StringVar(&opt.tcp.PayloadHex, "payload-hex", "", "TCP hex payload")
+	tcp.Flags().StringVar(&opt.tcp.PayloadPath, "payload-path", "", "TCP payload path")
 
 	// ICMP
 	icmpv4.Flags().Uint16Var(&opt.icmp4.Id, "id", 0, "ICMPv4 echo request id")
@@ -114,7 +114,7 @@ func init() {
 	udp.Flags().Uint16Var(&opt.udp.SrcPort, "src-port", 0, "UDP source port")
 	udp.Flags().Uint16Var(&opt.udp.DstPort, "dst-port", 0, "UDP destination port")
 	udp.Flags().StringVar(&opt.udp.Payload, "payload", "", "UDP payload")
-	udp.Flags().StringVar(&opt.udp.PayloadHex, "payload-hex", "", "UDP hex payload")
+	udp.Flags().StringVar(&opt.udp.PayloadPath, "payload-path", "", "UDP payload path")
 
 	benchCmd.AddCommand(tcp)
 	benchCmd.AddCommand(icmpv4)

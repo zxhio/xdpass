@@ -1,8 +1,8 @@
 package bench
 
 import (
-	"encoding/hex"
 	"net"
+	"os"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -28,24 +28,23 @@ type layerOptICMPv4 struct {
 }
 
 type layerOptTCP struct {
-	SYN        bool
-	ACK        bool
-	PSH        bool
-	RST        bool
-	FIN        bool
-	SrcPort    uint16
-	DstPort    uint16
-	Seq        uint32
-	Payload    string
-	PayloadHex string
+	SYN         bool
+	ACK         bool
+	PSH         bool
+	RST         bool
+	FIN         bool
+	SrcPort     uint16
+	DstPort     uint16
+	Seq         uint32
+	Payload     string
+	PayloadPath string
 }
 
 type layerOptUDP struct {
 	SrcPort     uint16
 	DstPort     uint16
 	Payload     string
-	PayloadHex  string
-	PayloadHex2 []byte
+	PayloadPath string
 }
 
 type layerOpt struct {
@@ -99,10 +98,10 @@ func (l4MakerTCP) MakeLayer(opt *layerOpt, ipv4 *layers.IPv4) gopacket.Serializa
 }
 
 func (l4MakerTCP) MakePayload(opt *layerOpt) (gopacket.Payload, error) {
-	if len(opt.tcp.Payload) == 0 && len(opt.tcp.PayloadHex) != 0 {
-		data, err := hex.DecodeString(opt.tcp.PayloadHex)
+	if len(opt.tcp.Payload) == 0 && len(opt.tcp.PayloadPath) != 0 {
+		data, err := os.ReadFile(opt.tcp.PayloadPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "hex.Decode")
+			return nil, errors.Wrap(err, "os.ReadFile")
 		}
 		return gopacket.Payload(data[:min(len(data), 1400)]), nil
 	}
@@ -122,10 +121,10 @@ func (l4MakerUDP) MakeLayer(opt *layerOpt, ipv4 *layers.IPv4) gopacket.Serializa
 }
 
 func (l4MakerUDP) MakePayload(opt *layerOpt) (gopacket.Payload, error) {
-	if len(opt.udp.Payload) == 0 && len(opt.udp.PayloadHex) != 0 {
-		data, err := hex.DecodeString(opt.udp.PayloadHex)
+	if len(opt.udp.Payload) == 0 && len(opt.udp.PayloadPath) != 0 {
+		data, err := os.ReadFile(opt.udp.PayloadPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "hex.Decode")
+			return nil, errors.Wrap(err, "os.ReadFile")
 		}
 		return gopacket.Payload(data[:min(len(data), 1400)]), nil
 	}
@@ -137,7 +136,12 @@ func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, 
 	if err != nil {
 		return nil, errors.Wrap(err, "netlink.LinkByName")
 	}
-	logrus.WithFields(logrus.Fields{"name": link.Attrs().Name, "index": link.Attrs().Index, "hwaddr": link.Attrs().HardwareAddr}).Debug("Found link")
+	logrus.WithFields(logrus.Fields{
+		"name":   link.Attrs().Name,
+		"index":  link.Attrs().Index,
+		"hwaddr": link.Attrs().HardwareAddr,
+		"mtu":    link.Attrs().MTU,
+	}).Debug("Found link")
 
 	srcIP, dstIP, err := getIPPair(link, &opt.layerOptIPv4)
 	if err != nil {
@@ -167,6 +171,7 @@ func makePacketData(ifaceName string, opt *layerOpt, l4Maker l4DMaker) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
+	payload = payload[:min(len(payload), link.Attrs().MTU-14-20)]
 	packetLayers = append(packetLayers, &ipv4, l4, payload)
 
 	b := gopacket.NewSerializeBuffer()
