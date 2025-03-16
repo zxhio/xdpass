@@ -14,20 +14,19 @@ type RedirectHandle interface {
 }
 
 type Redirect struct {
-	// TODO: Use array to avoid map lookup
-	handles map[protos.RedirectType]RedirectHandle
+	handles []RedirectHandle
 	closers utils.NamedClosers
 }
 
 func NewRedirect(ifaceName string, frameSize int) (*Redirect, error) {
-	handles := map[protos.RedirectType]RedirectHandle{}
+	handles := []RedirectHandle{}
 
 	// Dump
 	dump, err := NewDumpHandle(frameSize)
 	if err != nil {
 		return nil, err
 	}
-	handles[protos.RedirectTypeDump] = dump
+	handles = append(handles, dump)
 	exports.RegisterDumpAPI(ifaceName, dump)
 	closers := utils.NamedClosers{utils.NamedCloser{Name: "dump.DumpHandle", Close: dump.Close}}
 
@@ -39,7 +38,7 @@ func NewRedirect(ifaceName string, frameSize int) (*Redirect, error) {
 	if err != nil {
 		return nil, err
 	}
-	handles[protos.RedirectTypeSpoof] = spoof
+	handles = append(handles, spoof)
 	exports.RegisterSpoofAPI(ifaceName, spoof)
 	closers = append(closers, utils.NamedCloser{Name: "spoof.SpoofHandle", Close: spoof.Close})
 
@@ -48,7 +47,7 @@ func NewRedirect(ifaceName string, frameSize int) (*Redirect, error) {
 	if err != nil {
 		return nil, err
 	}
-	handles[protos.RedirectTypeTuntap] = tuntap
+	handles = append(handles, tuntap)
 	exports.RegisterTuntapAPI(ifaceName, tuntap)
 	closers = append(closers, utils.NamedCloser{Name: "tun.TunHandle", Close: tuntap.Close})
 
