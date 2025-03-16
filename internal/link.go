@@ -175,6 +175,7 @@ func (x *LinkHandle) Close() error {
 type xskGroup struct {
 	xsks []*xdp.XDPSocket
 	core int
+	fds  []unix.PollFd
 }
 
 func (x *LinkHandle) Run(ctx context.Context) error {
@@ -195,6 +196,7 @@ func (x *LinkHandle) Run(ctx context.Context) error {
 	}
 	for k, xsk := range x.xsks {
 		xskGroups[k%len(xskGroups)].xsks = append(xskGroups[k%len(xskGroups)].xsks, xsk)
+		xskGroups[k%len(xskGroups)].fds = append(xskGroups[k%len(xskGroups)].fds, unix.PollFd{Fd: int32(xsk.SocketFD()), Events: unix.POLLIN})
 	}
 
 	wg := sync.WaitGroup{}
@@ -227,7 +229,7 @@ func (x *LinkHandle) Run(ctx context.Context) error {
 			}
 
 			for !done {
-				err := x.waitPoll()
+				err := x.waitPoll(g.fds)
 				if err != nil {
 					continue
 				}
@@ -266,19 +268,16 @@ func (x *LinkHandle) handleXSK(xsk *xdp.XDPSocket, rxDataVec, tmpTxDataVec [][]b
 		}
 	}
 	if txIdx > 0 {
-		xsk.Writev(tmpTxDataVec[:txIdx])
+		for xsk.Writev(tmpTxDataVec[:txIdx]) == 0 {
+		}
 	}
 }
 
-func (x *LinkHandle) waitPoll() error {
+func (x *LinkHandle) waitPoll(fds []unix.PollFd) error {
 	if x.pollTimeout == 0 {
 		return nil
 	}
 
-	fds := []unix.PollFd{}
-	for _, xsk := range x.xsks {
-		fds = append(fds, unix.PollFd{Fd: int32(xsk.SocketFD()), Events: unix.POLLIN})
-	}
 	_, err := unix.Poll(fds, x.pollTimeout)
 	if err != nil {
 		if errors.Is(err, unix.EINTR) {
