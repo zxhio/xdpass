@@ -29,12 +29,93 @@ var statsCommand = &cobra.Command{
 func init() {
 	commands.SetFlagsInterface(statsCommand.Flags(), &opt.Interface)
 	statsCommand.Flags().DurationVarP(&opt.StatsDur, "duration", "d", time.Second*3, "Statistics duration")
+	statsCommand.Flags().BoolVarP(&opt.ShowPackets, "packets", "p", true, "Show packets")
+	statsCommand.Flags().BoolVarP(&opt.ShowPps, "pps", "P", true, "Show pps")
+	statsCommand.Flags().BoolVarP(&opt.ShowBytes, "bytes", "b", true, "Show bytes")
+	statsCommand.Flags().BoolVarP(&opt.ShowBps, "bps", "B", true, "Show bps")
+	statsCommand.Flags().BoolVarP(&opt.ShowIops, "iops", "I", false, "Show iops")
+	statsCommand.Flags().BoolVarP(&opt.ShowErrIops, "err-iops", "E", false, "Show error iops")
+	statsCommand.Flags().BoolVarP(&opt.ShowAll, "all", "a", false, "Show all")
 	commands.Register(statsCommand)
 }
 
 type StatsOpt struct {
-	Interface string
-	StatsDur  time.Duration
+	Interface   string
+	StatsDur    time.Duration
+	ShowAll     bool
+	ShowPackets bool
+	ShowPps     bool
+	ShowBytes   bool
+	ShowBps     bool
+	ShowIops    bool
+	ShowErrIops bool
+}
+
+type StatsFields interface {
+	Headers() []string
+	Values(stat netutil.Statistics, rate netutil.StatisticsRate) []string
+}
+
+type StatsFieldsQueues struct{}
+
+type StatsFieldsPackets struct{}
+
+func (StatsFieldsPackets) Headers() []string { return []string{"rx_pkts", "tx_pkts"} }
+func (StatsFieldsPackets) Values(stat netutil.Statistics, _ netutil.StatisticsRate) []string {
+	return []string{
+		fmt.Sprintf("%d", stat.RxPackets),
+		fmt.Sprintf("%d", stat.TxPackets),
+	}
+}
+
+type StatsFieldsPps struct{}
+
+func (StatsFieldsPps) Headers() []string { return []string{"rx_pps", "tx_pps"} }
+func (StatsFieldsPps) Values(stat netutil.Statistics, rate netutil.StatisticsRate) []string {
+	return []string{
+		fmt.Sprintf("%.0f", rate.RxPPS),
+		fmt.Sprintf("%.0f", rate.TxPPS),
+	}
+}
+
+type StatsFieldsBytes struct{}
+
+func (StatsFieldsBytes) Headers() []string { return []string{"rx_bytes", "tx_bytes"} }
+func (StatsFieldsBytes) Values(stat netutil.Statistics, _ netutil.StatisticsRate) []string {
+	return []string{
+		humanize.Bytes(int(stat.RxBytes)),
+		humanize.Bytes(int(stat.TxBytes)),
+	}
+}
+
+type StatsFieldsBps struct{}
+
+func (StatsFieldsBps) Headers() []string { return []string{"rx_bps", "tx_bps"} }
+func (StatsFieldsBps) Values(stat netutil.Statistics, rate netutil.StatisticsRate) []string {
+	return []string{
+		humanize.BitsRate(int(rate.RxBPS)),
+		humanize.BitsRate(int(rate.TxBPS)),
+	}
+}
+
+type StatsFieldsIops struct{}
+
+func (StatsFieldsIops) Headers() []string { return []string{"rx_iops", "tx_iops"} }
+func (StatsFieldsIops) Values(stat netutil.Statistics, rate netutil.StatisticsRate) []string {
+	return []string{
+		fmt.Sprintf("%.0f", rate.RxIOPS),
+		fmt.Sprintf("%.0f", rate.TxIOPS),
+	}
+}
+
+type StatsFieldsErrIops struct{}
+
+func (StatsFieldsErrIops) Headers() []string { return []string{"rx_err_iops", "tx_err_iops"} }
+func (StatsFieldsErrIops) Values(stat netutil.Statistics, rate netutil.StatisticsRate) []string {
+	return []string{
+		fmt.Sprintf("%.0f", rate.RxErrIOPS),
+		fmt.Sprintf("%.0f", rate.TxErrIOPS),
+	}
 }
 
 var opt StatsOpt
@@ -42,6 +123,36 @@ var opt StatsOpt
 type StatsCommandClient struct{}
 
 func (StatsCommandClient) DoReq(opt StatsOpt) error {
+	fields := []StatsFields{}
+
+	if opt.ShowAll {
+		fields = append(fields, StatsFieldsPackets{})
+		fields = append(fields, StatsFieldsPps{})
+		fields = append(fields, StatsFieldsBytes{})
+		fields = append(fields, StatsFieldsBps{})
+		fields = append(fields, StatsFieldsIops{})
+		fields = append(fields, StatsFieldsErrIops{})
+	} else {
+		if opt.ShowPackets {
+			fields = append(fields, StatsFieldsPackets{})
+		}
+		if opt.ShowPps {
+			fields = append(fields, StatsFieldsPps{})
+		}
+		if opt.ShowBytes {
+			fields = append(fields, StatsFieldsBytes{})
+		}
+		if opt.ShowBps {
+			fields = append(fields, StatsFieldsBps{})
+		}
+		if opt.ShowIops {
+			fields = append(fields, StatsFieldsIops{})
+		}
+		if opt.ShowErrIops {
+			fields = append(fields, StatsFieldsErrIops{})
+		}
+	}
+
 	statsKey := func(iface string, queueID uint32) string {
 		return fmt.Sprintf("%s:%d", iface, queueID)
 	}
@@ -50,9 +161,14 @@ func (StatsCommandClient) DoReq(opt StatsOpt) error {
 	timer := time.NewTicker(opt.StatsDur)
 	for range timer.C {
 		tbl := tablewriter.NewWriter(os.Stdout)
-		tbl.SetHeader([]string{"interface", "queue", "rx_pkts", "tx_pkts", "rx_pps", "tx_pps", "rx_bytes", "tx_bytes", "rx_bps", "tx_bps", "rx_iops", "tx_iops"})
 		tbl.SetAutoMergeCellsByColumnIndex([]int{0})
 		tbl.SetAlignment(tablewriter.ALIGN_CENTER)
+
+		headers := []string{"interface", "queue"}
+		for _, field := range fields {
+			headers = append(headers, field.Headers()...)
+		}
+		tbl.SetHeader(headers)
 
 		sum := struct {
 			netutil.Statistics
@@ -72,15 +188,11 @@ func (StatsCommandClient) DoReq(opt StatsOpt) error {
 				rate := stat.Rate(prev[statsKey(iface.Interface, queue.QueueID)])
 				prev[statsKey(iface.Interface, queue.QueueID)] = stat
 
-				tbl.Append([]string{
-					iface.Interface,
-					fmt.Sprintf("%d", queue.QueueID),
-					fmt.Sprintf("%d", stat.RxPackets), fmt.Sprintf("%d", stat.TxPackets),
-					fmt.Sprintf("%.0f", rate.RxPPS), fmt.Sprintf("%.0f", rate.TxPPS),
-					humanize.Bytes(int(stat.RxBytes)), humanize.Bytes(int(stat.TxBytes)),
-					humanize.BitsRate(int(rate.RxBPS)), humanize.BitsRate(int(rate.TxBPS)),
-					fmt.Sprintf("%.0f", rate.RxIOPS), fmt.Sprintf("%.0f", rate.TxIOPS),
-				})
+				row := []string{iface.Interface, fmt.Sprintf("%d", queue.QueueID)}
+				for _, field := range fields {
+					row = append(row, field.Values(stat, rate)...)
+				}
+				tbl.Append(row)
 
 				sum.RxPackets += stat.RxPackets
 				sum.TxPackets += stat.TxPackets
@@ -96,15 +208,12 @@ func (StatsCommandClient) DoReq(opt StatsOpt) error {
 			}
 		}
 
-		tbl.SetFooter([]string{
-			"SUM",
-			fmt.Sprintf("%d", sum.numQueues),
-			fmt.Sprintf("%d", sum.RxPackets), fmt.Sprintf("%d", sum.TxPackets),
-			fmt.Sprintf("%.0f", sum.RxPPS), fmt.Sprintf("%.0f", sum.TxPPS),
-			humanize.Bytes(int(sum.RxBytes)), humanize.Bytes(int(sum.TxBytes)),
-			humanize.BitsRate(int(sum.RxBPS)), humanize.BitsRate(int(sum.TxBPS)),
-			fmt.Sprintf("%.0f", sum.RxIOPS), fmt.Sprintf("%.0f", sum.TxIOPS),
-		})
+		row := []string{}
+		row = append(row, "SUM", fmt.Sprintf("%d", sum.numQueues))
+		for _, field := range fields {
+			row = append(row, field.Values(sum.Statistics, sum.StatisticsRate)...)
+		}
+		tbl.SetFooter(row)
 		tbl.Render()
 		fmt.Println()
 	}

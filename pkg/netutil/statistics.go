@@ -23,8 +23,8 @@ type StatisticsRate struct {
 	TxBPS       float64
 	RxIOPS      float64 // IOs Per Second
 	TxIOPS      float64
-	RxErrorPS   float64 // Errors Per Second
-	TxErrorPS   float64
+	RxErrIOPS   float64 // Errors Per Second
+	TxErrIOPS   float64
 	RxDroppedPS float64 // Dropped Per Second
 	TxDroppedPS float64
 }
@@ -66,8 +66,8 @@ func (s Statistics) Rate(prev Statistics) StatisticsRate {
 		TxBPS:       bps(prev.TxBytes, s.TxBytes, period),
 		RxIOPS:      iops(prev.RxIOs, s.RxIOs, period),
 		TxIOPS:      iops(prev.TxIOs, s.TxIOs, period),
-		RxErrorPS:   ioerrps(prev.RxErrors, s.RxErrors, period),
-		TxErrorPS:   ioerrps(prev.TxErrors, s.TxErrors, period),
+		RxErrIOPS:   ioerrps(prev.RxErrors, s.RxErrors, period),
+		TxErrIOPS:   ioerrps(prev.TxErrors, s.TxErrors, period),
 		RxDroppedPS: dps(prev.RxDropped, s.RxDropped, period),
 		TxDroppedPS: dps(prev.TxDropped, s.TxDropped, period),
 	}

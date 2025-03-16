@@ -203,14 +203,14 @@ func dumpStats(txList []Tx, dur time.Duration) {
 				humanize.Bytes(int(stat.TxBytes)),
 				humanize.BitsRate(int(rate.TxBPS)),
 				fmt.Sprintf("%.0f", rate.TxIOPS),
-				fmt.Sprintf("%.0f", rate.TxErrorPS),
+				fmt.Sprintf("%.0f", rate.TxErrIOPS),
 			})
 			sum.TxPackets += stat.TxPackets
 			sum.TxBytes += stat.TxBytes
 			sum.TxPPS += rate.TxPPS
 			sum.TxBPS += rate.TxBPS
 			sum.TxIOPS += rate.TxIOPS
-			sum.TxErrorPS += rate.TxErrorPS
+			sum.TxErrIOPS += rate.TxErrIOPS
 		}
 		tbl.Append([]string{
 			"SUM",
@@ -219,7 +219,7 @@ func dumpStats(txList []Tx, dur time.Duration) {
 			humanize.Bytes(int(sum.TxBytes)),
 			humanize.BitsRate(int(sum.TxBPS)),
 			fmt.Sprintf("%.0f", sum.TxIOPS),
-			fmt.Sprintf("%.0f", sum.TxErrorPS),
+			fmt.Sprintf("%.0f", sum.TxErrIOPS),
 		})
 		tbl.Render()
 		fmt.Println()
