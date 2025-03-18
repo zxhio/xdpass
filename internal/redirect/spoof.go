@@ -2,6 +2,7 @@ package redirect
 
 import (
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/kentik/patricia"
@@ -14,12 +15,15 @@ import (
 )
 
 const (
+	ARPRequest            = 1
+	ARPReply              = 2
 	ICMPv4TypeEchoRequest = 0x8
 	ICMPv4TypeEchoReply   = 0x0
 )
 
 type SpoofHandle struct {
 	ifaceName    string
+	hwAddr       net.HardwareAddr
 	id           uint32
 	mu           *sync.RWMutex
 	v4RulesIDMap map[protos.SpoofRuleV4]uint32
@@ -27,9 +31,10 @@ type SpoofHandle struct {
 	v4DstIPTree  *generics_tree.TreeV4[protos.SpoofRuleV4] // search key is DstIP
 }
 
-func NewSpoofHandle(ifaceName string) (*SpoofHandle, error) {
+func NewSpoofHandle(ifaceName string, hwAddr net.HardwareAddr) (*SpoofHandle, error) {
 	return &SpoofHandle{
 		ifaceName:    ifaceName,
+		hwAddr:       hwAddr,
 		mu:           &sync.RWMutex{},
 		v4RulesIDMap: make(map[protos.SpoofRuleV4]uint32),
 		v4RetRules:   make([]protos.SpoofRuleV4, 0, 64),
@@ -103,6 +108,8 @@ func (h *SpoofHandle) HandlePacket(pkt *fastpkt.Packet) {
 
 	var err error
 	switch pkt.L3Proto {
+	case unix.ETH_P_ARP:
+		err = h.handlePacketARP(pkt)
 	case unix.ETH_P_IP:
 		err = h.handlePacketIPv4(pkt)
 	case unix.ETH_P_IPV6:
@@ -288,6 +295,59 @@ func (h *SpoofHandle) handlePacketTCPReset(pkt *fastpkt.Packet) error {
 
 func (h *SpoofHandle) handlePacketUDP(*fastpkt.Packet) error {
 	// TODO: add udp implement
+	return nil
+}
+
+func (h *SpoofHandle) handlePacketARP(pkt *fastpkt.Packet) error {
+	var (
+		rxEther   = fastpkt.DataPtrEthernet(pkt.RxData, 0)
+		rxPayload = pkt.RxData[pkt.L2Len+uint8(fastpkt.SizeofARP):]
+		rxARP     = fastpkt.DataPtrARP(pkt.RxData, int(pkt.L2Len))
+		buf       = fastpkt.NewUncheckedBuffer(pkt.TxData)
+	)
+
+	if netutil.Ntohs(rxARP.Operation) != ARPRequest {
+		return nil
+	}
+
+	// TODO: add spoof rule
+
+	// L3
+	txPayload := buf.AllocatePayload(int(rxARP.HwAddrLen*2 + rxARP.ProtAddrLen*2))
+
+	// ARP reply
+	// Source hardware address
+	copy(txPayload[:rxARP.HwAddrLen], []byte(h.hwAddr))
+	// Source protocol address
+	copy(txPayload[rxARP.HwAddrLen:rxARP.HwAddrLen+rxARP.ProtAddrLen], rxPayload[rxARP.HwAddrLen*2+rxARP.ProtAddrLen:rxARP.HwAddrLen*2+rxARP.ProtAddrLen*2])
+	// Dest hardware address
+	copy(txPayload[rxARP.HwAddrLen+rxARP.ProtAddrLen:rxARP.HwAddrLen*2+rxARP.ProtAddrLen], rxPayload[:rxARP.HwAddrLen])
+	// Dest protocol address
+	copy(txPayload[rxARP.HwAddrLen*2+rxARP.ProtAddrLen:rxARP.HwAddrLen*2+rxARP.ProtAddrLen*2], rxPayload[rxARP.HwAddrLen:rxARP.HwAddrLen+rxARP.ProtAddrLen])
+
+	txARP := buf.AllocateARP()
+	txARP.HwAddrType = rxARP.HwAddrType
+	txARP.ProtAddrType = rxARP.ProtAddrType
+	txARP.HwAddrLen = rxARP.HwAddrLen
+	txARP.ProtAddrLen = rxARP.ProtAddrLen
+	txARP.Operation = netutil.Htons(ARPReply)
+
+	// L2 VLAN
+	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
+		rxVLAN := fastpkt.DataPtrVLAN(pkt.RxData, fastpkt.SizeofEthernet)
+		txVLAN := buf.AllocateVLAN()
+		txVLAN.ID = rxVLAN.ID
+		txVLAN.EncapsulatedProto = rxVLAN.EncapsulatedProto
+	}
+
+	// L2 Ethernet
+	txEther := buf.AllocateEthernet()
+	txEther.HwSource = [6]byte(h.hwAddr)
+	txEther.HwDest = rxEther.HwSource
+	txEther.HwProto = rxEther.HwProto
+
+	pkt.TxData = buf.Bytes()
+
 	return nil
 }
 

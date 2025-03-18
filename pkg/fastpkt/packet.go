@@ -17,6 +17,7 @@ const (
 	SizeofTCP      = int(unsafe.Sizeof(TCP{}))      // sizeof(struct tcphdr)
 	SizeofUDP      = int(unsafe.Sizeof(UDP{}))      // sizeof(struct udphdr)
 	SizeofICMP     = int(unsafe.Sizeof(ICMP{}))     // sizeof(struct icmphdr)
+	SizeofARP      = int(unsafe.Sizeof(ARP{}))      // sizeof(struct arphdr)
 )
 
 var (
@@ -55,24 +56,18 @@ func (pkt *Packet) DecodeFromData(data []byte) error {
 	if len(data) < 14 {
 		return ErrPacketTooShort
 	}
-	pkt.RxData = data
 
-	eth := (*Ethernet)(unsafe.Pointer(&data[0]))
-	ethType := netutil.Ntohs(eth.HwProto)
-	off := SizeofEthernet
+	pkt.RxData = data
 	pkt.L2Len = uint8(SizeofEthernet)
 
-	if ethType == unix.ETH_P_8021Q {
-		if len(data[off:]) < SizeofVLAN {
-			return ErrPacketTooShort
-		}
-		vlan := (*VLAN)(unsafe.Pointer(&data[off]))
-		ethType = netutil.Ntohs(vlan.EncapsulatedProto)
-		off += SizeofVLAN
-		pkt.L2Len += uint8(SizeofVLAN)
-	}
+	eth := (*Ethernet)(unsafe.Pointer(&data[0]))
+	off := SizeofEthernet
 
-	switch ethType {
+	switch netutil.Ntohs(eth.HwProto) {
+	case unix.ETH_P_8021Q:
+		return pkt.DecodePacketVLAN(data[off:])
+	case unix.ETH_P_ARP:
+		return pkt.DecodePacketARP(data[off:])
 	case unix.ETH_P_IP:
 		return pkt.DecodePacketIPv4(data[off:])
 	case unix.ETH_P_IPV6:
@@ -82,8 +77,46 @@ func (pkt *Packet) DecodeFromData(data []byte) error {
 	}
 }
 
+func (pkt *Packet) DecodePacketVLAN(data []byte) error {
+	if len(data) < SizeofVLAN {
+		return ErrPacketTooShort
+	}
+
+	pkt.L2Len += uint8(SizeofVLAN)
+
+	vlan := (*VLAN)(unsafe.Pointer(&data[0]))
+	off := SizeofVLAN
+
+	switch netutil.Ntohs(vlan.EncapsulatedProto) {
+	case unix.ETH_P_ARP:
+		return pkt.DecodePacketARP(data[off:])
+	case unix.ETH_P_IP:
+		return pkt.DecodePacketIPv4(data[off:])
+	case unix.ETH_P_IPV6:
+		return pkt.DecodePacketIPv6(data[off:])
+	default:
+		return ErrPacketInvalidEthernetType
+	}
+}
+
+func (pkt *Packet) DecodePacketARP(data []byte) error {
+	if len(data) < SizeofARP {
+		return ErrPacketTooShort
+	}
+
+	arp := (*ARP)(unsafe.Pointer(&data[0]))
+	if len(data) < SizeofARP+int(arp.HwAddrLen)*2+int(arp.ProtAddrLen)*2 {
+		return ErrPacketTooShort
+	}
+
+	pkt.L3Proto = unix.ETH_P_ARP
+	pkt.L3Len = arp.HwAddrLen*2 + arp.ProtAddrLen*2
+
+	return nil
+}
+
 func (pkt *Packet) DecodePacketIPv4(data []byte) error {
-	if len(data) < 20 {
+	if len(data) < SizeofIPv4 {
 		return ErrPacketTooShort
 	}
 
@@ -112,7 +145,7 @@ func (pkt *Packet) DecodePacketIPv6([]byte) error {
 }
 
 func (pkt *Packet) DecodePacketTCP(data []byte) error {
-	if len(data) < 20 {
+	if len(data) < SizeofTCP {
 		return ErrPacketTooShort
 	}
 
@@ -126,7 +159,7 @@ func (pkt *Packet) DecodePacketTCP(data []byte) error {
 }
 
 func (pkt *Packet) DecodePacketUDP(data []byte) error {
-	if len(data) < 8 {
+	if len(data) < SizeofUDP {
 		return ErrPacketTooShort
 	}
 
@@ -139,7 +172,7 @@ func (pkt *Packet) DecodePacketUDP(data []byte) error {
 }
 
 func (pkt *Packet) DecodePacketICMP(data []byte) error {
-	if len(data) < 8 {
+	if len(data) < SizeofICMP {
 		return ErrPacketTooShort
 	}
 
@@ -185,6 +218,10 @@ func (b *UncheckedBuffer) AllocateEthernet() *Ethernet {
 
 func (b *UncheckedBuffer) AllocateVLAN() *VLAN {
 	return DataPtrVLAN(b.AllocatePayload(SizeofVLAN), 0)
+}
+
+func (b *UncheckedBuffer) AllocateARP() *ARP {
+	return DataPtrARP(b.AllocatePayload(SizeofARP), 0)
 }
 
 func (b *UncheckedBuffer) AllocateIPv4() *IPv4 {

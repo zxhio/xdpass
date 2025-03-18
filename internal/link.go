@@ -141,7 +141,7 @@ func NewLinkHandle(name string, opts ...LinkHandleOpt) (*LinkHandle, error) {
 	firewall := fw.NewFirewall(name, objs.IpLpmTrie)
 	exports.RegisterFirewallAPI(name, firewall)
 
-	redirect, err := redirect.NewRedirect(name, xdp.UmemFrameSize2048)
+	redirect, err := redirect.NewRedirect(name, xdp.UmemFrameSize2048, ifaceLink.Attrs().HardwareAddr)
 	if err != nil {
 		closers.Close(nil)
 		return nil, err

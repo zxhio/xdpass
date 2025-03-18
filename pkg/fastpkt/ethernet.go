@@ -25,3 +25,21 @@ type VLAN struct {
 	ID                uint16
 	EncapsulatedProto uint16
 }
+
+// <linux/if_arp.h>
+//
+// struct arphdr {
+//     __be16 ar_hrd;        /* format of hardware address	*/
+//     __be16 ar_pro;        /* format of protocol address	*/
+//     unsigned char ar_hln; /* length of hardware address	*/
+//     unsigned char ar_pln; /* length of protocol address	*/
+//     __be16 ar_op;         /* ARP opcode (command)		*/
+// };
+
+type ARP struct {
+	HwAddrType   uint16
+	ProtAddrType uint16
+	HwAddrLen    uint8
+	ProtAddrLen  uint8
+	Operation    uint16
+}

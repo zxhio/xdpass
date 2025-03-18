@@ -43,3 +43,8 @@ func DataPtrUDP(data []byte, off int) *UDP {
 func DataPtrICMP(data []byte, off int) *ICMP {
 	return DataPtr[ICMP](data, off)
 }
+
+// DataPtrARP is a helper function to cast an ICMP header to a pointer
+func DataPtrARP(data []byte, off int) *ARP {
+	return DataPtr[ARP](data, off)
+}

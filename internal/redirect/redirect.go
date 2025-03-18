@@ -1,6 +1,8 @@
 package redirect
 
 import (
+	"net"
+
 	"github.com/zxhio/xdpass/internal/exports"
 	"github.com/zxhio/xdpass/internal/protos"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
@@ -18,7 +20,7 @@ type Redirect struct {
 	closers utils.NamedClosers
 }
 
-func NewRedirect(ifaceName string, frameSize int) (*Redirect, error) {
+func NewRedirect(ifaceName string, frameSize int, hwAddr net.HardwareAddr) (*Redirect, error) {
 	handles := []RedirectHandle{}
 
 	// Dump
@@ -34,7 +36,7 @@ func NewRedirect(ifaceName string, frameSize int) (*Redirect, error) {
 	// TODO: implement
 
 	// Spoof handle
-	spoof, err := NewSpoofHandle(ifaceName)
+	spoof, err := NewSpoofHandle(ifaceName, hwAddr)
 	if err != nil {
 		return nil, err
 	}
