@@ -2,6 +2,7 @@
 
 #include <linux/bpf.h>
 #include <linux/icmp.h>
+#include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #include <linux/in.h>
 #include <linux/ip.h>
@@ -19,6 +20,7 @@ struct vlan_hdr {
 
 struct packet {
     // Protocol
+    __be16 l2_proto;
     __be16 l3_proto;
     __be16 l4_proto;
 
@@ -43,8 +45,12 @@ struct packet {
 
 typedef enum {
     OK,
-    INVALID_DATA_LENGTH,
-    INVALID_PROTO,
+    INVALID_L2_DATA_LENGTH,
+    INVALID_L3_DATA_LENGTH,
+    INVALID_L4_DATA_LENGTH,
+    INVALID_L2_PROTO,
+    INVALID_L3_PROTO,
+    INVALID_L4_PROTO,
     INVALID_IP,
 } stauts_t;
 
@@ -56,8 +62,12 @@ static stauts_t make_packet_ipv4(struct packet *pkt, void *data,
                                  void *data_end);
 static stauts_t make_packet_ipv6(struct packet *pkt, void *data,
                                  void *data_end);
+static stauts_t make_packet_arp(struct packet *pkt, void *data, void *data_end);
+static stauts_t make_packet_vlan(struct packet *pkt, void *data,
+                                 void *data_end);
 static stauts_t make_packet(struct packet *pkt, void *data, void *data_end);
-static stauts_t is_valid_ip(struct packet *pkt);
+static stauts_t is_valid_packet(const struct packet *pkt);
+static stauts_t is_valid_ip(const struct packet *pkt);
 
 struct {
     __uint(type, BPF_MAP_TYPE_XSKMAP);
@@ -92,7 +102,7 @@ int xdp_redirect_xsk_prog(struct xdp_md *ctx)
         return XDP_PASS;
 
     // Check ip valid
-    if (is_valid_ip(&pkt) != OK)
+    if (is_valid_packet(&pkt) != OK)
         return XDP_DROP;
 
     // Redirect
@@ -123,11 +133,24 @@ int xdp_firewall_prog(struct xdp_md *ctx)
     return is_valid_ip(&pkt) == OK ? XDP_DROP : XDP_PASS;
 }
 
-static inline stauts_t is_valid_ip(struct packet *pkt)
+static inline stauts_t is_valid_packet(const struct packet *pkt)
 {
-    // Filter
+    switch (pkt->l2_proto) {
+    case ETH_P_802_3:
+        return is_valid_ip(pkt);
+    case ETH_P_8021Q:
+        return is_valid_ip(pkt);
+    default:
+        return INVALID_L2_PROTO;
+    }
+}
+
+static inline stauts_t is_valid_ip(const struct packet *pkt)
+{
     struct ip_lpm_key key = {};
     switch (pkt->l3_proto) {
+    case ETH_P_ARP:
+        return OK;
     case ETH_P_IP:
         key.prefix_len = 32;
         __builtin_memcpy(key.data, &(pkt->saddr), sizeof(pkt->saddr));
@@ -137,7 +160,7 @@ static inline stauts_t is_valid_ip(struct packet *pkt)
         __builtin_memcpy(key.data, &(pkt->saddr6), sizeof(pkt->saddr6));
         break;
     default:
-        return INVALID_PROTO;
+        return INVALID_L3_PROTO;
     }
     return bpf_map_lookup_elem(&ip_lpm_trie, &key) ? OK : INVALID_IP;
 }
@@ -147,27 +170,55 @@ static stauts_t make_packet(struct packet *pkt, void *data, void *data_end)
     // L2
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L2_DATA_LENGTH;
+
+    pkt->l2_proto = ETH_P_802_3;
 
     __be16 eth_type = bpf_ntohs(eth->h_proto);
     __be16 off = sizeof(*eth);
-
-    if (eth_type == ETH_P_8021Q) {
-        struct vlan_hdr *vlan = (struct vlan_hdr *)(eth + 1);
-        if ((void *)(vlan + 1) > data_end)
-            return INVALID_DATA_LENGTH;
-
-        eth_type = bpf_ntohs(vlan->h_vlan_encapsulated_proto);
-        off += sizeof(*vlan);
-    }
-
     switch (eth_type) {
+    case ETH_P_8021Q:
+        return make_packet_vlan(pkt, data + off, data_end);
+    case ETH_P_ARP:
+        return make_packet_arp(pkt, data + off, data_end);
     case ETH_P_IP:
         return make_packet_ipv4(pkt, data + off, data_end);
     case ETH_P_IPV6:
         return make_packet_ipv6(pkt, data + off, data_end);
     default:
-        return INVALID_PROTO;
+        return INVALID_L3_PROTO;
+    }
+}
+
+static stauts_t make_packet_arp(struct packet *pkt, void *data, void *data_end)
+{
+    struct arphdr *arp = (struct arphdr *)data;
+    if ((void *)(arp + 1) > data_end)
+        return INVALID_L2_DATA_LENGTH;
+
+    pkt->l3_proto = ETH_P_ARP;
+
+    return OK;
+}
+
+static stauts_t make_packet_vlan(struct packet *pkt, void *data, void *data_end)
+{
+    struct vlan_hdr *vlan = (struct vlan_hdr *)data;
+    if ((void *)(vlan + 1) > data_end)
+        return INVALID_L2_DATA_LENGTH;
+
+    pkt->l2_proto = ETH_P_8021Q;
+
+    __be16 off = sizeof(*vlan);
+    switch (bpf_ntohs(vlan->h_vlan_encapsulated_proto)) {
+    case ETH_P_ARP:
+        return make_packet_arp(pkt, data + off, data_end);
+    case ETH_P_IP:
+        return make_packet_ipv4(pkt, data + off, data_end);
+    case ETH_P_IPV6:
+        return make_packet_ipv6(pkt, data + off, data_end);
+    default:
+        return INVALID_L3_PROTO;
     }
 }
 
@@ -175,7 +226,7 @@ static stauts_t make_packet_ipv4(struct packet *pkt, void *data, void *data_end)
 {
     struct iphdr *ip = (struct iphdr *)data;
     if ((void *)(ip + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L3_DATA_LENGTH;
 
     pkt->l3_proto = ETH_P_IP;
     pkt->saddr = ip->saddr;
@@ -190,7 +241,7 @@ static stauts_t make_packet_ipv4(struct packet *pkt, void *data, void *data_end)
     case IPPROTO_TCP:
         return make_packet_tcp(pkt, data + off, data_end);
     default:
-        return INVALID_PROTO;
+        return INVALID_L4_PROTO;
     }
 }
 
@@ -198,7 +249,7 @@ static stauts_t make_packet_ipv6(struct packet *pkt, void *data, void *data_end)
 {
     struct ipv6hdr *ip = (struct ipv6hdr *)data;
     if ((void *)(ip + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L3_DATA_LENGTH;
 
     pkt->l3_proto = ETH_P_IPV6;
     pkt->saddr6 = ip->saddr;
@@ -213,7 +264,7 @@ static stauts_t make_packet_ipv6(struct packet *pkt, void *data, void *data_end)
     case IPPROTO_TCP:
         return make_packet_tcp(pkt, data + off, data_end);
     default:
-        return INVALID_PROTO;
+        return INVALID_L4_PROTO;
     }
 }
 
@@ -221,7 +272,7 @@ static stauts_t make_packet_icmp(struct packet *pkt, void *data, void *data_end)
 {
     struct icmphdr *icmp = (struct icmphdr *)data;
     if ((void *)(icmp + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L4_DATA_LENGTH;
 
     pkt->l4_proto = IPPROTO_ICMP;
     pkt->sport = 0;
@@ -234,7 +285,7 @@ static stauts_t make_packet_udp(struct packet *pkt, void *data, void *data_end)
 {
     struct udphdr *udp = (struct udphdr *)data;
     if ((void *)(udp + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L4_DATA_LENGTH;
 
     pkt->l4_proto = IPPROTO_UDP;
     pkt->sport = bpf_ntohs(udp->source);
@@ -247,7 +298,7 @@ static stauts_t make_packet_tcp(struct packet *pkt, void *data, void *data_end)
 {
     struct tcphdr *tcp = (struct tcphdr *)data;
     if ((void *)(tcp + 1) > data_end)
-        return INVALID_DATA_LENGTH;
+        return INVALID_L4_DATA_LENGTH;
 
     pkt->l4_proto = IPPROTO_TCP;
     pkt->sport = bpf_ntohs(tcp->source);
