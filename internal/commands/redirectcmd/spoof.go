@@ -230,12 +230,11 @@ func (s SpoofCommandHandle) handleOpList(ifaceName string) ([]byte, error) {
 }
 
 func (s SpoofCommandHandle) handleOpListTypes(*protos.SpoofReq) ([]byte, error) {
-	resp := protos.SpoofResp{Interfaces: []protos.SpoofInterfaceRule{
-		{Rules: []protos.SpoofRule{
-			{SpoofRuleV4: protos.SpoofRuleV4{SpoofType: protos.SpoofTypeICMPEchoReply}},
-			{SpoofRuleV4: protos.SpoofRuleV4{SpoofType: protos.SpoofTypeTCPReset}},
-			{SpoofRuleV4: protos.SpoofRuleV4{SpoofType: protos.SpoofTypeTCPResetSYN}},
-		}},
+	resp := protos.SpoofResp{SupportedTypes: []protos.SpoofType{
+		protos.SpoofTypeICMPEchoReply,
+		protos.SpoofTypeTCPReset,
+		protos.SpoofTypeTCPResetSYN,
+		protos.SpoofTypeARPReply,
 	}}
 	return json.Marshal(resp)
 }
