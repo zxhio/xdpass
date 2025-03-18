@@ -90,6 +90,7 @@ const (
 	SpoofTypeICMPEchoReply
 	SpoofTypeTCPReset
 	SpoofTypeTCPResetSYN
+	SpoofTypeARPReply
 )
 
 const (
@@ -97,6 +98,7 @@ const (
 	spoofTypeStrICMPEchoReply = "icmp-echo-reply"
 	spoofTypeStrTCPReset      = "tcp-reset"
 	spoofTypeStrTCPResetSYN   = "tcp-reset-syn"
+	spoofTypeStrARPReply      = "arp-reply"
 )
 
 var spoofTypeLookup = map[string]SpoofType{
@@ -104,6 +106,7 @@ var spoofTypeLookup = map[string]SpoofType{
 	spoofTypeStrICMPEchoReply: SpoofTypeICMPEchoReply,
 	spoofTypeStrTCPReset:      SpoofTypeTCPReset,
 	spoofTypeStrTCPResetSYN:   SpoofTypeTCPResetSYN,
+	spoofTypeStrARPReply:      SpoofTypeARPReply,
 }
 
 var spoofTypeStrLookup = map[SpoofType]string{
@@ -111,6 +114,7 @@ var spoofTypeStrLookup = map[SpoofType]string{
 	SpoofTypeICMPEchoReply: spoofTypeStrICMPEchoReply,
 	SpoofTypeTCPReset:      spoofTypeStrTCPReset,
 	SpoofTypeTCPResetSYN:   spoofTypeStrTCPResetSYN,
+	SpoofTypeARPReply:      spoofTypeStrARPReply,
 }
 
 func (t SpoofType) String() string { return spoofTypeStrLookup[t] }

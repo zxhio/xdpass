@@ -142,6 +142,16 @@ func (SpoofCommandClient) DoReqShowTypes() error {
 }
 
 func (SpoofCommandClient) DoReqEditRule(op protos.Operation, opt *SpoofOpt) error {
+	var proto uint16
+	switch opt.SpoofType {
+	case protos.SpoofTypeARPReply:
+		proto = unix.ETH_P_ARP
+	case protos.SpoofTypeICMPEchoReply:
+		proto = unix.IPPROTO_ICMP
+	case protos.SpoofTypeTCPReset, protos.SpoofTypeTCPResetSYN:
+		proto = unix.IPPROTO_TCP
+	}
+
 	req := protos.SpoofReq{Operation: op, Interface: opt.Interface, Rules: []protos.SpoofRule{{
 		SpoofRuleV4: protos.SpoofRuleV4{
 			SpoofType:      opt.SpoofType,
@@ -151,6 +161,7 @@ func (SpoofCommandClient) DoReqEditRule(op protos.Operation, opt *SpoofOpt) erro
 			DstIPPrefixLen: uint8(opt.DstIPLPM.PrefixLen),
 			SrcIP:          opt.SrcIPLPM.To4().Address,
 			DstIP:          opt.DstIPLPM.To4().Address,
+			Proto:          proto,
 		},
 	}}}
 	_, err := doRequest[protos.SpoofReq, protos.SpoofResp](protos.RedirectTypeSpoof, &req)

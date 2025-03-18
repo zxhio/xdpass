@@ -306,11 +306,28 @@ func (h *SpoofHandle) handlePacketARP(pkt *fastpkt.Packet) error {
 		buf       = fastpkt.NewUncheckedBuffer(pkt.TxData)
 	)
 
-	if netutil.Ntohs(rxARP.Operation) != ARPRequest {
+	// TODO: support IPv6
+	if netutil.Ntohs(rxARP.Operation) != ARPRequest || rxARP.ProtAddrLen != 4 {
 		return nil
 	}
 
-	// TODO: add spoof rule
+	dstIP := netutil.IPv4ToUint32(rxPayload[rxARP.HwAddrLen*2+rxARP.ProtAddrLen : rxARP.HwAddrLen*2+rxARP.ProtAddrLen*2])
+	dstAddr := patricia.NewIPv4Address(dstIP, 32)
+	h.mu.RLock()
+	ok, rules := h.v4DstIPTree.FindDeepestTagsWithFilterAppend(h.v4RetRules[:0], dstAddr, func(tag protos.SpoofRuleV4) bool { return tag.Proto == unix.ETH_P_ARP })
+	h.mu.RUnlock()
+	if !ok || len(rules) == 0 {
+		return nil
+	}
+
+	if logrus.GetLevel() >= logrus.DebugLevel {
+		logrus.WithField("rules_count", len(rules)).Debug("Matched rules")
+		if logrus.GetLevel() >= logrus.TraceLevel {
+			for _, rule := range rules {
+				logrus.WithField("rule", rule.String()).Trace("Matched rule detail")
+			}
+		}
+	}
 
 	// L3
 	txPayload := buf.AllocatePayload(int(rxARP.HwAddrLen*2 + rxARP.ProtAddrLen*2))
