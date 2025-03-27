@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/zxhio/xdpass/internal/protos"
+	"github.com/zxhio/xdpass/internal/redirect/spoof"
 )
 
 type RedirectDumpAPI interface {
@@ -12,9 +13,9 @@ type RedirectDumpAPI interface {
 }
 
 type RedirectSpoofAPI interface {
-	GetSpoofRules() []protos.SpoofRule
-	AddSpoofRule(rule protos.SpoofRule) error
-	DelSpoofRule(rule protos.SpoofRule) error
+	GetSpoofRules() []spoof.Rule
+	AddSpoofRule(rule spoof.Rule) error
+	DelSpoofRule(rule spoof.Rule) error
 }
 
 type RedirectTuntapAPI interface {

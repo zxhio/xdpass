@@ -158,17 +158,20 @@ Redirect network traffic and response spoofed traffic based on rule spoof types.
 
 - `--interface -i` specify interface, alse could be empty.
 - `--list` `--add` or `--del` manage spoof rules.
-- `--dst-ip` `--dst-port` and `--dst-ip` `--dst-port` special rule addresses.
-- `spoof-type` special spoof type
-- `--list-spoof-types` show supported types
+- `--source -s` `--iprange-src` `--smac` `--sport` `--sports` special rule match destination addresses.
+- `--destination -d` `--iprange-dst` `--dmac` `--dport` `--dports` special rule match destination addresses.
+- `--target` special spoof target
+- `--list-target` show supported target
     - tcp-reset
-    - tcp-syn-reset
+    - arp-reply
     - icmp-echo-reply
 
 e.g. Return ICMP echo reply packet for ICMP echo packets originating from interface br1 with source IPs in the 172.16.23.0/24 range and destination IPs in the 172.16.23.0/24 range.
 ```shell
-$ xdpass spoof -i br1 --add --src-ip 172.16.23.0/24 --dst-ip 172.16.23.0/24 --spoof-type icmp-echo-reply
+$ xdpass spoof -i br1 --add -s 172.16.23.0/24 -d 172.16.23.0/24 --target icmp-echo-reply
 ```
+
+Detail see [make_test_commands.sh](scripts/make_test_commands.sh) 
 
 ### tuntap
 

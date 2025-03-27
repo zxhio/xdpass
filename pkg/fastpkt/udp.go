@@ -16,14 +16,14 @@ import (
 //     __sum16 check;
 // };
 
-type UDP struct {
+type UDPHeader struct {
 	SrcPort uint16
 	DstPort uint16
 	Length  uint16
 	Check   uint16
 }
 
-func (udp *UDP) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
+func (udp *UDPHeader) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
 	udpAndPayloadLen := udp.Length + payloadLen
 	data := unsafe.Slice((*byte)(unsafe.Pointer(udp)), udpAndPayloadLen)
 

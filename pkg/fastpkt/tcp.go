@@ -44,7 +44,7 @@ import (
 // 	__be16	urg_ptr;
 // };
 
-type TCP struct {
+type TCPHeader struct {
 	SrcPort uint16
 	DstPort uint16
 	Seq     uint32
@@ -56,15 +56,15 @@ type TCP struct {
 	UrgPtr  uint16
 }
 
-func (tcp *TCP) HeaderLen() uint8 {
+func (tcp *TCPHeader) HeaderLen() uint8 {
 	return (tcp.DataOff >> 4) * 4
 }
 
-func (tcp *TCP) SetHeaderLen(headerLen uint8) {
+func (tcp *TCPHeader) SetHeaderLen(headerLen uint8) {
 	tcp.DataOff = ((headerLen / 4) << 4) | (tcp.DataOff & 0x0f)
 }
 
-func (tcp *TCP) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
+func (tcp *TCPHeader) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
 	tcpAndPayloadLen := uint16(tcp.HeaderLen()) + payloadLen
 	data := unsafe.Slice((*byte)(unsafe.Pointer(tcp)), tcpAndPayloadLen)
 

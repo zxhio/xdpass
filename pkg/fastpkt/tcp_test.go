@@ -40,7 +40,7 @@ func TestTCPFlags(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tcp := DataPtrTCP(buf, 20)
+		tcp := DataPtrTCPHeader(buf, 20)
 		assert.True(t, tcp.Flags.Has(testCase.want))
 		assert.Equal(t, testCase.want, tcp.Flags)
 	}
@@ -97,15 +97,15 @@ func TestTCPChecksum(t *testing.T) {
 		tcp := pkt.Layer(layers.LayerTypeTCP).(*layers.TCP)
 
 		// Check ComputeChecksum
-		ipPseudoChecksum := DataPtrIPv4(buf, 0).PseudoChecksum()
-		checksum := netutil.Htons(DataPtrTCP(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
+		ipPseudoChecksum := DataPtrIPv4Header(buf, 0).PseudoChecksum()
+		checksum := netutil.Htons(DataPtrTCPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
 		assert.Equal(t, tcp.Checksum, checksum)
 
 		// Check HeaderLen
-		assert.Equal(t, testCase.headerLen, DataPtrTCP(buf, 20).HeaderLen())
+		assert.Equal(t, testCase.headerLen, DataPtrTCPHeader(buf, 20).HeaderLen())
 
 		// Check SetHeaderLen
-		DataPtrTCP(buf, 20).SetHeaderLen(testCase.headerLen)
-		assert.Equal(t, tcp.DataOffset*4, DataPtrTCP(buf, 20).HeaderLen())
+		DataPtrTCPHeader(buf, 20).SetHeaderLen(testCase.headerLen)
+		assert.Equal(t, tcp.DataOffset*4, DataPtrTCPHeader(buf, 20).HeaderLen())
 	}
 }

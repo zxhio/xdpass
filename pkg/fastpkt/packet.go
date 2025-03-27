@@ -4,20 +4,19 @@ import (
 	"errors"
 	"unsafe"
 
-	"github.com/zxhio/xdpass/internal/protos"
 	"github.com/zxhio/xdpass/pkg/netutil"
 	"golang.org/x/sys/unix"
 )
 
 const (
-	SizeofEthernet = int(unsafe.Sizeof(Ethernet{})) // sizeof(struct ethhdr)
-	SizeofVLAN     = int(unsafe.Sizeof(VLAN{}))     // sizeof(struct vlan_hdr)
-	SizeofIPv4     = int(unsafe.Sizeof(IPv4{}))     // sizeof(struct iphdr)
-	SizeofIPv6     = int(unsafe.Sizeof(IPv6{}))     // sizeof(struct ipv6hdr)
-	SizeofTCP      = int(unsafe.Sizeof(TCP{}))      // sizeof(struct tcphdr)
-	SizeofUDP      = int(unsafe.Sizeof(UDP{}))      // sizeof(struct udphdr)
-	SizeofICMP     = int(unsafe.Sizeof(ICMP{}))     // sizeof(struct icmphdr)
-	SizeofARP      = int(unsafe.Sizeof(ARP{}))      // sizeof(struct arphdr)
+	SizeofEthernet = int(unsafe.Sizeof(EthHeader{}))  // sizeof(struct ethhdr)
+	SizeofVLAN     = int(unsafe.Sizeof(VLANHeader{})) // sizeof(struct vlan_hdr)
+	SizeofIPv4     = int(unsafe.Sizeof(IPv4Header{})) // sizeof(struct iphdr)
+	SizeofIPv6     = int(unsafe.Sizeof(IPv6Header{})) // sizeof(struct ipv6hdr)
+	SizeofTCP      = int(unsafe.Sizeof(TCPHeader{}))  // sizeof(struct tcphdr)
+	SizeofUDP      = int(unsafe.Sizeof(UDPHeader{}))  // sizeof(struct udphdr)
+	SizeofICMP     = int(unsafe.Sizeof(ICMPHeader{})) // sizeof(struct icmphdr)
+	SizeofARP      = int(unsafe.Sizeof(ARPHeader{}))  // sizeof(struct arphdr)
 )
 
 var (
@@ -60,7 +59,7 @@ func (pkt *Packet) DecodeFromData(data []byte) error {
 	pkt.RxData = data
 	pkt.L2Len = uint8(SizeofEthernet)
 
-	eth := (*Ethernet)(unsafe.Pointer(&data[0]))
+	eth := (*EthHeader)(unsafe.Pointer(&data[0]))
 	off := SizeofEthernet
 
 	switch netutil.Ntohs(eth.HwProto) {
@@ -84,7 +83,7 @@ func (pkt *Packet) DecodePacketVLAN(data []byte) error {
 
 	pkt.L2Len += uint8(SizeofVLAN)
 
-	vlan := (*VLAN)(unsafe.Pointer(&data[0]))
+	vlan := (*VLANHeader)(unsafe.Pointer(&data[0]))
 	off := SizeofVLAN
 
 	switch netutil.Ntohs(vlan.EncapsulatedProto) {
@@ -104,13 +103,20 @@ func (pkt *Packet) DecodePacketARP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	arp := (*ARP)(unsafe.Pointer(&data[0]))
+	arp := (*ARPHeader)(unsafe.Pointer(&data[0]))
 	if len(data) < SizeofARP+int(arp.HwAddrLen)*2+int(arp.ProtAddrLen)*2 {
 		return ErrPacketTooShort
 	}
 
+	data = data[SizeofARP:]
 	pkt.L3Proto = unix.ETH_P_ARP
 	pkt.L3Len = arp.HwAddrLen*2 + arp.ProtAddrLen*2
+
+	// IPv4
+	if arp.ProtAddrLen == 4 {
+		pkt.SrcIP = netutil.IPv4ToUint32(data[arp.HwAddrLen : arp.HwAddrLen+arp.ProtAddrLen])
+		pkt.DstIP = netutil.IPv4ToUint32(data[arp.HwAddrLen*2+arp.ProtAddrLen : arp.HwAddrLen*2+arp.ProtAddrLen*2])
+	}
 
 	return nil
 }
@@ -120,7 +126,7 @@ func (pkt *Packet) DecodePacketIPv4(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	ip := (*IPv4)(unsafe.Pointer(&data[0]))
+	ip := (*IPv4Header)(unsafe.Pointer(&data[0]))
 	off := ip.HeaderLen()
 	pkt.L3Proto = unix.ETH_P_IP
 	pkt.SrcIP = netutil.Ntohl(ip.SrcIP)
@@ -141,7 +147,7 @@ func (pkt *Packet) DecodePacketIPv4(data []byte) error {
 
 // TODO: implement
 func (pkt *Packet) DecodePacketIPv6([]byte) error {
-	return protos.ErrNotImpl
+	return errors.New("not implement")
 }
 
 func (pkt *Packet) DecodePacketTCP(data []byte) error {
@@ -149,7 +155,7 @@ func (pkt *Packet) DecodePacketTCP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	tcp := (*TCP)(unsafe.Pointer(&data[0]))
+	tcp := (*TCPHeader)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_TCP
 	pkt.SrcPort = netutil.Ntohs(tcp.SrcPort)
 	pkt.DstPort = netutil.Ntohs(tcp.DstPort)
@@ -163,7 +169,7 @@ func (pkt *Packet) DecodePacketUDP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	udp := (*UDP)(unsafe.Pointer(&data[0]))
+	udp := (*UDPHeader)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_UDP
 	pkt.SrcPort = netutil.Ntohs(udp.SrcPort)
 	pkt.DstPort = netutil.Ntohs(udp.DstPort)
@@ -186,56 +192,4 @@ func (pkt *Packet) DecodePacketICMP(data []byte) error {
 func NewPacket(data []byte) (*Packet, error) {
 	pkt := &Packet{}
 	return pkt, pkt.DecodeFromData(data)
-}
-
-type UncheckedBuffer struct {
-	buf   []byte
-	start int
-}
-
-// NewUncheckedBuffer
-// return value instead of pointer, in order to avoid memory allocation
-func NewUncheckedBuffer(data []byte) UncheckedBuffer {
-	return UncheckedBuffer{buf: data[:cap(data)], start: cap(data)}
-}
-
-func (b *UncheckedBuffer) Bytes() []byte {
-	return b.buf[b.start:]
-}
-
-func (b *UncheckedBuffer) Len() int {
-	return len(b.buf) - b.start
-}
-
-func (b *UncheckedBuffer) AllocatePayload(n int) []byte {
-	b.start -= n
-	return b.buf[b.start:]
-}
-
-func (b *UncheckedBuffer) AllocateEthernet() *Ethernet {
-	return DataPtrEthernet(b.AllocatePayload(SizeofEthernet), 0)
-}
-
-func (b *UncheckedBuffer) AllocateVLAN() *VLAN {
-	return DataPtrVLAN(b.AllocatePayload(SizeofVLAN), 0)
-}
-
-func (b *UncheckedBuffer) AllocateARP() *ARP {
-	return DataPtrARP(b.AllocatePayload(SizeofARP), 0)
-}
-
-func (b *UncheckedBuffer) AllocateIPv4() *IPv4 {
-	return DataPtrIPv4(b.AllocatePayload(SizeofIPv4), 0)
-}
-
-func (b *UncheckedBuffer) AllocateTCP() *TCP {
-	return DataPtrTCP(b.AllocatePayload(SizeofTCP), 0)
-}
-
-func (b *UncheckedBuffer) AllocateUDP() *UDP {
-	return DataPtrUDP(b.AllocatePayload(SizeofUDP), 0)
-}
-
-func (b *UncheckedBuffer) AllocateICMP() *ICMP {
-	return DataPtrICMP(b.AllocatePayload(SizeofICMP), 0)
 }

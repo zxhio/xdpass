@@ -27,7 +27,7 @@ import (
 //     __be32 daddr;    // Destination IP Address
 // };
 
-type IPv4 struct {
+type IPv4Header struct {
 	VerHdrLen uint8  // 4 bits version, 4 bits header length
 	TOS       uint8  // type of service
 	Len       uint16 // total length
@@ -40,17 +40,17 @@ type IPv4 struct {
 	DstIP     uint32 // destination ip
 }
 
-func (ip *IPv4) HeaderLen() uint8 {
+func (ip *IPv4Header) HeaderLen() uint8 {
 	return (ip.VerHdrLen & 0x0f) * 4
 }
 
-func (ip *IPv4) SetHeaderLen(headerLen uint8) {
+func (ip *IPv4Header) SetHeaderLen(headerLen uint8) {
 	// IPv4 version is 4 in high 4 bit
 	ip.VerHdrLen = (0x40 & 0xf0) | (headerLen / 4)
 }
 
 // ComputeChecksum must be called after the header is filled
-func (ip *IPv4) ComputeChecksum(l3PayloadLen uint16) uint16 {
+func (ip *IPv4Header) ComputeChecksum(l3PayloadLen uint16) uint16 {
 	off := ip.HeaderLen()
 	data := unsafe.Slice((*byte)(unsafe.Pointer(ip)), off)
 
@@ -84,7 +84,7 @@ func checksum(bytes []byte) uint16 {
 }
 
 // PseudoChecksum is the checksum of the pseudo header
-func (ip *IPv4) PseudoChecksum() uint32 {
+func (ip *IPv4Header) PseudoChecksum() uint32 {
 	saddr := (*[4]byte)(unsafe.Pointer(&ip.SrcIP))
 	daddr := (*[4]byte)(unsafe.Pointer(&ip.DstIP))
 

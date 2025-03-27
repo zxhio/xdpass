@@ -27,7 +27,7 @@ func TestICMPChecksum(t *testing.T) {
 		}
 
 		pkt := gopacket.NewPacket(buf, layers.LayerTypeICMPv4, gopacket.Default)
-		csum := DataPtrICMP(buf, 0).ComputeChecksum(uint16(len(testCase.payload)))
+		csum := DataPtrICMPHeader(buf, 0).ComputeChecksum(uint16(len(testCase.payload)))
 		assert.Equal(t, pkt.Layers()[0].(*layers.ICMPv4).Checksum, netutil.Htons(csum))
 	}
 }

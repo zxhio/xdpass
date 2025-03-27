@@ -1,5 +1,5 @@
 package fastpkt
 
-type IPv6 struct {
+type IPv6Header struct {
 	// TODO: implement
 }

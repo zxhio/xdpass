@@ -61,8 +61,8 @@ func TestDecodePacketVLAN(t *testing.T) {
 
 	assert.Equal(t, uint16(unix.ETH_P_IP), pkt.L3Proto)
 	assert.Equal(t, uint16(unix.IPPROTO_ICMP), pkt.L4Proto)
-	assert.Equal(t, true, netutil.Uint32ToIPv4(pkt.SrcIP).Equal(testLayerIPv4.SrcIP.To4()))
-	assert.Equal(t, true, netutil.Uint32ToIPv4(pkt.DstIP).Equal(testLayerIPv4.DstIP.To4()))
+	assert.Equal(t, true, netutil.IPv4FromUint32(pkt.SrcIP).Equal(testLayerIPv4.SrcIP.To4()))
+	assert.Equal(t, true, netutil.IPv4FromUint32(pkt.DstIP).Equal(testLayerIPv4.DstIP.To4()))
 	assert.Equal(t, uint16(0), pkt.SrcPort)
 	assert.Equal(t, uint16(0), pkt.DstPort)
 	assert.Equal(t, uint8(SizeofEthernet+SizeofVLAN), pkt.L2Len)
