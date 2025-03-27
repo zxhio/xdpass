@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/cilium/ebpf/rlimit"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/zxhio/xdpass/internal"
@@ -65,6 +66,11 @@ func main() {
 		cancel()
 		logrus.WithField("sig", sig).Info("Recv signal")
 	}()
+
+	err = rlimit.RemoveMemlock()
+	if err != nil {
+		logrus.WithError(err).Fatal("Fatal to remove memory limit")
+	}
 
 	server, err := commands.NewMessageServer(commands.DefUnixSock, fwcmd.FirewallCommandHandle{}, redirectcmd.RedirectCommandHandle{}, statscmd.StatsCommandHandle{})
 	if err != nil {
