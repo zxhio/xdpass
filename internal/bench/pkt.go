@@ -85,7 +85,7 @@ func (l4MakerTCP) MakeLayer(opt *layerOpt, ipv4 *layers.IPv4) gopacket.Serializa
 	ipv4.Protocol = layers.IPProtocolTCP
 	tcp := &layers.TCP{
 		SrcPort: layers.TCPPort(valueOr(opt.tcp.SrcPort, 54321)),
-		DstPort: layers.TCPPort(valueOr(opt.tcp.SrcPort, 54321)),
+		DstPort: layers.TCPPort(valueOr(opt.tcp.DstPort, 12345)),
 		Seq:     valueOr(opt.tcp.Seq, 12345),
 		SYN:     opt.tcp.SYN,
 		ACK:     opt.tcp.ACK,
@@ -114,7 +114,7 @@ func (l4MakerUDP) MakeLayer(opt *layerOpt, ipv4 *layers.IPv4) gopacket.Serializa
 	ipv4.Protocol = layers.IPProtocolUDP
 	udp := &layers.UDP{
 		SrcPort: layers.UDPPort(valueOr(opt.udp.SrcPort, 54321)),
-		DstPort: layers.UDPPort(valueOr(opt.udp.SrcPort, 54321)),
+		DstPort: layers.UDPPort(valueOr(opt.udp.DstPort, 12345)),
 	}
 	udp.SetNetworkLayerForChecksum(ipv4)
 	return udp
