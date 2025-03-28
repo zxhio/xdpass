@@ -9,13 +9,18 @@ import (
 	"github.com/zxhio/xdpass/internal/protos"
 )
 
+type redirectReq struct {
+	RedirectType protos.RedirectType `json:"redirect_type"`
+	RedirectData json.RawMessage     `json:"redirect_data"`
+}
+
 func doRequest[Q, R any](redirectType protos.RedirectType, v *Q) (*R, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
-	req := protos.RedirectReq{RedirectType: redirectType, RedirectData: data}
-	resp, err := commands.GetMessage[protos.RedirectReq, R](protos.TypeRedirect, "", &req)
+	req := redirectReq{RedirectType: redirectType, RedirectData: data}
+	resp, err := commands.GetMessage[redirectReq, R](protos.TypeRedirect, "", &req)
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +28,7 @@ func doRequest[Q, R any](redirectType protos.RedirectType, v *Q) (*R, error) {
 }
 
 func response(client *commands.MessageClient, data []byte) error {
-	resp := protos.MessageResp{Data: data, ErrorCode: 0}
+	resp := commands.MessageResp{Data: data, ErrorCode: 0}
 	return commands.Response(client, &resp)
 }
 
@@ -45,7 +50,7 @@ func (RedirectCommandHandle) CommandType() protos.Type {
 func (RedirectCommandHandle) HandleReqData(client *commands.MessageClient, data []byte) error {
 	logrus.WithField("data", string(data)).Debug("Handle redirect request data")
 
-	var req protos.RedirectReq
+	var req redirectReq
 	if err := json.Unmarshal(data, &req); err != nil {
 		return commands.ResponseErrorCode(client, err, protos.ErrorCode_InvalidRequest)
 	}

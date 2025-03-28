@@ -16,33 +16,27 @@ const (
 	RedirectTypeTuntap
 )
 
-const (
-	redirectTypeStrDump   = "dump"
-	redirectTypeStrRemote = "remote"
-	redirectTypeStrSpoof  = "spoof"
-	redirectTypeStrTuntap = "tuntap"
-)
-
-var redirectTypeStrLookup = map[RedirectType]string{
-	RedirectTypeDump:   redirectTypeStrDump,
-	RedirectTypeRemote: redirectTypeStrRemote,
-	RedirectTypeSpoof:  redirectTypeStrSpoof,
-	RedirectTypeTuntap: redirectTypeStrTuntap,
+var redirectTypeToStr = map[RedirectType]string{
+	RedirectTypeDump:   "dump",
+	RedirectTypeRemote: "remote",
+	RedirectTypeSpoof:  "spoof",
+	RedirectTypeTuntap: "tuntap",
 }
 
-var redirectTypeLookup = map[string]RedirectType{
-	redirectTypeStrDump:   RedirectTypeDump,
-	redirectTypeStrRemote: RedirectTypeRemote,
-	redirectTypeStrSpoof:  RedirectTypeSpoof,
-	redirectTypeStrTuntap: RedirectTypeTuntap,
+var strToRedirectType = make(map[string]RedirectType)
+
+func init() {
+	for matchType, str := range redirectTypeToStr {
+		strToRedirectType[str] = matchType
+	}
 }
 
 func (t RedirectType) String() string {
-	return redirectTypeStrLookup[t]
+	return redirectTypeToStr[t]
 }
 
 func (t *RedirectType) Set(s string) error {
-	v, ok := redirectTypeLookup[s]
+	v, ok := strToRedirectType[s]
 	if !ok {
 		return fmt.Errorf("invalid redirect type: %s", s)
 	}
@@ -51,7 +45,7 @@ func (t *RedirectType) Set(s string) error {
 }
 
 func (t RedirectType) MarshalJSON() ([]byte, error) {
-	s, ok := redirectTypeStrLookup[t]
+	s, ok := redirectTypeToStr[t]
 	if !ok {
 		return nil, fmt.Errorf("invalid redirect type %d", t)
 	}
@@ -67,38 +61,7 @@ func (t *RedirectType) UnmarshalJSON(data []byte) error {
 	return t.Set(s)
 }
 
-type RedirectReq struct {
-	RedirectType RedirectType    `json:"redirect_type"`
-	RedirectData json.RawMessage `json:"redirect_data"`
-}
-
-type DumpReq struct {
-	Interface string `json:"interface,omitempty"`
-}
-
-// Remote
-// TODO: add req/resp
-
-// Spoof
-
-// Tun
-
-type TuntapReq struct {
-	Operation Operation      `json:"operation"`
-	Interface string         `json:"interface,omitempty"`
-	Devices   []TuntapDevice `json:"devices,omitempty"`
-}
-
 type TuntapDevice struct {
 	Name string             `json:"name"`
 	Mode netlink.TuntapMode `json:"mode,omitempty"`
-}
-
-type TuntapResp struct {
-	Interfaces []TuntapInterfaceDevices `json:"interfaces,omitempty"`
-}
-
-type TuntapInterfaceDevices struct {
-	Interface string         `json:"interface"`
-	Devices   []TuntapDevice `json:"devices"`
 }

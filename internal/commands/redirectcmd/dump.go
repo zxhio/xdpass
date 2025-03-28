@@ -36,6 +36,10 @@ var dumpCmd = &cobra.Command{
 
 var dumpopt DumpOpt
 
+type dumpReq struct {
+	Interface string `json:"interface,omitempty"`
+}
+
 type DumpOpt struct {
 	Interface string
 }
@@ -43,7 +47,7 @@ type DumpOpt struct {
 type DumpCommandClient struct{}
 
 func (DumpCommandClient) DoReq(opt DumpOpt) error {
-	client, err := commands.GetMessageClient(commands.DefUnixSock, protos.TypeRedirect, "", &protos.RedirectReq{RedirectType: protos.RedirectTypeDump})
+	client, err := commands.GetMessageClient(commands.DefUnixSock, protos.TypeRedirect, "", &redirectReq{RedirectType: protos.RedirectTypeDump})
 	if err != nil {
 		return err
 	}
@@ -72,7 +76,7 @@ func (DumpCommandHandle) RedirectType() protos.RedirectType {
 }
 
 func (DumpCommandHandle) HandleReqData(client *commands.MessageClient, data []byte) error {
-	var req protos.DumpReq
+	var req dumpReq
 	if err := json.Unmarshal(data, &req); err != nil {
 		return commands.ResponseError(client, err)
 	}

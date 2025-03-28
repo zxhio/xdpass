@@ -76,8 +76,8 @@ var spoofCmd = &cobra.Command{
 }
 
 type spoofBaseReq struct {
-	Operation protos.Operation `json:"operation"`
-	Interface string           `json:"interface,omitempty"`
+	Operation commands.Operation `json:"operation"`
+	Interface string             `json:"interface,omitempty"`
 }
 
 type spoofShowListReq struct {
@@ -125,17 +125,17 @@ func (s *SpoofCommandClient) DoReq(opt *SpoofOpt) error {
 	}
 
 	if opt.Add {
-		return s.DoReqEditRule(protos.OperationAdd, opt)
+		return s.DoReqEditRule(commands.OperationAdd, opt)
 	}
 
 	if opt.Del {
-		return s.DoReqEditRule(protos.OperationDel, opt)
+		return s.DoReqEditRule(commands.OperationDel, opt)
 	}
 	return nil
 }
 
 func (SpoofCommandClient) DoReqShowList(ifaceName string) error {
-	req := spoofShowListReq{spoofBaseReq{Operation: protos.OperationList, Interface: ifaceName}}
+	req := spoofShowListReq{spoofBaseReq{Operation: commands.OperationList, Interface: ifaceName}}
 	resp, err := doRequest[spoofShowListReq, spoofShowListResp](protos.RedirectTypeSpoof, &req)
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func (SpoofCommandClient) DoReqShowList(ifaceName string) error {
 	return nil
 }
 
-const operationListTarget = protos.OperationCustom + 1
+const operationListTarget = commands.OperationCustom + 1
 
 func (SpoofCommandClient) DoReqShowTargets() error {
 	req := spoofListTargetTypeReq{spoofBaseReq{Operation: operationListTarget}}
@@ -220,7 +220,7 @@ func (SpoofCommandClient) DoReqShowTargets() error {
 	return nil
 }
 
-func (SpoofCommandClient) DoReqEditRule(op protos.Operation, opt *SpoofOpt) error {
+func (SpoofCommandClient) DoReqEditRule(op commands.Operation, opt *SpoofOpt) error {
 	var matchs []spoof.Match
 	if !opt.Source.Equal(inet.LPMIPv4{}) {
 		matchs = append(matchs, spoof.MatchLPMIPv4Src(opt.Source))
@@ -284,11 +284,11 @@ func (s SpoofCommandHandle) HandleReqData(client *commands.MessageClient, data [
 	}
 
 	switch req.Operation {
-	case protos.OperationNop:
+	case commands.OperationNop:
 		data, err = []byte("{}"), nil
-	case protos.OperationList:
+	case commands.OperationList:
 		data, err = s.handleOpList(req.Interface)
-	case protos.OperationAdd, protos.OperationDel:
+	case commands.OperationAdd, commands.OperationDel:
 		data, err = s.handleReqEdit(data)
 	case operationListTarget:
 		data, err = s.handleOpListTargets()
@@ -359,9 +359,9 @@ func (s SpoofCommandHandle) handleReqEdit(data []byte) ([]byte, error) {
 	for ifaceName, api := range apis {
 		logrus.WithFields(logrus.Fields{"interface": ifaceName, "op": req.Operation, "rule": req.Rule.String()}).Debug("Edit spoof rule")
 		switch req.Operation {
-		case protos.OperationAdd:
+		case commands.OperationAdd:
 			err = api.AddSpoofRule(req.Rule)
-		case protos.OperationDel:
+		case commands.OperationDel:
 			err = api.DelSpoofRule(req.Rule)
 		default:
 			err = fmt.Errorf("invalid operation: %d", req.Operation)

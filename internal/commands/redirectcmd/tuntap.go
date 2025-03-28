@@ -29,6 +29,21 @@ func init() {
 
 var tuntapOpt TuntapOpt
 
+type tuntapReq struct {
+	Operation commands.Operation    `json:"operation"`
+	Interface string                `json:"interface,omitempty"`
+	Devices   []protos.TuntapDevice `json:"devices,omitempty"`
+}
+
+type tuntapResp struct {
+	Interfaces []TuntapInterfaceDevices `json:"interfaces,omitempty"`
+}
+
+type TuntapInterfaceDevices struct {
+	Interface string                `json:"interface"`
+	Devices   []protos.TuntapDevice `json:"devices"`
+}
+
 type TuntapOpt struct {
 	Interface  string
 	ShowList   bool
@@ -54,20 +69,20 @@ func (t TuntapCommandClient) DoReq(opt *TuntapOpt) error {
 		return t.DoReqShow(opt.Interface)
 	}
 	if len(opt.AddTuns) > 0 {
-		return t.DoReqEdit(protos.OperationAdd, opt.Interface, opt.AddTuns, netlink.TUNTAP_MODE_TUN)
+		return t.DoReqEdit(commands.OperationAdd, opt.Interface, opt.AddTuns, netlink.TUNTAP_MODE_TUN)
 	}
 	if len(opt.AddTaps) > 0 {
-		return t.DoReqEdit(protos.OperationAdd, opt.Interface, opt.AddTaps, netlink.TUNTAP_MODE_TAP)
+		return t.DoReqEdit(commands.OperationAdd, opt.Interface, opt.AddTaps, netlink.TUNTAP_MODE_TAP)
 	}
 	if len(opt.DelDevices) > 0 {
-		return t.DoReqEdit(protos.OperationDel, opt.Interface, opt.DelDevices, 0)
+		return t.DoReqEdit(commands.OperationDel, opt.Interface, opt.DelDevices, 0)
 	}
 	return nil
 }
 
 func (TuntapCommandClient) DoReqShow(ifaceName string) error {
-	req := protos.TuntapReq{Operation: protos.OperationList, Interface: ifaceName}
-	resp, err := doRequest[protos.TuntapReq, protos.TuntapResp](protos.RedirectTypeTuntap, &req)
+	req := tuntapReq{Operation: commands.OperationList, Interface: ifaceName}
+	resp, err := doRequest[tuntapReq, tuntapResp](protos.RedirectTypeTuntap, &req)
 	if err != nil {
 		return err
 	}
@@ -85,12 +100,12 @@ func (TuntapCommandClient) DoReqShow(ifaceName string) error {
 	return nil
 }
 
-func (TuntapCommandClient) DoReqEdit(op protos.Operation, ifaceName string, devs []string, mode netlink.TuntapMode) error {
-	req := protos.TuntapReq{Operation: op, Interface: ifaceName}
+func (TuntapCommandClient) DoReqEdit(op commands.Operation, ifaceName string, devs []string, mode netlink.TuntapMode) error {
+	req := tuntapReq{Operation: op, Interface: ifaceName}
 	for _, dev := range devs {
 		req.Devices = append(req.Devices, protos.TuntapDevice{Name: dev, Mode: mode})
 	}
-	_, err := doRequest[protos.TuntapReq, protos.TuntapResp](protos.RedirectTypeTuntap, &req)
+	_, err := doRequest[tuntapReq, tuntapResp](protos.RedirectTypeTuntap, &req)
 	return err
 }
 
@@ -101,18 +116,18 @@ func (TuntapCommandHandle) RedirectType() protos.RedirectType {
 }
 
 func (t TuntapCommandHandle) HandleReqData(client *commands.MessageClient, data []byte) error {
-	var req protos.TuntapReq
+	var req tuntapReq
 	err := json.Unmarshal(data, &req)
 	if err != nil {
 		return commands.ResponseErrorCode(client, err, protos.ErrorCode_InvalidRequest)
 	}
 
 	switch req.Operation {
-	case protos.OperationList:
+	case commands.OperationList:
 		data, err = t.handleOpList(req.Interface)
-	case protos.OperationAdd:
+	case commands.OperationAdd:
 		data, err = t.handleOpEdit(&req, func(api exports.RedirectTuntapAPI, d *protos.TuntapDevice) error { return api.AddTuntap(d) })
-	case protos.OperationDel:
+	case commands.OperationDel:
 		data, err = t.handleOpEdit(&req, func(api exports.RedirectTuntapAPI, d *protos.TuntapDevice) error { return api.DelTuntap(d) })
 	}
 	if err != nil {
@@ -141,9 +156,9 @@ func (t TuntapCommandHandle) handleOpList(ifaceName string) ([]byte, error) {
 		return nil, err
 	}
 
-	resp := protos.TuntapResp{}
+	resp := tuntapResp{}
 	for name, api := range apis {
-		resp.Interfaces = append(resp.Interfaces, protos.TuntapInterfaceDevices{
+		resp.Interfaces = append(resp.Interfaces, TuntapInterfaceDevices{
 			Interface: name,
 			Devices:   api.GetTuntaps(),
 		})
@@ -151,7 +166,7 @@ func (t TuntapCommandHandle) handleOpList(ifaceName string) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-func (t TuntapCommandHandle) handleOpEdit(req *protos.TuntapReq, edit func(api exports.RedirectTuntapAPI, device *protos.TuntapDevice) error) ([]byte, error) {
+func (t TuntapCommandHandle) handleOpEdit(req *tuntapReq, edit func(api exports.RedirectTuntapAPI, device *protos.TuntapDevice) error) ([]byte, error) {
 	apis, err := t.getAPIs(req.Interface)
 	if err != nil {
 		return nil, err

@@ -54,7 +54,7 @@ func GetMessageByAddr[Q any, R any](addr string, t protos.Type, id string, v *Q)
 	}
 	logrus.WithField("data", string(data)).Debug("Get response")
 
-	return protos.GetMessageRespValue[R](data)
+	return GetMessageRespValue[R](data)
 }
 
 func GetMessageClient[Q any](addr string, t protos.Type, id string, v *Q) (*MessageClient, error) {
@@ -64,7 +64,7 @@ func GetMessageClient[Q any](addr string, t protos.Type, id string, v *Q) (*Mess
 	}
 	logrus.WithField("addr", addr).Debug("Connected to")
 
-	data, err := protos.MakeMessageReqData(t, id, v)
+	data, err := MakeMessageReqData(t, id, v)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func GetMessageClient[Q any](addr string, t protos.Type, id string, v *Q) (*Mess
 	return client, nil
 }
 
-func Response(client *MessageClient, resp *protos.MessageResp) error {
+func Response(client *MessageClient, resp *MessageResp) error {
 	data, err := json.Marshal(resp)
 	if err != nil {
 		return err
@@ -87,12 +87,12 @@ func Response(client *MessageClient, resp *protos.MessageResp) error {
 }
 
 func ResponseError(client *MessageClient, err error) error {
-	resp := protos.MessageResp{Message: err.Error(), ErrorCode: 1}
+	resp := MessageResp{Message: err.Error(), ErrorCode: 1}
 	return Response(client, &resp)
 }
 
 func ResponseErrorCode(client *MessageClient, err error, errCode protos.ErrorCode) error {
-	resp := protos.MessageResp{Message: err.Error(), ErrorCode: errCode}
+	resp := MessageResp{Message: err.Error(), ErrorCode: errCode}
 	return Response(client, &resp)
 }
 
@@ -101,7 +101,7 @@ func ResponseMessage[T any](client *MessageClient, v *T) error {
 	if err != nil {
 		return err
 	}
-	resp := protos.MessageResp{Data: data, ErrorCode: 0}
+	resp := MessageResp{Data: data, ErrorCode: 0}
 	return Response(client, &resp)
 }
 
@@ -169,7 +169,7 @@ func (s *MessageServer) handleConn(conn net.Conn) {
 
 	logrus.WithField("data", string(data)).Debug("New command")
 
-	var req protos.MessageReq
+	var req MessageReq
 	err = json.Unmarshal(data, &req)
 	if err != nil {
 		logrus.WithError(err).Error("Fail to unmarshal message")
