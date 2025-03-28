@@ -6,7 +6,7 @@ interface=br1
 hwaddr=$(cat /sys/class/net/$interface/address)
 
 # Firewall
-xdpass firewall -i $interface --add --key 172.16.23.0/24
+xdpass firewall -i $interface --add --ip 172.16.23.0/24
 xdpass firewall -i $interface --list
 
 # Redirect

@@ -16,10 +16,10 @@ import (
 
 func init() {
 	commands.SetFlagsInterface(fwCmd.Flags(), &opt.Interface)
-	fwCmd.Flags().BoolVarP(&opt.ShowList, "list", "l", false, "List filter ip")
-	fwCmd.Flags().BoolVarP(&opt.Add, "add", "a", false, "Add filter ip")
-	fwCmd.Flags().BoolVarP(&opt.Del, "del", "d", false, "Del filter ip")
-	fwCmd.Flags().Var(&opt.Key, "key", "IP for filter")
+	commands.SetFlagsList(fwCmd.Flags(), &opt.ShowList, "List lpm ipv4")
+	commands.SetFlagsAdd(fwCmd.Flags(), &opt.Add, "Add lpm ipv4")
+	commands.SetFlagsDel(fwCmd.Flags(), &opt.Del, "Del lpm ipv4")
+	fwCmd.Flags().Var(&opt.Key, "ip", "LPM IPv4")
 
 	commands.Register(fwCmd)
 }
@@ -49,16 +49,13 @@ type FirewallCommand struct{}
 func (f FirewallCommand) DoReq(opt *FirwallOpt) error {
 	if opt.ShowList {
 		return f.DoReqListIPKey(opt.Interface)
-	}
-
-	if opt.Add {
+	} else if opt.Add {
 		return f.DoReqEditIPKey(protos.OperationAdd, opt.Interface, opt.Key)
-	}
-
-	if opt.Del {
+	} else if opt.Del {
 		return f.DoReqEditIPKey(protos.OperationDel, opt.Interface, opt.Key)
+	} else {
+		return fmt.Errorf("no operation specified")
 	}
-	return nil
 }
 
 func (FirewallCommand) DoReqListIPKey(ifaceName string) error {
@@ -83,8 +80,11 @@ func (FirewallCommand) DoReqListIPKey(ifaceName string) error {
 	return nil
 }
 
-func (FirewallCommand) DoReqEditIPKey(op protos.Operation, iface string, key inet.LPMIPv4) error {
-	req := protos.FirewallReq{Operation: op, Interface: iface, Keys: []inet.LPMIPv4{key}}
+func (FirewallCommand) DoReqEditIPKey(op protos.Operation, iface string, lpmIPv4 inet.LPMIPv4) error {
+	if lpmIPv4.Equal(inet.LPMIPv4{}) {
+		return fmt.Errorf("no non-nil ip specified")
+	}
+	req := protos.FirewallReq{Operation: op, Interface: iface, Keys: []inet.LPMIPv4{lpmIPv4}}
 	_, err := commands.GetMessage[protos.FirewallReq, protos.FirewallResp](protos.TypeFirewall, "", &req)
 	return err
 }

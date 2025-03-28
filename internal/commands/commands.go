@@ -46,6 +46,14 @@ func SetFlagsList(s *pflag.FlagSet, v *bool, usage string) {
 	s.BoolVarP(v, "list", "l", false, usage)
 }
 
+func SetFlagsAdd(s *pflag.FlagSet, v *bool, usage string) {
+	s.BoolVarP(v, "add", "A", false, usage)
+}
+
+func SetFlagsDel(s *pflag.FlagSet, v *bool, usage string) {
+	s.BoolVarP(v, "del", "D", false, usage)
+}
+
 func SetVerbose() {
 	if opt.verbose {
 		logrus.SetLevel(logrus.DebugLevel)
