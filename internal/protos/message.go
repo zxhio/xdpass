@@ -121,7 +121,7 @@ const (
 	OperationAdd
 	OperationDel
 	OperationList
-	OperationListSpoofTypes
+	OperationCustom
 )
 
 func (o Operation) String() string {
@@ -134,8 +134,8 @@ func (o Operation) String() string {
 		return "del"
 	case OperationList:
 		return "list"
-	case OperationListSpoofTypes:
-		return "list-spoof-types"
+	case OperationCustom:
+		return "custom"
 	}
-	return "unknown"
+	return fmt.Sprintf("custom+%d", o-OperationCustom)
 }

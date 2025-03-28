@@ -22,7 +22,7 @@ import (
 func init() {
 	commands.SetFlagsInterface(spoofCmd.Flags(), &spoofOpt.Interface)
 	commands.SetFlagsList(spoofCmd.Flags(), &spoofOpt.ShowList, "Show spoof rule list")
-	spoofCmd.Flags().BoolVar(&spoofOpt.ShowTypes, "list-spoof-types", false, "Show supported spoof type list")
+	spoofCmd.Flags().BoolVar(&spoofOpt.ShowTypes, "list-target", false, "Show supported spoof target type list")
 	spoofCmd.Flags().BoolVarP(&spoofOpt.Add, "add", "A", false, "Add spoof rule")
 	spoofCmd.Flags().BoolVarP(&spoofOpt.Del, "del", "D", false, "Delete spoof rule")
 	spoofCmd.Flags().Var(&spoofOpt.SrcMAC, "smac", "Source mac address")
@@ -88,12 +88,17 @@ type spoofShowListResp struct {
 	Interfaces []spoofShowListIface `json:"interfaces"`
 }
 
-type spoofListTypesReq struct {
+type spoofListTargetTypeReq struct {
 	spoofBaseReq
 }
 
-type spoofListTypesResp struct {
-	Types []string `json:"types"`
+type spoofListTargetTypeResp struct {
+	Targets []spoofListTargetMatch `json:"targets"`
+}
+
+type spoofListTargetMatch struct {
+	TargetType spoof.TargetType  `json:"target_type"`
+	MatchTypes []spoof.MatchType `json:"match_types"`
 }
 
 type spoofShowListIface struct {
@@ -116,7 +121,7 @@ func (s *SpoofCommandClient) DoReq(opt *SpoofOpt) error {
 	}
 
 	if opt.ShowTypes {
-		return s.DoReqShowTypes()
+		return s.DoReqShowTargets()
 	}
 
 	if opt.Add {
@@ -192,18 +197,23 @@ func (SpoofCommandClient) DoReqShowList(ifaceName string) error {
 	return nil
 }
 
-func (SpoofCommandClient) DoReqShowTypes() error {
-	req := spoofListTypesReq{spoofBaseReq{Operation: protos.OperationList}}
-	resp, err := doRequest[spoofListTypesReq, spoofListTypesResp](protos.RedirectTypeSpoof, &req)
+const operationListTarget = protos.OperationCustom + 1
+
+func (SpoofCommandClient) DoReqShowTargets() error {
+	req := spoofListTargetTypeReq{spoofBaseReq{Operation: operationListTarget}}
+	resp, err := doRequest[spoofListTargetTypeReq, spoofListTargetTypeResp](protos.RedirectTypeSpoof, &req)
 	if err != nil {
 		return err
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Supported Spoof Type"})
+	table.SetHeader([]string{"TargetType", "MatchType"})
 	table.SetAlignment(tablewriter.ALIGN_CENTER)
-	for _, typ := range resp.Types {
-		table.Append([]string{typ})
+	table.SetAutoMergeCellsByColumnIndex([]int{0})
+	for _, tgt := range resp.Targets {
+		for _, matchType := range tgt.MatchTypes {
+			table.Append([]string{tgt.TargetType.String(), matchType.String()})
+		}
 	}
 	table.Render()
 
@@ -278,10 +288,10 @@ func (s SpoofCommandHandle) HandleReqData(client *commands.MessageClient, data [
 		data, err = []byte("{}"), nil
 	case protos.OperationList:
 		data, err = s.handleOpList(req.Interface)
-	case protos.OperationListSpoofTypes:
-		data, err = s.handleOpListTypes()
 	case protos.OperationAdd, protos.OperationDel:
 		data, err = s.handleReqEdit(data)
+	case operationListTarget:
+		data, err = s.handleOpListTargets()
 	}
 	if err != nil {
 		return commands.ResponseErrorCode(client, err, protos.ErrorCode_InvalidRequest)
@@ -319,8 +329,19 @@ func (s SpoofCommandHandle) handleOpList(ifaceName string) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-func (s SpoofCommandHandle) handleOpListTypes() ([]byte, error) {
-	return []byte("[]"), nil
+func (s SpoofCommandHandle) handleOpListTargets() ([]byte, error) {
+	supportedTargets := []spoof.Target{
+		spoof.TargetARPReply{},
+		spoof.TargetICMPEchoReply{},
+		spoof.TargetTCPReset{},
+	}
+
+	targets := []spoofListTargetMatch{}
+	for _, tgt := range supportedTargets {
+		targets = append(targets, spoofListTargetMatch{TargetType: tgt.TargetType(), MatchTypes: tgt.MatchTypes()})
+	}
+	resp := spoofListTargetTypeResp{Targets: targets}
+	return json.Marshal(resp)
 }
 
 func (s SpoofCommandHandle) handleReqEdit(data []byte) ([]byte, error) {
