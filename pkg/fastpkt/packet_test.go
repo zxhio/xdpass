@@ -7,7 +7,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -61,8 +61,8 @@ func TestDecodePacketVLAN(t *testing.T) {
 
 	assert.Equal(t, uint16(unix.ETH_P_IP), pkt.L3Proto)
 	assert.Equal(t, uint16(unix.IPPROTO_ICMP), pkt.L4Proto)
-	assert.Equal(t, true, netutil.IPv4FromUint32(pkt.SrcIP).Equal(testLayerIPv4.SrcIP.To4()))
-	assert.Equal(t, true, netutil.IPv4FromUint32(pkt.DstIP).Equal(testLayerIPv4.DstIP.To4()))
+	assert.Equal(t, true, inet.AddrV4(pkt.SrcIP) == inet.NewAddrV4FromIP(testLayerIPv4.SrcIP))
+	assert.Equal(t, true, inet.AddrV4(pkt.DstIP) == inet.NewAddrV4FromIP(testLayerIPv4.DstIP))
 	assert.Equal(t, uint16(0), pkt.SrcPort)
 	assert.Equal(t, uint16(0), pkt.DstPort)
 	assert.Equal(t, uint8(SizeofEthernet+SizeofVLAN), pkt.L2Len)

@@ -1,13 +1,13 @@
 package protos
 
 import (
-	"github.com/zxhio/xdpass/pkg/xdpprog"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 type FirewallReq struct {
-	Operation Operation          `json:"operation"`
-	Interface string             `json:"interface"`
-	Keys      []xdpprog.IPLpmKey `json:"keys,omitempty"`
+	Operation Operation      `json:"operation"`
+	Interface string         `json:"interface"`
+	Keys      []inet.LPMIPv4 `json:"keys,omitempty"`
 }
 
 type FirewallResp struct {
@@ -15,6 +15,6 @@ type FirewallResp struct {
 }
 
 type FirewallIPKeys struct {
-	Interface string             `json:"interface"`
-	Keys      []xdpprog.IPLpmKey `json:"keys,omitempty"`
+	Interface string         `json:"interface"`
+	Keys      []inet.LPMIPv4 `json:"keys,omitempty"`
 }

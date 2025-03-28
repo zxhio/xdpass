@@ -14,7 +14,7 @@ import (
 	"github.com/zxhio/xdpass/internal/exports"
 	"github.com/zxhio/xdpass/internal/protos"
 	"github.com/zxhio/xdpass/internal/redirect/spoof"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 // IPv4LPM  IPv4
@@ -29,12 +29,12 @@ func init() {
 	spoofCmd.Flags().Var(&spoofOpt.DstMAC, "dmac", "Destination mac address")
 	spoofCmd.Flags().VarP(&spoofOpt.Source, "source", "s", "Source ip address")
 	spoofCmd.Flags().VarP(&spoofOpt.Dest, "destination", "d", "Destination ip address")
-	spoofCmd.Flags().Var(&spoofOpt.IPRangeSrc, "iprange-src", "Source iprange address")
-	spoofCmd.Flags().Var(&spoofOpt.IPRangeDst, "iprange-dst", "Destination iprange address")
-	spoofCmd.Flags().Var(&spoofOpt.SPort, "sport", "Source port")
-	spoofCmd.Flags().Var(&spoofOpt.DPort, "dport", "Destination port")
-	spoofCmd.Flags().Var(&spoofOpt.SPorts, "sports", "Source multiport")
-	spoofCmd.Flags().Var(&spoofOpt.DPorts, "dports", "Destination multiport")
+	spoofCmd.Flags().Var(&spoofOpt.IPRangeSrc, "iprange-src", "Source iprange address, IP1-IP2")
+	spoofCmd.Flags().Var(&spoofOpt.IPRangeDst, "iprange-dst", "Destination iprange address, IP1-IP2")
+	spoofCmd.Flags().Var(&spoofOpt.SPort, "sport", "Source port, PORT1[:PORT2]")
+	spoofCmd.Flags().Var(&spoofOpt.DPort, "dport", "Destination port, PORT1[:PORT2]")
+	spoofCmd.Flags().Var(&spoofOpt.SPorts, "sports", "Source multiport, PORT1[,PORT2...]")
+	spoofCmd.Flags().Var(&spoofOpt.DPorts, "dports", "Destination multiport, PORT1[,PORT2...]")
 	spoofCmd.Flags().Var(&spoofOpt.TargetType, "target", "")
 
 	commands.Register(spoofCmd)
@@ -51,10 +51,10 @@ type SpoofOpt struct {
 	ShowTypes  bool
 	Add        bool
 	Del        bool
-	SrcMAC     netutil.HwAddr
-	DstMAC     netutil.HwAddr
-	Source     spoof.LPMIPv4
-	Dest       spoof.LPMIPv4
+	SrcMAC     inet.HwAddr
+	DstMAC     inet.HwAddr
+	Source     inet.LPMIPv4
+	Dest       inet.LPMIPv4
 	IPRangeSrc spoof.IPRangeV4
 	IPRangeDst spoof.IPRangeV4
 	SPort      spoof.PortRange
@@ -157,9 +157,9 @@ func (SpoofCommandClient) DoReqShowList(ifaceName string) error {
 
 				switch match.MatchType() {
 				case spoof.MatchTypeLPMIPv4Src:
-					valueIfEmpty(&source, spoof.LPMIPv4(match.(spoof.MatchLPMIPv4Src)).String())
+					valueIfEmpty(&source, inet.LPMIPv4(match.(spoof.MatchLPMIPv4Src)).String())
 				case spoof.MatchTypeLPMIPv4Dst:
-					valueIfEmpty(&dest, spoof.LPMIPv4(match.(spoof.MatchLPMIPv4Dst)).String())
+					valueIfEmpty(&dest, inet.LPMIPv4(match.(spoof.MatchLPMIPv4Dst)).String())
 				case spoof.MatchTypeIPRangeV4Src:
 					valueIfEmpty(&source, spoof.IPRangeV4(match.(spoof.MatchIPRangeV4Src)).String())
 				case spoof.MatchTypeIPRangeV4Dst:
@@ -212,10 +212,10 @@ func (SpoofCommandClient) DoReqShowTypes() error {
 
 func (SpoofCommandClient) DoReqEditRule(op protos.Operation, opt *SpoofOpt) error {
 	var matchs []spoof.Match
-	if !opt.Source.Equal(spoof.LPMIPv4{}) {
+	if !opt.Source.Equal(inet.LPMIPv4{}) {
 		matchs = append(matchs, spoof.MatchLPMIPv4Src(opt.Source))
 	}
-	if !opt.Dest.Equal(spoof.LPMIPv4{}) {
+	if !opt.Dest.Equal(inet.LPMIPv4{}) {
 		matchs = append(matchs, spoof.MatchLPMIPv4Dst(opt.Dest))
 	}
 	if !opt.IPRangeSrc.Equal(spoof.IPRangeV4{}) {

@@ -5,24 +5,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func TestLPMIPv4(t *testing.T) {
 	testCases := []struct {
 		str string
-		lpm LPMIPv4
+		lpm inet.LPMIPv4
 	}{
-		{"192.168.10.10", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("192.168.10.10"))), PrefixLen: 32}},
-		{"192.168.10.10/32", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("192.168.10.10"))), PrefixLen: 32}},
-		{"192.168.10.0/24", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("192.168.10.0"))), PrefixLen: 24}},
-		{"192.168.0.0/16", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("192.168.0.0"))), PrefixLen: 16}},
-		{"192.0.0.0/8", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("192.0.0.0"))), PrefixLen: 8}},
-		{"0.0.0.0/0", LPMIPv4{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("0.0.0.0"))), PrefixLen: 0}},
+		{"192.168.10.10", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("192.168.10.10")), PrefixLen: 32}},
+		{"192.168.10.10/32", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("192.168.10.10")), PrefixLen: 32}},
+		{"192.168.10.0/24", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("192.168.10.0")), PrefixLen: 24}},
+		{"192.168.0.0/16", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("192.168.0.0")), PrefixLen: 16}},
+		{"192.0.0.0/8", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("192.0.0.0")), PrefixLen: 8}},
+		{"0.0.0.0/0", inet.LPMIPv4{Addr4: inet.NewAddrV4FromIP(net.ParseIP("0.0.0.0")), PrefixLen: 0}},
 	}
 
 	for _, tc := range testCases {
-		var lpmIPv4 LPMIPv4
+		var lpmIPv4 inet.LPMIPv4
 		err := lpmIPv4.Set(tc.str)
 		if err != nil {
 			t.Error(err)

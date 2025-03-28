@@ -9,8 +9,7 @@ import (
 	"strings"
 
 	"github.com/zxhio/xdpass/pkg/fastpkt"
-	"github.com/zxhio/xdpass/pkg/netutil"
-	"github.com/zxhio/xdpass/pkg/xdpprog"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -91,63 +90,7 @@ func (t *MatchType) UnmarshalJSON(data []byte) error {
 	return t.Set(s)
 }
 
-type LPMIPv4Uint32 uint32
-
-func (u LPMIPv4Uint32) MarshalJSON() ([]byte, error) {
-	ip := netutil.IPv4FromUint32(uint32(u))
-	if ip == nil {
-		return nil, fmt.Errorf("invalid ip: %d", u)
-	}
-	return json.Marshal(ip.String())
-}
-
-func (u *LPMIPv4Uint32) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-	ip := net.ParseIP(s)
-	if ip == nil {
-		return fmt.Errorf("invalid ip: %s", s)
-	}
-	*u = LPMIPv4Uint32(netutil.IPv4ToUint32(ip))
-	return nil
-}
-
-type LPMIPv4 struct {
-	IP        LPMIPv4Uint32 `json:"ip,omitempty"`
-	PrefixLen uint8         `json:"prefix_len,omitempty"`
-}
-
-func (lpm LPMIPv4) Match(ip uint32) bool {
-	return netutil.IPv4PrefixCompare(ip, uint32(lpm.IP), lpm.PrefixLen) == 0
-}
-
-func (lpm LPMIPv4) Equal(other LPMIPv4) bool {
-	return lpm.IP == other.IP && lpm.PrefixLen == other.PrefixLen
-}
-
-func (lpm LPMIPv4) String() string {
-	ipNet := net.IPNet{IP: netutil.IPv4FromUint32(uint32(lpm.IP)), Mask: net.CIDRMask(int(lpm.PrefixLen), 32)}
-	return ipNet.String()
-}
-func (lpm LPMIPv4) Type() string {
-	return "lpm-ipv4"
-}
-
-func (lpm *LPMIPv4) Set(s string) error {
-	key, err := xdpprog.MakeIPLpmKeyFromStr(s)
-	if err != nil {
-		return err
-	}
-
-	lpm.PrefixLen = uint8(key.PrefixLen)
-	lpm.IP = LPMIPv4Uint32(netutil.IPv4ToUint32(net.IP(key.Data[:4])))
-	return nil
-}
-
-type RangeT[T uint16 | uint32 | int] struct {
+type RangeT[T uint16 | uint32 | inet.AddrV4] struct {
 	Start T `json:"start,omitempty"`
 	End   T `json:"end,omitempty"`
 }
@@ -163,38 +106,42 @@ func (r RangeT[T]) Equal(other RangeT[T]) bool {
 // IPv4 match
 
 // MatchLPMIPv4Src e.g. 192.168.10.10/32, 192.168.10.0/24
-type MatchLPMIPv4Src LPMIPv4
+type MatchLPMIPv4Src inet.LPMIPv4
 
-func (MatchLPMIPv4Src) MatchType() MatchType             { return MatchTypeLPMIPv4Src }
-func (m MatchLPMIPv4Src) Match(pkt *fastpkt.Packet) bool { return (LPMIPv4(m)).Match(pkt.SrcIP) }
+func (MatchLPMIPv4Src) MatchType() MatchType { return MatchTypeLPMIPv4Src }
+func (m MatchLPMIPv4Src) Match(pkt *fastpkt.Packet) bool {
+	return (inet.LPMIPv4(m)).Match(pkt.SrcIP)
+}
 func (m MatchLPMIPv4Src) Equal(other Match) bool {
 	if m.MatchType() != other.MatchType() {
 		return false
 	}
-	return LPMIPv4(m).Equal(LPMIPv4(other.(MatchLPMIPv4Src)))
+	return inet.LPMIPv4(m).Equal(inet.LPMIPv4(other.(MatchLPMIPv4Src)))
 }
 
 // MatchLPMIPv4Dst e.g. 192.168.10.10/32, 192.168.10.0/24
-type MatchLPMIPv4Dst LPMIPv4
+type MatchLPMIPv4Dst inet.LPMIPv4
 
-func (MatchLPMIPv4Dst) MatchType() MatchType             { return MatchTypeLPMIPv4Dst }
-func (m MatchLPMIPv4Dst) Match(pkt *fastpkt.Packet) bool { return (LPMIPv4(m)).Match(pkt.DstIP) }
+func (MatchLPMIPv4Dst) MatchType() MatchType { return MatchTypeLPMIPv4Dst }
+func (m MatchLPMIPv4Dst) Match(pkt *fastpkt.Packet) bool {
+	return (inet.LPMIPv4(m)).Match(pkt.DstIP)
+}
 func (m MatchLPMIPv4Dst) Equal(other Match) bool {
 	if m.MatchType() != other.MatchType() {
 		return false
 	}
-	return LPMIPv4(m).Equal(LPMIPv4(other.(MatchLPMIPv4Dst)))
+	return inet.LPMIPv4(m).Equal(inet.LPMIPv4(other.(MatchLPMIPv4Dst)))
 }
 
 // IPRangeV4 e.g. 192.168.10.10-192.168.10.20
-type IPRangeV4 RangeT[uint32]
+type IPRangeV4 RangeT[inet.AddrV4]
 
-func (r IPRangeV4) IsIn(v uint32) bool {
-	return RangeT[uint32](r).IsIn(v)
+func (r IPRangeV4) IsIn(v inet.AddrV4) bool {
+	return RangeT[inet.AddrV4](r).IsIn(v)
 }
 
 func (r IPRangeV4) Equal(other IPRangeV4) bool {
-	return RangeT[uint32](r).Equal(RangeT[uint32](other))
+	return RangeT[inet.AddrV4](r).Equal(RangeT[inet.AddrV4](other))
 }
 
 func (IPRangeV4) Type() string {
@@ -203,15 +150,18 @@ func (IPRangeV4) Type() string {
 
 func (ir IPRangeV4) String() string {
 	if ir.Start == ir.End {
-		return netutil.IPv4FromUint32(ir.Start).String()
+		if ir.Start == 0 {
+			return ""
+		}
+		return ir.Start.String()
 	}
-	return fmt.Sprintf("%s-%s", netutil.IPv4FromUint32(ir.Start), netutil.IPv4FromUint32(ir.End))
+	return fmt.Sprintf("%s-%s", ir.Start.String(), ir.End.String())
 }
 
 func (ir *IPRangeV4) Set(s string) error {
 	var (
-		start uint32
-		end   uint32
+		start inet.AddrV4
+		end   inet.AddrV4
 	)
 
 	fields := strings.Split(s, "-")
@@ -224,7 +174,7 @@ func (ir *IPRangeV4) Set(s string) error {
 		if ip == nil {
 			return fmt.Errorf("invalid start ip: %s", fields[0])
 		}
-		start = netutil.IPv4ToUint32(ip)
+		start = inet.NewAddrV4FromIP(ip)
 		end = start
 
 		if len(fields) == 2 {
@@ -232,7 +182,7 @@ func (ir *IPRangeV4) Set(s string) error {
 			if ip == nil {
 				return fmt.Errorf("invalid end ip: %s", fields[1])
 			}
-			end = netutil.IPv4ToUint32(ip)
+			end = inet.NewAddrV4FromIP(ip)
 		}
 	}
 
@@ -253,7 +203,7 @@ func (m MatchIPRangeV4Src) Equal(other Match) bool {
 	return IPRangeV4(m).Equal(IPRangeV4(other.(MatchIPRangeV4Src)))
 }
 
-type MatchIPRangeV4Dst RangeT[uint32]
+type MatchIPRangeV4Dst IPRangeV4
 
 func (MatchIPRangeV4Dst) MatchType() MatchType             { return MatchTypeIPRangeV4Dst }
 func (m MatchIPRangeV4Dst) Match(pkt *fastpkt.Packet) bool { return IPRangeV4(m).IsIn(pkt.DstIP) }
@@ -525,7 +475,7 @@ func (MatchARP) MatchType() MatchType {
 
 func (m MatchARP) Match(pkt *fastpkt.Packet) bool {
 	arp := fastpkt.DataPtrARPHeader(pkt.RxData, int(pkt.L2Len))
-	return pkt.L3Proto == unix.ETH_P_ARP && netutil.Ntohs(arp.Operation) == m.Operation
+	return pkt.L3Proto == unix.ETH_P_ARP && inet.Ntohs(arp.Operation) == m.Operation
 }
 
 func (m MatchARP) Equal(other Match) bool {

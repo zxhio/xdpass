@@ -4,7 +4,7 @@ import (
 	"errors"
 	"unsafe"
 
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,8 +30,8 @@ type Packet struct {
 	L4Proto uint16
 
 	// L3
-	SrcIP uint32
-	DstIP uint32
+	SrcIP inet.AddrV4
+	DstIP inet.AddrV4
 
 	// L4
 	SrcPort uint16
@@ -62,7 +62,7 @@ func (pkt *Packet) DecodeFromData(data []byte) error {
 	eth := (*EthHeader)(unsafe.Pointer(&data[0]))
 	off := SizeofEthernet
 
-	switch netutil.Ntohs(eth.HwProto) {
+	switch inet.Ntohs(eth.HwProto) {
 	case unix.ETH_P_8021Q:
 		return pkt.DecodePacketVLAN(data[off:])
 	case unix.ETH_P_ARP:
@@ -86,7 +86,7 @@ func (pkt *Packet) DecodePacketVLAN(data []byte) error {
 	vlan := (*VLANHeader)(unsafe.Pointer(&data[0]))
 	off := SizeofVLAN
 
-	switch netutil.Ntohs(vlan.EncapsulatedProto) {
+	switch inet.Ntohs(vlan.EncapsulatedProto) {
 	case unix.ETH_P_ARP:
 		return pkt.DecodePacketARP(data[off:])
 	case unix.ETH_P_IP:
@@ -114,8 +114,8 @@ func (pkt *Packet) DecodePacketARP(data []byte) error {
 
 	// IPv4
 	if arp.ProtAddrLen == 4 {
-		pkt.SrcIP = netutil.IPv4ToUint32(data[arp.HwAddrLen : arp.HwAddrLen+arp.ProtAddrLen])
-		pkt.DstIP = netutil.IPv4ToUint32(data[arp.HwAddrLen*2+arp.ProtAddrLen : arp.HwAddrLen*2+arp.ProtAddrLen*2])
+		pkt.SrcIP = inet.NewAddrV4FromIP(data[arp.HwAddrLen : arp.HwAddrLen+arp.ProtAddrLen])
+		pkt.DstIP = inet.NewAddrV4FromIP(data[arp.HwAddrLen*2+arp.ProtAddrLen : arp.HwAddrLen*2+arp.ProtAddrLen*2])
 	}
 
 	return nil
@@ -129,8 +129,8 @@ func (pkt *Packet) DecodePacketIPv4(data []byte) error {
 	ip := (*IPv4Header)(unsafe.Pointer(&data[0]))
 	off := ip.HeaderLen()
 	pkt.L3Proto = unix.ETH_P_IP
-	pkt.SrcIP = netutil.Ntohl(ip.SrcIP)
-	pkt.DstIP = netutil.Ntohl(ip.DstIP)
+	pkt.SrcIP = inet.AddrV4(inet.Ntohl(ip.SrcIP))
+	pkt.DstIP = inet.AddrV4(inet.Ntohl(ip.DstIP))
 	pkt.L3Len = uint8(off)
 
 	switch ip.Protocol {
@@ -157,8 +157,8 @@ func (pkt *Packet) DecodePacketTCP(data []byte) error {
 
 	tcp := (*TCPHeader)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_TCP
-	pkt.SrcPort = netutil.Ntohs(tcp.SrcPort)
-	pkt.DstPort = netutil.Ntohs(tcp.DstPort)
+	pkt.SrcPort = inet.Ntohs(tcp.SrcPort)
+	pkt.DstPort = inet.Ntohs(tcp.DstPort)
 	pkt.L4Len = uint8(tcp.HeaderLen())
 
 	return nil
@@ -171,8 +171,8 @@ func (pkt *Packet) DecodePacketUDP(data []byte) error {
 
 	udp := (*UDPHeader)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_UDP
-	pkt.SrcPort = netutil.Ntohs(udp.SrcPort)
-	pkt.DstPort = netutil.Ntohs(udp.DstPort)
+	pkt.SrcPort = inet.Ntohs(udp.SrcPort)
+	pkt.DstPort = inet.Ntohs(udp.DstPort)
 	pkt.L4Len = uint8(SizeofUDP)
 	return nil
 }

@@ -3,7 +3,7 @@ package fastpkt
 import (
 	"unsafe"
 
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -72,7 +72,7 @@ func (tcp *TCPHeader) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16
 	ipPseudoChecksum += uint32(tcpAndPayloadLen) & 0xffff
 	ipPseudoChecksum += uint32(tcpAndPayloadLen) >> 16
 	tcp.Check = 0
-	tcp.Check = netutil.Htons(tcpipChecksum(data, ipPseudoChecksum))
+	tcp.Check = inet.Htons(tcpipChecksum(data, ipPseudoChecksum))
 	return tcp.Check
 }
 

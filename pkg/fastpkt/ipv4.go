@@ -3,7 +3,7 @@ package fastpkt
 import (
 	"unsafe"
 
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 // <linux/ip.h>
@@ -54,9 +54,9 @@ func (ip *IPv4Header) ComputeChecksum(l3PayloadLen uint16) uint16 {
 	off := ip.HeaderLen()
 	data := unsafe.Slice((*byte)(unsafe.Pointer(ip)), off)
 
-	ip.Len = netutil.Htons(uint16(off) + l3PayloadLen)
+	ip.Len = inet.Htons(uint16(off) + l3PayloadLen)
 	ip.Checksum = 0
-	ip.Checksum = netutil.Htons(checksum(data[:off]))
+	ip.Checksum = inet.Htons(checksum(data[:off]))
 	return ip.Checksum
 }
 

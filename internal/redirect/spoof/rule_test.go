@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func TestRuleEqual(t *testing.T) {
@@ -50,11 +50,11 @@ func TestRuleEqual(t *testing.T) {
 		},
 		{
 			Rule{
-				Matchs: []Match{MatchLPMIPv4Src{IP: 123456, PrefixLen: 32}},
+				Matchs: []Match{MatchLPMIPv4Src{Addr4: 123456, PrefixLen: 32}},
 				Target: TargetTCPReset{},
 			},
 			Rule{
-				Matchs: []Match{MatchLPMIPv4Src{IP: 123456, PrefixLen: 32}},
+				Matchs: []Match{MatchLPMIPv4Src{Addr4: 123456, PrefixLen: 32}},
 				Target: TargetARPReply{},
 			},
 			false,
@@ -70,7 +70,7 @@ func TestRuleMarshal(t *testing.T) {
 	rule := Rule{
 		Matchs: []Match{
 			MatchARP{Operation: ARPOperationRequest},
-			MatchLPMIPv4Dst{IP: LPMIPv4Uint32(netutil.IPv4ToUint32(net.ParseIP("172.16.23.1"))), PrefixLen: 32},
+			MatchLPMIPv4Dst{Addr4: inet.NewAddrV4FromIP(net.ParseIP("172.16.23.1")), PrefixLen: 32},
 		},
 		Target: TargetARPReply{HwAddr: [6]byte{1, 2, 3, 4, 5, 6}},
 	}

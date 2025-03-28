@@ -6,7 +6,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func setBaseLayersForUDP() {
@@ -36,7 +36,7 @@ func TestUDPChecksum(t *testing.T) {
 		}
 
 		ipPseudoChecksum := DataPtrIPv4Header(buf, 0).PseudoChecksum()
-		checksum := netutil.Htons(DataPtrUDPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
+		checksum := inet.Htons(DataPtrUDPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
 
 		pkt := gopacket.NewPacket(buf, layers.LayerTypeIPv4, gopacket.Default)
 		assert.Equal(t, pkt.Layers()[1].(*layers.UDP).Checksum, checksum)

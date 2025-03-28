@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/zxhio/xdpass/pkg/fastpkt"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -14,7 +14,7 @@ const (
 )
 
 type TargetARPReply struct {
-	HwAddr netutil.HwAddr `json:"hw_addr"`
+	HwAddr inet.HwAddr `json:"hw_addr"`
 }
 
 func (TargetARPReply) TargetType() TargetType {
@@ -40,7 +40,7 @@ func (tgt TargetARPReply) Execute(pkt *fastpkt.Packet) error {
 	)
 
 	// // TODO: support IPv6
-	// if netutil.Ntohs(rxARP.Operation) != ARPOperationRequest || rxARP.ProtAddrLen != 4 {
+	// if inet.Ntohs(rxARP.Operation) != ARPOperationRequest || rxARP.ProtAddrLen != 4 {
 	// 	return nil
 	// }
 
@@ -62,10 +62,10 @@ func (tgt TargetARPReply) Execute(pkt *fastpkt.Packet) error {
 	txARP.ProtAddrType = rxARP.ProtAddrType
 	txARP.HwAddrLen = rxARP.HwAddrLen
 	txARP.ProtAddrLen = rxARP.ProtAddrLen
-	txARP.Operation = netutil.Htons(ARPOperationReply)
+	txARP.Operation = inet.Htons(ARPOperationReply)
 
 	// L2 VLAN
-	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
+	if inet.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
 		rxVLAN := fastpkt.DataPtrVLANHeader(pkt.RxData, fastpkt.SizeofEthernet)
 		txVLAN := buf.AllocVLANHeader()
 		txVLAN.ID = rxVLAN.ID

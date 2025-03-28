@@ -9,7 +9,6 @@ import (
 	"github.com/zxhio/xdpass/internal/protos"
 	"github.com/zxhio/xdpass/internal/redirect/spoof"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
-	"github.com/zxhio/xdpass/pkg/netutil"
 )
 
 const (
@@ -89,8 +88,8 @@ func (h *SpoofHandle) HandlePacket(pkt *fastpkt.Packet) {
 		logrus.WithFields(logrus.Fields{
 			"l3_proto": pkt.L3Proto,
 			"l4_proto": pkt.L4Proto,
-			"src_ip":   netutil.IPv4FromUint32(pkt.SrcIP),
-			"dst_ip":   netutil.IPv4FromUint32(pkt.DstIP),
+			"src_ip":   pkt.SrcIP,
+			"dst_ip":   pkt.DstIP,
 			"src_port": pkt.SrcPort,
 			"dst_port": pkt.DstPort,
 		}).Debug("Handle packet")
@@ -110,8 +109,8 @@ func (h *SpoofHandle) HandlePacket(pkt *fastpkt.Packet) {
 				logrus.WithFields(logrus.Fields{
 					"l3_proto":    pkt.L3Proto,
 					"l4_proto":    pkt.L4Proto,
-					"src_ip":      netutil.IPv4FromUint32(pkt.SrcIP),
-					"dst_ip":      netutil.IPv4FromUint32(pkt.DstIP),
+					"src_ip":      pkt.SrcIP,
+					"dst_ip":      pkt.DstIP,
 					"src_port":    pkt.SrcPort,
 					"dst_port":    pkt.DstPort,
 					"target_type": rule.Target.TargetType(),

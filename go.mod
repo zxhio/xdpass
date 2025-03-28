@@ -13,7 +13,6 @@ require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/cilium/ebpf v0.17.1
 	github.com/google/gopacket v1.1.19
-	github.com/kentik/patricia v1.2.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/sirupsen/logrus v1.9.3

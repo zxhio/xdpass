@@ -3,13 +3,13 @@ package exports
 import (
 	"sync"
 
-	"github.com/zxhio/xdpass/pkg/xdpprog"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 type FirewallAPI interface {
-	ListIPKey() ([]xdpprog.IPLpmKey, error)
-	AddIPKey(xdpprog.IPLpmKey) error
-	DelIPKey(xdpprog.IPLpmKey) error
+	ListIPKey() ([]inet.LPMIPv4, error)
+	AddIPKey(inet.LPMIPv4) error
+	DelIPKey(inet.LPMIPv4) error
 }
 
 type firewallAPI struct {

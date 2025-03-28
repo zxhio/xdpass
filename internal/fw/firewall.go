@@ -5,13 +5,14 @@ import (
 	"sync"
 
 	"github.com/cilium/ebpf"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"github.com/zxhio/xdpass/pkg/xdpprog"
 )
 
 type Firewall struct {
 	ifaceName string
 	trie      *ebpf.Map
-	keys      map[xdpprog.IPLpmKey]struct{}
+	keys      map[inet.LPMIPv4]struct{}
 	mu        *sync.Mutex
 }
 
@@ -19,18 +20,18 @@ func NewFirewall(ifaceName string, trie *ebpf.Map) *Firewall {
 	return &Firewall{
 		ifaceName: ifaceName,
 		trie:      trie,
-		keys:      make(map[xdpprog.IPLpmKey]struct{}),
+		keys:      make(map[inet.LPMIPv4]struct{}),
 		mu:        &sync.Mutex{},
 	}
 }
 
-func (f *Firewall) AddIPKey(key xdpprog.IPLpmKey) error {
+func (f *Firewall) AddIPKey(key inet.LPMIPv4) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// TODO: Aggregate these keys
 
-	err := f.trie.Update(&key, uint8(0), 0)
+	err := f.trie.Update(xdpprog.NewIPLpmKey(key), uint8(0), 0)
 	if err != nil {
 		return err
 	}
@@ -38,11 +39,11 @@ func (f *Firewall) AddIPKey(key xdpprog.IPLpmKey) error {
 	return nil
 }
 
-func (f *Firewall) DelIPKey(key xdpprog.IPLpmKey) error {
+func (f *Firewall) DelIPKey(key inet.LPMIPv4) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	err := f.trie.Delete(&key)
+	err := f.trie.Delete(xdpprog.NewIPLpmKey(key))
 	if err != nil {
 		return err
 	}
@@ -50,11 +51,11 @@ func (f *Firewall) DelIPKey(key xdpprog.IPLpmKey) error {
 	return nil
 }
 
-func (f *Firewall) ListIPKey() ([]xdpprog.IPLpmKey, error) {
+func (f *Firewall) ListIPKey() ([]inet.LPMIPv4, error) {
 	var (
 		key     xdpprog.IPLpmKey
 		nextKey xdpprog.IPLpmKey
-		keys    []xdpprog.IPLpmKey
+		lpms    []inet.LPMIPv4
 	)
 
 	for {
@@ -66,7 +67,7 @@ func (f *Firewall) ListIPKey() ([]xdpprog.IPLpmKey, error) {
 			return nil, err
 		}
 		key = nextKey
-		keys = append(keys, key)
+		lpms = append(lpms, key.ToLPMIPv4())
 	}
-	return keys, nil
+	return lpms, nil
 }

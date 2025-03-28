@@ -21,7 +21,6 @@ xdpass redirect tuntap -i $interface --list
 xdpass spoof --add --smac "$hwaddr" -s 172.16.23.2 -d 172.16.23.1 --target arp-reply
 xdpass spoof --add --smac "$hwaddr" -s 172.16.23.0/24 -d 172.16.23.1 --target arp-reply
 xdpass spoof --add --smac "$hwaddr" -s 172.16.23.0/24 -d 172.16.23.0/24 --target arp-reply
-xdpass spoof --add --smac "$hwaddr" -s 172.16.23.0/24 -d 172.16.23.0/24 --target arp-reply
 
 ### ICMP
 xdpass spoof --add -s 172.16.23.2 -d 172.16.23.1 --target icmp-echo-reply

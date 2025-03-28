@@ -2,7 +2,7 @@ package spoof
 
 import (
 	"github.com/zxhio/xdpass/pkg/fastpkt"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 	"golang.org/x/sys/unix"
 )
 
@@ -38,7 +38,7 @@ func (TargetTCPReset) Execute(pkt *fastpkt.Packet) error {
 	txTCP := buf.AllocTCPHeader()
 	txTCP.SrcPort = rxTCP.DstPort
 	txTCP.DstPort = rxTCP.SrcPort
-	txTCP.AckSeq = netutil.Htonl(netutil.Ntohl(rxTCP.Seq) + 1)
+	txTCP.AckSeq = inet.Htonl(inet.Ntohl(rxTCP.Seq) + 1)
 	txTCP.SetHeaderLen(uint8(fastpkt.SizeofTCP))
 	txTCP.Flags.Clear(fastpkt.TCPFlagsMask)
 	txTCP.Flags.Set(fastpkt.TCPFlagRST | fastpkt.TCPFlagACK)
@@ -59,7 +59,7 @@ func (TargetTCPReset) Execute(pkt *fastpkt.Packet) error {
 	txTCP.ComputeChecksum(txIPv4.PseudoChecksum(), 0)
 
 	// L2 VLAN
-	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
+	if inet.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
 		rxVLAN := fastpkt.DataPtrVLANHeader(pkt.RxData, fastpkt.SizeofEthernet)
 		txVLAN := buf.AllocVLANHeader()
 		txVLAN.ID = rxVLAN.ID

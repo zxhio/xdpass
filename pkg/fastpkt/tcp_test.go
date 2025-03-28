@@ -6,7 +6,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func setBaseLayersForTCP() {
@@ -98,7 +98,7 @@ func TestTCPChecksum(t *testing.T) {
 
 		// Check ComputeChecksum
 		ipPseudoChecksum := DataPtrIPv4Header(buf, 0).PseudoChecksum()
-		checksum := netutil.Htons(DataPtrTCPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
+		checksum := inet.Htons(DataPtrTCPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
 		assert.Equal(t, tcp.Checksum, checksum)
 
 		// Check HeaderLen

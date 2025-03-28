@@ -6,7 +6,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func TestIPv4Checksum(t *testing.T) {
@@ -54,7 +54,7 @@ func TestIPv4Checksum(t *testing.T) {
 		// Based on gopacket
 		pkt := gopacket.NewPacket(buf, layers.LayerTypeIPv4, gopacket.Default)
 		csum := DataPtrIPv4Header(buf, 0).ComputeChecksum(0)
-		assert.Equal(t, pkt.Layers()[0].(*layers.IPv4).Checksum, netutil.Htons(csum))
+		assert.Equal(t, pkt.Layers()[0].(*layers.IPv4).Checksum, inet.Htons(csum))
 
 		// Check HeaderLen
 		assert.Equal(t, testCase.headerLen, DataPtrIPv4Header(buf, 0).HeaderLen())

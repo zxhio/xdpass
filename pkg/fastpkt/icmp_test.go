@@ -6,7 +6,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
-	"github.com/zxhio/xdpass/pkg/netutil"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func TestICMPChecksum(t *testing.T) {
@@ -28,6 +28,6 @@ func TestICMPChecksum(t *testing.T) {
 
 		pkt := gopacket.NewPacket(buf, layers.LayerTypeICMPv4, gopacket.Default)
 		csum := DataPtrICMPHeader(buf, 0).ComputeChecksum(uint16(len(testCase.payload)))
-		assert.Equal(t, pkt.Layers()[0].(*layers.ICMPv4).Checksum, netutil.Htons(csum))
+		assert.Equal(t, pkt.Layers()[0].(*layers.ICMPv4).Checksum, inet.Htons(csum))
 	}
 }

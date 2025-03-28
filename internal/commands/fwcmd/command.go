@@ -11,7 +11,7 @@ import (
 	"github.com/zxhio/xdpass/internal/commands"
 	"github.com/zxhio/xdpass/internal/exports"
 	"github.com/zxhio/xdpass/internal/protos"
-	"github.com/zxhio/xdpass/pkg/xdpprog"
+	"github.com/zxhio/xdpass/pkg/inet"
 )
 
 func init() {
@@ -19,7 +19,7 @@ func init() {
 	fwCmd.Flags().BoolVarP(&opt.ShowList, "list", "l", false, "List filter ip")
 	fwCmd.Flags().BoolVarP(&opt.Add, "add", "a", false, "Add filter ip")
 	fwCmd.Flags().BoolVarP(&opt.Del, "del", "d", false, "Del filter ip")
-	fwCmd.Flags().Var(&opt.Key, "key", "IP key for filter")
+	fwCmd.Flags().Var(&opt.Key, "key", "IP for filter")
 
 	commands.Register(fwCmd)
 }
@@ -39,7 +39,7 @@ type FirwallOpt struct {
 	ShowList  bool
 	Add       bool
 	Del       bool
-	Key       xdpprog.IPLpmKey
+	Key       inet.LPMIPv4
 }
 
 var opt FirwallOpt
@@ -83,8 +83,8 @@ func (FirewallCommand) DoReqListIPKey(ifaceName string) error {
 	return nil
 }
 
-func (FirewallCommand) DoReqEditIPKey(op protos.Operation, iface string, key xdpprog.IPLpmKey) error {
-	req := protos.FirewallReq{Operation: op, Interface: iface, Keys: []xdpprog.IPLpmKey{key}}
+func (FirewallCommand) DoReqEditIPKey(op protos.Operation, iface string, key inet.LPMIPv4) error {
+	req := protos.FirewallReq{Operation: op, Interface: iface, Keys: []inet.LPMIPv4{key}}
 	_, err := commands.GetMessage[protos.FirewallReq, protos.FirewallResp](protos.TypeFirewall, "", &req)
 	return err
 }
@@ -108,11 +108,11 @@ func (f FirewallCommandHandle) HandleReqData(client *commands.MessageClient, dat
 	case protos.OperationList:
 		data, err = f.handleOpShowList(req.Interface)
 	case protos.OperationAdd:
-		data, err = f.handleOpAddDel(req, protos.OperationAdd, func(api exports.FirewallAPI, key xdpprog.IPLpmKey) error {
+		data, err = f.handleOpAddDel(req, protos.OperationAdd, func(api exports.FirewallAPI, key inet.LPMIPv4) error {
 			return api.AddIPKey(key)
 		})
 	case protos.OperationDel:
-		data, err = f.handleOpAddDel(req, protos.OperationDel, func(api exports.FirewallAPI, key xdpprog.IPLpmKey) error {
+		data, err = f.handleOpAddDel(req, protos.OperationDel, func(api exports.FirewallAPI, key inet.LPMIPv4) error {
 			return api.DelIPKey(key)
 		})
 	}
@@ -156,7 +156,7 @@ func (f FirewallCommandHandle) handleOpShowList(ifaceName string) ([]byte, error
 	return json.Marshal(resp)
 }
 
-func (f FirewallCommandHandle) handleOpAddDel(req protos.FirewallReq, op protos.Operation, fn func(exports.FirewallAPI, xdpprog.IPLpmKey) error) ([]byte, error) {
+func (f FirewallCommandHandle) handleOpAddDel(req protos.FirewallReq, op protos.Operation, fn func(exports.FirewallAPI, inet.LPMIPv4) error) ([]byte, error) {
 	apis, err := f.getAPIs(req.Interface)
 	if err != nil {
 		return nil, err
