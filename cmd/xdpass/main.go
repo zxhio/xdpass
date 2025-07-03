@@ -1,0 +1,46 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/pkg/builder"
+)
+
+var (
+	verbose bool
+	version bool
+)
+
+const logoAscii = `    |             
+ \ \| |\ //| // //
+      |`
+
+var rootCmd = &cobra.Command{
+	Use:   "xdpass",
+	Short: "xdpass command line tool\n\n" + color.HiBlueString(logoAscii),
+	Run: func(cmd *cobra.Command, args []string) {
+		if version {
+			fmt.Println(builder.BuildInfo())
+			os.Exit(0)
+		}
+		cmd.Help()
+	},
+}
+
+func main() {
+	cobra.EnableTraverseRunHooks = true
+	rootCmd.AddGroup(&ruleGroup)
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version")
+	rootCmd.Execute()
+}
+
+func verbosePrintln(format string, a ...any) {
+	if verbose {
+		fmt.Printf(format, a...)
+		fmt.Println()
+	}
+}
