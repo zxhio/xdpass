@@ -1,4 +1,4 @@
-package main
+package rule
 
 import (
 	"github.com/spf13/cobra"
@@ -62,11 +62,12 @@ type RuleHTTPFlags struct {
 }
 
 var (
-	F RuleFlags
-	R rule.Rule
+	F              RuleFlags
+	R              rule.Rule
+	exportCommands []*cobra.Command
 )
 
-var ruleGroup = cobra.Group{ID: "rule", Title: "Rule-Protocol-Based Commands:"}
+var group = cobra.Group{ID: "rule", Title: "Rule-Based-Protocol Commands:"}
 
 var ruleCmd = &cobra.Command{
 	Use:   "rule",
@@ -103,7 +104,7 @@ var arpCmd = &cobra.Command{
 	Use:     "arp",
 	Short:   "Matches ARP layer fields and specifies the target",
 	Aliases: []string{"rule arp"},
-	GroupID: ruleGroup.ID,
+	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchARP{})
 		if F.SpoofARPReplyAddr.Compare(netaddr.HwAddr{}) != 0 {
@@ -116,7 +117,7 @@ var tcpCmd = &cobra.Command{
 	Use:     "tcp",
 	Short:   "Matches TCP layer fields and specifies the target",
 	Aliases: []string{"rule tcp"},
-	GroupID: ruleGroup.ID,
+	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchTCP{})
 		if F.TCP.SpoofHandshake {
@@ -131,7 +132,7 @@ var udpCmd = &cobra.Command{
 	Use:     "udp",
 	Short:   "Matches UDP layer fields and specifies the target",
 	Aliases: []string{"rule udp"},
-	GroupID: ruleGroup.ID,
+	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchUDP{})
 	},
@@ -141,7 +142,7 @@ var icmpCmd = &cobra.Command{
 	Use:     "icmp",
 	Short:   "Matches ICMP layer fields and specifies the target",
 	Aliases: []string{"rule icmp"},
-	GroupID: ruleGroup.ID,
+	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchICMP{})
 		if F.ICMP.SpoofEchoReply {
@@ -154,7 +155,7 @@ var httpCmd = &cobra.Command{
 	Use:     "http",
 	Short:   "Matches HTTP layer fields and specifies the target",
 	Aliases: []string{"rule http", "rule tcp http"},
-	GroupID: ruleGroup.ID,
+	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchHTTP{})
 	},
@@ -170,43 +171,44 @@ func init() {
 	ruleCmd.PersistentFlags().Var(&F.DstIPv4Range, "iprange-dst", "Destionation ipv4 range address")
 	ruleCmd.PersistentFlags().BoolVar(&F.MirrorStdout, "mirror-stdout", false, "Target for mirror traffic to stdout")
 	ruleCmd.PersistentFlags().StringVar(&F.MirrorTap, "mirror-tap", "", "Target for mirror traffic to tap device")
-	ruleCmd.AddGroup(&ruleGroup)
-	rootCmd.AddCommand(ruleCmd)
+	ruleCmd.AddGroup(&group)
 
 	// rule arp
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "Target MAC for ARP-Reply spoofing")
-	arpCmd.AddGroup(&ruleGroup)
-	addSubCommands(arpCmd, rootCmd, ruleCmd)
+	arpCmd.AddGroup(&group)
+	addSubCommands(arpCmd, ruleCmd)
 
 	// rule tcp
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofHandshake, "spoof-handshake", false, "Target for TCP handshake spoofing (SYN/ACK)")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.ResetHandshake, "reset-handshake", false, "Target for TCP handshake reseting (RST/ACK)")
-	tcpCmd.AddGroup(&ruleGroup)
+	tcpCmd.AddGroup(&group)
 	setCommandFlagsPorts(tcpCmd)
-	addSubCommands(tcpCmd, rootCmd, ruleCmd)
+	addSubCommands(tcpCmd, ruleCmd)
 
 	// rule udp
-	udpCmd.AddGroup(&ruleGroup)
+	udpCmd.AddGroup(&group)
 	setCommandFlagsPorts(udpCmd)
-	addSubCommands(udpCmd, rootCmd, ruleCmd)
+	addSubCommands(udpCmd, ruleCmd)
 
 	// rule icmp
 	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "Target for ICMP Echo Reply spoofing​​")
-	icmpCmd.AddGroup(&ruleGroup)
+	icmpCmd.AddGroup(&group)
 	setCommandFlagsPorts(icmpCmd)
-	addSubCommands(icmpCmd, rootCmd, ruleCmd)
+	addSubCommands(icmpCmd, ruleCmd)
 
 	// rule http
 	httpCmd.PersistentFlags().StringVar(&F.Method, "method", "", "HTTP request method")
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
 	httpCmd.PersistentFlags().StringVar(&F.Host, "host", "", "HTTP request host")
-	addSubCommands(httpCmd, rootCmd, ruleCmd, tcpCmd)
+	addSubCommands(httpCmd, ruleCmd, tcpCmd)
 
 	// operation commands
 	// each command MUST include these operations.
-	setOpAddListSubCommands(ruleCmd, arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
-	setOpGetDeleteSubCommands(ruleCmd)
+	setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
+	setOpCommands(ruleCmd)
+
+	export(ruleCmd, arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
 }
 
 func setCommandFlagsPorts(cmd *cobra.Command) {
@@ -219,5 +221,21 @@ func setCommandFlagsPorts(cmd *cobra.Command) {
 func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		cmd.AddCommand(subCmd)
+	}
+}
+
+func export(cmds ...*cobra.Command) {
+	exportCommands = append(exportCommands, cmds...)
+}
+
+func Export(cmd *cobra.Command) {
+	cmd.AddGroup(&group)
+
+	// Note:
+	//  cmd.Parent will be modified after call cobra.AppendCommand()
+	// Some commands (e.g. tcp/udp) needs to inherit the flags of the rule command, so the parent cannot be modified
+	for _, c := range exportCommands {
+		v := *c
+		cmd.AddCommand(&v)
 	}
 }

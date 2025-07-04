@@ -6,7 +6,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/rule"
 	"github.com/zxhio/xdpass/pkg/builder"
+	"github.com/zxhio/xdpass/pkg/utils"
 )
 
 var (
@@ -21,6 +23,9 @@ const logoAscii = `    |
 var rootCmd = &cobra.Command{
 	Use:   "xdpass",
 	Short: "xdpass command line tool\n\n" + color.HiBlueString(logoAscii),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		utils.SetVerbose(verbose)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if version {
 			fmt.Println(builder.BuildInfo())
@@ -32,15 +37,8 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	cobra.EnableTraverseRunHooks = true
-	rootCmd.AddGroup(&ruleGroup)
+	rule.Export(rootCmd)
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version")
 	rootCmd.Execute()
-}
-
-func verbosePrintln(format string, a ...any) {
-	if verbose {
-		fmt.Printf(format, a...)
-		fmt.Println()
-	}
 }

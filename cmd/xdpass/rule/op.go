@@ -1,7 +1,10 @@
-package main
+package rule
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"slices"
 	"strconv"
@@ -11,16 +14,14 @@ import (
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/pkg/netaddr"
+	"github.com/zxhio/xdpass/pkg/utils"
 )
 
 const (
 	defaultAPIAddr = "http://127.0.0.1:9921"
-)
-
-var (
-	defaultClient = &client{Addr: defaultAPIAddr}
 )
 
 var (
@@ -47,8 +48,8 @@ var listCmd = cobra.Command{
 			listPageSize = 100
 			total := 0
 			for {
-				resp, err := getClient().QueryRules(listPage, listPageSize, mt.String())
-				checkErrAndExit(err, "Query rules failed")
+				resp, err := queryRules(listPage, listPageSize, mt.String())
+				utils.CheckErrorAndExit(err, "Query rules failed")
 
 				total += len(resp.Rules)
 				rules = append(rules, resp.Rules...)
@@ -58,8 +59,8 @@ var listCmd = cobra.Command{
 				listPage++
 			}
 		} else {
-			resp, err := getClient().QueryRules(listPage, listPageSize, mt.String())
-			checkErrAndExit(err, "Query rules failed")
+			resp, err := queryRules(listPage, listPageSize, mt.String())
+			utils.CheckErrorAndExit(err, "Query rules failed")
 			rules = resp.Rules
 		}
 
@@ -73,10 +74,10 @@ var getCmd = cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := strconv.Atoi(args[0])
-		checkErrAndExit(err, "Check invalid rule_id")
+		utils.CheckErrorAndExit(err, "Check invalid rule_id")
 
-		r, err := getClient().QueryRule(ruleID)
-		checkErrAndExit(err, "Query rule failed")
+		r, err := queryRule(ruleID)
+		utils.CheckErrorAndExit(err, "Query rule failed")
 
 		display([]*rule.Rule{r})
 	},
@@ -86,9 +87,9 @@ var addCmd = cobra.Command{
 	Use:   "add",
 	Short: "Get rules",
 	Run: func(cmd *cobra.Command, args []string) {
-		ruleID, err := getClient().AddRule(&R)
-		checkErrAndExit(err, "Add rule failed")
-		verbosePrintln("Add rule success, id: %d", ruleID)
+		ruleID, err := addRule(&R)
+		utils.CheckErrorAndExit(err, "Add rule failed")
+		utils.VerbosePrintln("Add rule success, id: %d", ruleID)
 	},
 }
 
@@ -99,12 +100,12 @@ var delCmd = cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := strconv.Atoi(args[0])
-		checkErrAndExit(err, "Check invalid rule_id")
+		utils.CheckErrorAndExit(err, "Check invalid rule_id")
 
-		err = getClient().DeletePacetRule(ruleID)
-		checkErrAndExit(err, "Delete rule failed")
+		err = deleteRule(ruleID)
+		utils.CheckErrorAndExit(err, "Delete rule failed")
 
-		verbosePrintln("Delete rule success, id: %d", ruleID)
+		utils.VerbosePrintln("Delete rule success, id: %d", ruleID)
 	},
 }
 
@@ -114,37 +115,30 @@ func init() {
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "List all rules")
 }
 
-// Get/Delete MUST specify rule id, NOT distinguish by subcommands.
-func setOpGetDeleteSubCommands(cmds ...*cobra.Command) {
-	for _, cmd := range cmds {
-		cmd.AddGroup(&cobra.Group{ID: "operation-with-id", Title: "Operation Commands:"})
-		opCmds := []cobra.Command{delCmd, getCmd}
-		for i := range opCmds {
-			sub := opCmds[i]
-			sub.GroupID = "operation"
-			cmd.AddCommand(&sub)
-		}
-	}
-}
-
 // Add can inherit different subcommands's flags.
 // List can filter with different subcommands.
-func setOpAddListSubCommands(cmds ...*cobra.Command) {
+func setOpCommandsWithoutID(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
-		cmd.AddGroup(&cobra.Group{ID: "operation", Title: "Operation Commands:"})
+		cmd.AddGroup(&cobra.Group{ID: "operation-with-id", Title: "Operation Commands:"})
 		opCmds := []cobra.Command{addCmd, listCmd}
 		for i := range opCmds {
 			sub := opCmds[i]
-			sub.GroupID = "operation"
+			sub.GroupID = "operation-with-id"
 			cmd.AddCommand(&sub)
 		}
 	}
 }
 
-func checkErrAndExit(err error, msg string) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", msg, err)
-		os.Exit(1)
+// Get/Delete MUST specify rule id, NOT distinguish by subcommands.
+func setOpCommands(cmds ...*cobra.Command) {
+	for _, cmd := range cmds {
+		cmd.AddGroup(&cobra.Group{ID: "operation", Title: "Operation Commands:"})
+		opCmds := []cobra.Command{addCmd, listCmd, delCmd, getCmd}
+		for i := range opCmds {
+			sub := opCmds[i]
+			sub.GroupID = "operation"
+			cmd.AddCommand(&sub)
+		}
 	}
 }
 
@@ -233,10 +227,37 @@ func display(rules []*rule.Rule) {
 	table.Render()
 }
 
-func getClient() *client {
-	envAPIAddr := os.Getenv("XDPASS_API_ADDR")
-	if envAPIAddr != "" {
-		return &client{Addr: envAPIAddr}
+func queryRules(page, size int, proto string) (*api.QueryRulesResp, error) {
+	return api.NewReqMessage[api.QueryRulesResp](api.APIPathQueryRules,
+		api.WithReqAddr(defaultAPIAddr),
+		api.WithReqQuery(fmt.Sprintf("page=%d&page-size=%d&proto=%s", page, size, proto)),
+	)
+}
+
+func queryRule(ruleID int) (*rule.Rule, error) {
+	return api.NewReqMessage[rule.Rule](api.InstantiateRuleAPIURL(api.APIPathQueryRule, ruleID), api.WithReqAddr(defaultAPIAddr))
+}
+
+func addRule(rule *rule.Rule) (int, error) {
+	data, err := json.Marshal(rule)
+	if err != nil {
+		return 0, err
 	}
-	return defaultClient
+	ruleId, err := api.NewReqMessage[int](api.APIPathAddRule,
+		api.WithReqAddr(defaultAPIAddr),
+		api.WithReqMethod(http.MethodPost),
+		api.WithReqBody(bytes.NewBuffer(data)),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return *ruleId, nil
+}
+
+func deleteRule(ruleID int) error {
+	_, err := api.NewReqMessage[int](api.InstantiateRuleAPIURL(api.APIPathDeleteRule, ruleID),
+		api.WithReqAddr(defaultAPIAddr),
+		api.WithReqMethod(http.MethodDelete),
+	)
+	return err
 }
