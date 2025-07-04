@@ -62,9 +62,8 @@ type RuleHTTPFlags struct {
 }
 
 var (
-	F              RuleFlags
-	R              rule.Rule
-	exportCommands []*cobra.Command
+	F RuleFlags
+	R rule.Rule
 )
 
 var group = cobra.Group{ID: "rule", Title: "Rule-Based-Protocol Commands:"}
@@ -176,39 +175,32 @@ func init() {
 	// rule arp
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "Target MAC for ARP-Reply spoofing")
 	arpCmd.AddGroup(&group)
-	addSubCommands(arpCmd, ruleCmd)
 
 	// rule tcp
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofHandshake, "spoof-handshake", false, "Target for TCP handshake spoofing (SYN/ACK)")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.ResetHandshake, "reset-handshake", false, "Target for TCP handshake reseting (RST/ACK)")
 	tcpCmd.AddGroup(&group)
 	setCommandFlagsPorts(tcpCmd)
-	addSubCommands(tcpCmd, ruleCmd)
 
 	// rule udp
 	udpCmd.AddGroup(&group)
 	setCommandFlagsPorts(udpCmd)
-	addSubCommands(udpCmd, ruleCmd)
 
 	// rule icmp
-	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "Target for ICMP Echo Reply spoofing​​")
+	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "Target for ICMP Echo Reply spoofing")
 	icmpCmd.AddGroup(&group)
 	setCommandFlagsPorts(icmpCmd)
-	addSubCommands(icmpCmd, ruleCmd)
 
 	// rule http
 	httpCmd.PersistentFlags().StringVar(&F.Method, "method", "", "HTTP request method")
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
 	httpCmd.PersistentFlags().StringVar(&F.Host, "host", "", "HTTP request host")
-	addSubCommands(httpCmd, ruleCmd, tcpCmd)
 
 	// operation commands
 	// each command MUST include these operations.
 	setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
 	setOpCommands(ruleCmd)
-
-	export(ruleCmd, arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
 }
 
 func setCommandFlagsPorts(cmd *cobra.Command) {
@@ -224,18 +216,16 @@ func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 	}
 }
 
-func export(cmds ...*cobra.Command) {
-	exportCommands = append(exportCommands, cmds...)
-}
-
-func Export(cmd *cobra.Command) {
-	cmd.AddGroup(&group)
+func Export(parent *cobra.Command) {
+	parent.AddGroup(&group)
 
 	// Note:
-	//  cmd.Parent will be modified after call cobra.AppendCommand()
+	// cmd.Parent will be modified after call cobra.AppendCommand()
 	// Some commands (e.g. tcp/udp) needs to inherit the flags of the rule command, so the parent cannot be modified
-	for _, c := range exportCommands {
-		v := *c
-		cmd.AddCommand(&v)
-	}
+	addSubCommands(ruleCmd, parent)
+	addSubCommands(arpCmd, parent, ruleCmd)
+	addSubCommands(tcpCmd, parent, ruleCmd)
+	addSubCommands(udpCmd, parent, ruleCmd)
+	addSubCommands(icmpCmd, parent, ruleCmd)
+	addSubCommands(httpCmd, parent, ruleCmd, tcpCmd)
 }

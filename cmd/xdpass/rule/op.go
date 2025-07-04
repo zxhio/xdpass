@@ -34,6 +34,7 @@ var listCmd = cobra.Command{
 	Use:     "list",
 	Short:   "List rules",
 	Aliases: []string{"ls"},
+	Args:    cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		var mt rule.MatchType
 		for _, m := range R.Matchs {
@@ -86,6 +87,7 @@ var getCmd = cobra.Command{
 var addCmd = cobra.Command{
 	Use:   "add",
 	Short: "Get rules",
+	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := addRule(&R)
 		utils.CheckErrorAndExit(err, "Add rule failed")
