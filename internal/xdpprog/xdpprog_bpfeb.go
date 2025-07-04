@@ -68,8 +68,9 @@ type xdpprogProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type xdpprogMapSpecs struct {
-	IpLpmTrie *ebpf.MapSpec `ebpf:"ip_lpm_trie"`
-	XskMap    *ebpf.MapSpec `ebpf:"xsk_map"`
+	PassLpmTrie     *ebpf.MapSpec `ebpf:"pass_lpm_trie"`
+	RedirectLpmTrie *ebpf.MapSpec `ebpf:"redirect_lpm_trie"`
+	XskMap          *ebpf.MapSpec `ebpf:"xsk_map"`
 }
 
 // xdpprogVariableSpecs contains global variables before they are loaded into the kernel.
@@ -98,13 +99,15 @@ func (o *xdpprogObjects) Close() error {
 //
 // It can be passed to loadXdpprogObjects or ebpf.CollectionSpec.LoadAndAssign.
 type xdpprogMaps struct {
-	IpLpmTrie *ebpf.Map `ebpf:"ip_lpm_trie"`
-	XskMap    *ebpf.Map `ebpf:"xsk_map"`
+	PassLpmTrie     *ebpf.Map `ebpf:"pass_lpm_trie"`
+	RedirectLpmTrie *ebpf.Map `ebpf:"redirect_lpm_trie"`
+	XskMap          *ebpf.Map `ebpf:"xsk_map"`
 }
 
 func (m *xdpprogMaps) Close() error {
 	return _XdpprogClose(
-		m.IpLpmTrie,
+		m.PassLpmTrie,
+		m.RedirectLpmTrie,
 		m.XskMap,
 	)
 }
