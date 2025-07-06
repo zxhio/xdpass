@@ -42,7 +42,9 @@ func (w httpRuleWrapper) QueryRule(c *gin.Context) {
 }
 
 func (w httpRuleWrapper) QueryRules(c *gin.Context) {
-	var req QueryRulesReq
+	req := QueryRulesReq{
+		QueryPage: NewPageFromRequest(c.Request),
+	}
 
 	var mt rule.MatchType
 	if err := mt.Set(c.Request.URL.Query().Get("proto")); err == nil {
