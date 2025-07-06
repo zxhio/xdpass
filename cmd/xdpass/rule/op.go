@@ -123,11 +123,11 @@ func init() {
 // List can filter with different subcommands.
 func setOpCommandsWithoutID(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
-		cmd.AddGroup(&cobra.Group{ID: "operation-with-id", Title: "Operation Commands:"})
+		cmd.AddGroup(&cobra.Group{ID: "operation-without-id", Title: "Operation Commands:"})
 		opCmds := []cobra.Command{addCmd, listCmd}
 		for i := range opCmds {
 			sub := opCmds[i]
-			sub.GroupID = "operation-with-id"
+			sub.GroupID = "operation-without-id"
 			cmd.AddCommand(&sub)
 		}
 	}

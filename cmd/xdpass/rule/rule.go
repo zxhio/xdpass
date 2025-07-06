@@ -174,7 +174,6 @@ func init() {
 
 	// rule arp
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "Target MAC for ARP-Reply spoofing")
-	arpCmd.AddGroup(&group)
 
 	// rule tcp
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofHandshake, "spoof-handshake", false, "Target for TCP handshake spoofing (SYN/ACK)")
@@ -183,12 +182,10 @@ func init() {
 	setCommandFlagsPorts(tcpCmd)
 
 	// rule udp
-	udpCmd.AddGroup(&group)
 	setCommandFlagsPorts(udpCmd)
 
 	// rule icmp
 	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "Target for ICMP Echo Reply spoofing")
-	icmpCmd.AddGroup(&group)
 	setCommandFlagsPorts(icmpCmd)
 
 	// rule http
@@ -196,11 +193,6 @@ func init() {
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
 	httpCmd.PersistentFlags().StringVar(&F.Host, "host", "", "HTTP request host")
-
-	// operation commands
-	// each command MUST include these operations.
-	setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
-	setOpCommands(ruleCmd)
 }
 
 func setCommandFlagsPorts(cmd *cobra.Command) {
@@ -217,6 +209,11 @@ func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 }
 
 func Export(parent *cobra.Command) {
+	// operation commands
+	// each command MUST include these operations.
+	setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
+	setOpCommands(ruleCmd)
+
 	parent.AddGroup(&group)
 
 	// Note:
