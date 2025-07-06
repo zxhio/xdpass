@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -15,6 +16,7 @@ import (
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/internal/xdpprog"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
+	"github.com/zxhio/xdpass/pkg/netaddr"
 	"github.com/zxhio/xdpass/pkg/netutil"
 	"github.com/zxhio/xdpass/pkg/utils"
 	"github.com/zxhio/xdpass/pkg/xdp"
@@ -57,9 +59,11 @@ type LinkHandle struct {
 	xsks    []*xdp.XDPSocket
 	closers utils.NamedClosers
 
-	mu     *sync.RWMutex
-	ruleID int
-	rules  []*rule.Rule
+	mu          *sync.RWMutex
+	ruleID      int
+	rules       []*rule.Rule
+	passIPs     map[netaddr.IPv4Prefix]struct{}
+	redirectIPs map[netaddr.IPv4Prefix]struct{}
 }
 
 func NewLinkHandle(name string, opts ...LinkHandleOpt) (*LinkHandle, error) {
@@ -147,6 +151,8 @@ func NewLinkHandle(name string, opts ...LinkHandleOpt) (*LinkHandle, error) {
 		closers:        closers,
 		mu:             &sync.RWMutex{},
 		rules:          make([]*rule.Rule, 0, 128),
+		passIPs:        make(map[netaddr.IPv4Prefix]struct{}),
+		redirectIPs:    make(map[netaddr.IPv4Prefix]struct{}),
 	}, nil
 }
 
@@ -356,13 +362,11 @@ func (x *LinkHandle) QueryRules(req *api.QueryRulesReq) (*api.QueryRulesResp, er
 		total = len(x.rules)
 	}
 
-	resp := api.QueryRulesResp{
-		Total: total,
-	}
+	resp := api.QueryRulesResp{Page: api.Page{Total: total}}
 
 	// Query with page
-	if req.Page > 0 && req.PageSize > 0 {
-		resp.Page = req.Page
+	if req.PageNumber > 0 && req.PageSize > 0 {
+		resp.PageNumber = req.PageNumber
 		resp.PageSize = min(req.PageSize, 100)
 		resp.Rules = make([]*rule.Rule, 0, min(req.PageSize, total))
 	} else {
@@ -375,11 +379,11 @@ func (x *LinkHandle) QueryRules(req *api.QueryRulesReq) (*api.QueryRulesResp, er
 			continue
 		}
 		idx++
-		if idx <= (resp.Page-1)*resp.PageSize {
+		if idx <= (resp.PageNumber-1)*resp.PageSize {
 			continue
 		}
 		resp.Rules = append(resp.Rules, r)
-		if idx >= resp.Page*resp.PageSize {
+		if idx >= resp.PageNumber*resp.PageSize {
 			break
 		}
 	}
@@ -410,6 +414,92 @@ func (x *LinkHandle) DeleteRule(ruleID int) error {
 
 func ruleIDMatcher(ruleID int) func(r *rule.Rule) bool {
 	return func(r *rule.Rule) bool { return r.ID == ruleID }
+}
+
+func (x *LinkHandle) QueryIPs(req *api.QueryIPsReq) (*api.QueryIPsResp, error) {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+
+	var resp api.QueryIPsResp
+	switch req.Action {
+	case api.XDPActionPass:
+		resp = x.queryIPs(req, x.passIPs)
+	case api.XDPActionRedirect:
+		resp = x.queryIPs(req, x.redirectIPs)
+	default:
+		pass := x.queryIPs(req, x.passIPs)
+		redirect := x.queryIPs(req, x.redirectIPs)
+		resp = api.QueryIPsResp{
+			Page: pass.Page,
+			IPs:  append(pass.IPs, redirect.IPs...),
+		}
+	}
+	return &resp, nil
+}
+
+func (x *LinkHandle) queryIPs(req *api.QueryIPsReq, ipset map[netaddr.IPv4Prefix]struct{}) api.QueryIPsResp {
+	resp := api.QueryIPsResp{Page: api.Page{Total: len(ipset)}}
+
+	// Query with page
+	if req.PageNumber > 0 && req.PageSize > 0 {
+		resp.PageNumber = req.PageNumber
+		resp.PageSize = min(req.PageSize, 100)
+		resp.IPs = make([]api.IPAction, 0, min(req.PageSize, resp.Total))
+	} else {
+		resp.IPs = make([]api.IPAction, 0, resp.Total)
+	}
+
+	idx := 0
+	for ip := range ipset {
+		idx++
+		if idx <= (resp.PageNumber-1)*resp.PageSize {
+			continue
+		}
+		resp.IPs = append(resp.IPs, api.IPAction{IP: ip, Action: req.Action})
+		if idx >= resp.PageNumber*resp.PageSize {
+			break
+		}
+	}
+	return resp
+}
+
+func (x *LinkHandle) AddIP(ip netaddr.IPv4Prefix, action api.XDPAction) error {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+
+	switch action {
+	case api.XDPActionPass:
+		x.passIPs[ip] = struct{}{}
+		return x.Objects.PassLpmTrie.Update(xdpprog.NewIPLpmKey(ip), uint8(0), 0)
+	case api.XDPActionRedirect:
+		x.redirectIPs[ip] = struct{}{}
+		return x.Objects.RedirectLpmTrie.Update(xdpprog.NewIPLpmKey(ip), uint8(0), 0)
+	default:
+		return fmt.Errorf("unsupported ip type: %s", ip)
+	}
+}
+
+func (x *LinkHandle) DeleteIP(ip netaddr.IPv4Prefix, action api.XDPAction) error {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+
+	switch action {
+	case api.XDPActionPass:
+		return x.deleteIP(ip, x.passIPs, x.Objects.PassLpmTrie)
+	case api.XDPActionRedirect:
+		return x.deleteIP(ip, x.redirectIPs, x.Objects.RedirectLpmTrie)
+	default:
+		return fmt.Errorf("unsupported ip type: %s", ip)
+	}
+}
+
+func (x *LinkHandle) deleteIP(ip netaddr.IPv4Prefix, ipset map[netaddr.IPv4Prefix]struct{}, trie *ebpf.Map) error {
+	err := trie.Delete(xdpprog.NewIPLpmKey(ip))
+	if err != nil {
+		return err
+	}
+	delete(ipset, ip)
+	return nil
 }
 
 func setAffinityCPU(cpu int) error {

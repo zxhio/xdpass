@@ -11,11 +11,43 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/zxhio/xdpass/pkg/utils"
 )
+
+type Page struct {
+	PageNumber int `json:"page_number"`
+	PageSize   int `json:"page_size"`
+	Total      int `json:"total"`
+}
+
+func (p Page) ToQuery() string {
+	s := []string{}
+	s = append(s, fmt.Sprintf("page=%d", p.PageNumber))
+	s = append(s, fmt.Sprintf("page-size=%d", p.PageSize))
+	return strings.Join(s, "&")
+}
+
+func NewPageFromRequest(req *http.Request) Page {
+	var p Page
+
+	pageNumber, err := strconv.Atoi(req.URL.Query().Get("page"))
+	if err != nil {
+		pageNumber = 1
+	}
+	p.PageNumber = pageNumber
+
+	size, err := strconv.Atoi(req.URL.Query().Get("page-size"))
+	if err != nil {
+		size = 100
+	}
+	p.PageSize = size
+
+	return p
+}
 
 type reqOpts struct {
 	addr   string

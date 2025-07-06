@@ -13,25 +13,19 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/zxhio/xdpass/internal"
 	"github.com/zxhio/xdpass/internal/api"
-	"github.com/zxhio/xdpass/internal/xdpprog"
 	"github.com/zxhio/xdpass/pkg/builder"
-	"github.com/zxhio/xdpass/pkg/netaddr"
 )
 
 var (
 	version   bool
 	verbose   bool
 	ifaceName string
-	redir     netaddr.IPv4Prefix
-	pass      netaddr.IPv4Prefix
 )
 
 func main() {
 	pflag.BoolVarP(&version, "version", "V", false, "Print version")
 	pflag.BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	pflag.StringVarP(&ifaceName, "interface", "i", "", "Interface name")
-	pflag.VarP(&redir, "redirect-ip", "R", "Pass matched source IP packets to kernel")
-	pflag.VarP(&pass, "pass-ip", "P", "Redirect matched source IP packets to xsk")
 	pflag.Parse()
 
 	if version {
@@ -68,19 +62,6 @@ func main() {
 	}()
 
 	go func() {
-		// TODO: use API updating lpm key
-		err = link.PassLpmTrie.Update(xdpprog.NewIPLpmKey(pass), uint8(0), 0)
-		if err != nil {
-			logrus.WithError(err).Fatal("Fatal to update pass ip")
-		}
-		logrus.WithField("lpm", pass).Info("Update pass lpm key")
-
-		err = link.RedirectLpmTrie.Update(xdpprog.NewIPLpmKey(redir), uint8(0), 0)
-		if err != nil {
-			logrus.WithError(err).Fatal("Fatal to update redirect ip")
-		}
-		logrus.WithField("lpm", redir).Info("Update redirect lpm key")
-
 		err = link.Run(ctx)
 		if err != nil {
 			logrus.WithError(err).Fatal("Fatal to run link handle")
@@ -89,5 +70,6 @@ func main() {
 
 	g := gin.Default()
 	api.SetRuleRouter(g, link)
+	api.SetIPRouter(g, link)
 	g.RunListener(lis)
 }

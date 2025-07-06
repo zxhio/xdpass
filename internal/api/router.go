@@ -12,6 +12,10 @@ const (
 	APIPathQueryRule  = "/api/rules/:rule_id"
 	APIPathAddRule    = "/api/rules"
 	APIPathDeleteRule = "/api/rules/:rule_id"
+
+	APIPathQueryIPsAction = "/api/xdp/:action/ips"
+	APIPathAddIPAction    = "/api/xdp/:action/ips"
+	APIPathDeleteIPAction = "/api/xdp/:action/ips/:ip"
 )
 
 func SetRuleRouter(g *gin.Engine, rule RuleAPI) {
@@ -22,6 +26,20 @@ func SetRuleRouter(g *gin.Engine, rule RuleAPI) {
 	g.DELETE(APIPathDeleteRule, w.DeletePacetRule)
 }
 
+func SetIPRouter(g *gin.Engine, ip XDPAPI) {
+	w := httpXDPWrapper{impl: ip}
+	g.GET(APIPathQueryIPsAction, w.QueryIPs)
+	g.POST(APIPathAddIPAction, w.AddIP)
+	g.DELETE(APIPathDeleteIPAction, w.DeleteIP)
+}
+
 func InstantiateRuleAPIURL(apiPath string, ruleID int) string {
-	return strings.ReplaceAll(apiPath, ":rule_id", strconv.Itoa(ruleID))
+	return InstantiateAPIURL(apiPath, map[string]string{":rule_id": strconv.Itoa(ruleID)})
+}
+
+func InstantiateAPIURL(apiPath string, params map[string]string) string {
+	for k, v := range params {
+		apiPath = strings.ReplaceAll(apiPath, k, v)
+	}
+	return strings.TrimSuffix(apiPath, "/")
 }

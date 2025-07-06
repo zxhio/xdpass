@@ -9,16 +9,13 @@ import (
 )
 
 type QueryRulesReq struct {
-	Page       int
-	PageSize   int
+	Page
 	MatchTypes []rule.MatchType
 }
 
 type QueryRulesResp struct {
-	Page     int          `json:"page"`
-	PageSize int          `json:"page_size"`
-	Total    int          `json:"total"`
-	Rules    []*rule.Rule `json:"rules"`
+	Page  `json:"page"`
+	Rules []*rule.Rule `json:"rules"`
 }
 
 type RuleAPI interface {
@@ -49,18 +46,6 @@ func (w httpRuleWrapper) QueryRule(c *gin.Context) {
 
 func (w httpRuleWrapper) QueryRules(c *gin.Context) {
 	var req QueryRulesReq
-
-	pageNumber, err := strconv.Atoi(c.Request.URL.Query().Get("page"))
-	if err != nil {
-		pageNumber = 1
-	}
-	req.Page = pageNumber
-
-	pageSize, err := strconv.Atoi(c.Request.URL.Query().Get("page-size"))
-	if err != nil {
-		pageSize = 100
-	}
-	req.PageSize = pageSize
 
 	var mt rule.MatchType
 	if err := mt.Set(c.Request.URL.Query().Get("proto")); err == nil {
