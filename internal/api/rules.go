@@ -9,14 +9,11 @@ import (
 )
 
 type QueryRulesReq struct {
-	Page
+	QueryPage
 	MatchTypes []rule.MatchType
 }
 
-type QueryRulesResp struct {
-	Page  `json:"page"`
-	Rules []*rule.Rule `json:"rules"`
-}
+type QueryRulesResp QueryPageResp[*rule.Rule]
 
 type RuleAPI interface {
 	QueryRule(int) (*rule.Rule, error)

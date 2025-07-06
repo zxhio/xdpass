@@ -62,8 +62,8 @@ type LinkHandle struct {
 	mu          *sync.RWMutex
 	ruleID      int
 	rules       []*rule.Rule
-	passIPs     map[netaddr.IPv4Prefix]struct{}
-	redirectIPs map[netaddr.IPv4Prefix]struct{}
+	passIPs     []netaddr.IPv4Prefix
+	redirectIPs []netaddr.IPv4Prefix
 }
 
 func NewLinkHandle(name string, opts ...LinkHandleOpt) (*LinkHandle, error) {
@@ -151,8 +151,6 @@ func NewLinkHandle(name string, opts ...LinkHandleOpt) (*LinkHandle, error) {
 		closers:        closers,
 		mu:             &sync.RWMutex{},
 		rules:          make([]*rule.Rule, 0, 128),
-		passIPs:        make(map[netaddr.IPv4Prefix]struct{}),
-		redirectIPs:    make(map[netaddr.IPv4Prefix]struct{}),
 	}, nil
 }
 
@@ -351,43 +349,8 @@ func (x *LinkHandle) QueryRules(req *api.QueryRulesReq) (*api.QueryRulesResp, er
 		})
 	}
 
-	var total int
-	if len(req.MatchTypes) > 0 {
-		for _, r := range x.rules {
-			if validateMatch(r) {
-				total++
-			}
-		}
-	} else {
-		total = len(x.rules)
-	}
-
-	resp := api.QueryRulesResp{Page: api.Page{Total: total}}
-
-	// Query with page
-	if req.PageNumber > 0 && req.PageSize > 0 {
-		resp.PageNumber = req.PageNumber
-		resp.PageSize = min(req.PageSize, 100)
-		resp.Rules = make([]*rule.Rule, 0, min(req.PageSize, total))
-	} else {
-		resp.Rules = make([]*rule.Rule, 0, total)
-	}
-
-	idx := 0
-	for _, r := range x.rules {
-		if !validateMatch(r) {
-			continue
-		}
-		idx++
-		if idx <= (resp.PageNumber-1)*resp.PageSize {
-			continue
-		}
-		resp.Rules = append(resp.Rules, r)
-		if idx >= resp.PageNumber*resp.PageSize {
-			break
-		}
-	}
-	return &resp, nil
+	resp := api.QueryWithPage(x.rules, &req.QueryPage, validateMatch)
+	return (*api.QueryRulesResp)(resp), nil
 }
 
 func (x *LinkHandle) AddRule(r *rule.Rule) (int, error) {
@@ -420,47 +383,16 @@ func (x *LinkHandle) QueryIPs(req *api.QueryIPsReq) (*api.QueryIPsResp, error) {
 	x.mu.RLock()
 	defer x.mu.RUnlock()
 
-	var resp api.QueryIPsResp
+	var resp *api.QueryPageResp[netaddr.IPv4Prefix]
 	switch req.Action {
 	case api.XDPActionPass:
-		resp = x.queryIPs(req, x.passIPs)
+		resp = api.QueryWithPage(x.passIPs, &req.QueryPage, nil)
 	case api.XDPActionRedirect:
-		resp = x.queryIPs(req, x.redirectIPs)
+		resp = api.QueryWithPage(x.redirectIPs, &req.QueryPage, nil)
 	default:
-		pass := x.queryIPs(req, x.passIPs)
-		redirect := x.queryIPs(req, x.redirectIPs)
-		resp = api.QueryIPsResp{
-			Page: pass.Page,
-			IPs:  append(pass.IPs, redirect.IPs...),
-		}
+		return nil, fmt.Errorf("invalid xdp action: %s", req.Action)
 	}
-	return &resp, nil
-}
-
-func (x *LinkHandle) queryIPs(req *api.QueryIPsReq, ipset map[netaddr.IPv4Prefix]struct{}) api.QueryIPsResp {
-	resp := api.QueryIPsResp{Page: api.Page{Total: len(ipset)}}
-
-	// Query with page
-	if req.PageNumber > 0 && req.PageSize > 0 {
-		resp.PageNumber = req.PageNumber
-		resp.PageSize = min(req.PageSize, 100)
-		resp.IPs = make([]api.IPAction, 0, min(req.PageSize, resp.Total))
-	} else {
-		resp.IPs = make([]api.IPAction, 0, resp.Total)
-	}
-
-	idx := 0
-	for ip := range ipset {
-		idx++
-		if idx <= (resp.PageNumber-1)*resp.PageSize {
-			continue
-		}
-		resp.IPs = append(resp.IPs, api.IPAction{IP: ip, Action: req.Action})
-		if idx >= resp.PageNumber*resp.PageSize {
-			break
-		}
-	}
-	return resp
+	return (*api.QueryIPsResp)(resp), nil
 }
 
 func (x *LinkHandle) AddIP(ip netaddr.IPv4Prefix, action api.XDPAction) error {
@@ -469,13 +401,17 @@ func (x *LinkHandle) AddIP(ip netaddr.IPv4Prefix, action api.XDPAction) error {
 
 	switch action {
 	case api.XDPActionPass:
-		x.passIPs[ip] = struct{}{}
+		if !slices.Contains(x.passIPs, ip) {
+			x.passIPs = append(x.passIPs, ip)
+		}
 		return x.Objects.PassLpmTrie.Update(xdpprog.NewIPLpmKey(ip), uint8(0), 0)
 	case api.XDPActionRedirect:
-		x.redirectIPs[ip] = struct{}{}
+		if !slices.Contains(x.redirectIPs, ip) {
+			x.passIPs = append(x.passIPs, ip)
+		}
 		return x.Objects.RedirectLpmTrie.Update(xdpprog.NewIPLpmKey(ip), uint8(0), 0)
 	default:
-		return fmt.Errorf("unsupported ip type: %s", ip)
+		return fmt.Errorf("invalid xdp action: %s", action)
 	}
 }
 
@@ -485,20 +421,23 @@ func (x *LinkHandle) DeleteIP(ip netaddr.IPv4Prefix, action api.XDPAction) error
 
 	switch action {
 	case api.XDPActionPass:
-		return x.deleteIP(ip, x.passIPs, x.Objects.PassLpmTrie)
+		return x.deleteIP(ip, &x.passIPs, x.Objects.PassLpmTrie)
 	case api.XDPActionRedirect:
-		return x.deleteIP(ip, x.redirectIPs, x.Objects.RedirectLpmTrie)
+		return x.deleteIP(ip, &x.redirectIPs, x.Objects.RedirectLpmTrie)
 	default:
-		return fmt.Errorf("unsupported ip type: %s", ip)
+		return fmt.Errorf("unsupported xdp action: %s", action)
 	}
 }
 
-func (x *LinkHandle) deleteIP(ip netaddr.IPv4Prefix, ipset map[netaddr.IPv4Prefix]struct{}, trie *ebpf.Map) error {
+func (x *LinkHandle) deleteIP(ip netaddr.IPv4Prefix, ips *[]netaddr.IPv4Prefix, trie *ebpf.Map) error {
 	err := trie.Delete(xdpprog.NewIPLpmKey(ip))
 	if err != nil {
 		return err
 	}
-	delete(ipset, ip)
+	idx := slices.Index(*ips, ip)
+	if idx != -1 {
+		*ips = slices.Delete(*ips, idx, idx+1)
+	}
 	return nil
 }
 

@@ -25,9 +25,9 @@ const (
 )
 
 var (
-	listPage     int
-	listPageSize int
-	listAll      bool
+	listPage  int
+	listLimit int
+	listAll   bool
 )
 
 var listCmd = cobra.Command{
@@ -43,26 +43,28 @@ var listCmd = cobra.Command{
 			}
 		}
 
+		queryPage := api.QueryPage{Page: listPage, Limit: listLimit}
+
 		var rules []*rule.Rule
 		if listAll {
 			listPage = 1
-			listPageSize = 100
+			listLimit = 100
 			total := 0
 			for {
-				resp, err := queryRules(listPage, listPageSize, mt.String())
+				resp, err := queryRules(queryPage, mt.String())
 				utils.CheckErrorAndExit(err, "Query rules failed")
 
-				total += len(resp.Rules)
-				rules = append(rules, resp.Rules...)
+				total += len(resp.Data)
+				rules = append(rules, resp.Data...)
 				if total >= int(resp.Total) {
 					break
 				}
 				listPage++
 			}
 		} else {
-			resp, err := queryRules(listPage, listPageSize, mt.String())
+			resp, err := queryRules(queryPage, mt.String())
 			utils.CheckErrorAndExit(err, "Query rules failed")
-			rules = resp.Rules
+			rules = resp.Data
 		}
 
 		display(rules)
@@ -113,7 +115,7 @@ var delCmd = cobra.Command{
 
 func init() {
 	listCmd.Flags().IntVar(&listPage, "page", 1, "Page number to list")
-	listCmd.Flags().IntVar(&listPageSize, "page-size", 100, "Size per page")
+	listCmd.Flags().IntVar(&listLimit, "limit", 100, "Limit size per page")
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "List all rules")
 }
 
@@ -229,10 +231,10 @@ func display(rules []*rule.Rule) {
 	table.Render()
 }
 
-func queryRules(page, size int, proto string) (*api.QueryRulesResp, error) {
+func queryRules(queryPage api.QueryPage, proto string) (*api.QueryRulesResp, error) {
 	return api.NewReqMessage[api.QueryRulesResp](api.APIPathQueryRules,
 		api.WithReqAddr(defaultAPIAddr),
-		api.WithReqQuery(fmt.Sprintf("page=%d&page-size=%d&proto=%s", page, size, proto)),
+		api.WithReqQuery(fmt.Sprintf("%s&proto=%s", queryPage.ToQuery(), proto)),
 	)
 }
 

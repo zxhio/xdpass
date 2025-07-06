@@ -16,20 +16,17 @@ const (
 	XDPActionRedirect XDPAction = "redirect"
 )
 
-type QueryIPsReq struct {
-	Page
-	Action XDPAction
-}
-
-type QueryIPsResp struct {
-	Page
-	IPs []IPAction `json:"ips"`
-}
-
 type IPAction struct {
 	Action XDPAction          `json:"action"`
 	IP     netaddr.IPv4Prefix `json:"ip"`
 }
+
+type QueryIPsReq struct {
+	QueryPage
+	Action XDPAction
+}
+
+type QueryIPsResp QueryPageResp[netaddr.IPv4Prefix]
 
 type AddIPReq struct {
 	IP netaddr.IPv4Prefix `json:"ip"`
@@ -41,8 +38,8 @@ type DeleteIPResp IPAction
 
 type XDPAPI interface {
 	QueryIPs(*QueryIPsReq) (*QueryIPsResp, error)
-	AddIP(ip netaddr.IPv4Prefix, action XDPAction) error
-	DeleteIP(ip netaddr.IPv4Prefix, action XDPAction) error
+	AddIP(netaddr.IPv4Prefix, XDPAction) error
+	DeleteIP(netaddr.IPv4Prefix, XDPAction) error
 }
 
 type httpXDPWrapper struct {
@@ -56,7 +53,7 @@ func (w httpXDPWrapper) QueryIPs(c *gin.Context) {
 		return
 	}
 
-	req := &QueryIPsReq{Page: NewPageFromRequest(c.Request), Action: action}
+	req := &QueryIPsReq{QueryPage: NewPageFromRequest(c.Request), Action: action}
 	resp, err := w.impl.QueryIPs(req)
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)

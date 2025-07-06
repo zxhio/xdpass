@@ -18,35 +18,113 @@ import (
 	"github.com/zxhio/xdpass/pkg/utils"
 )
 
-type Page struct {
-	PageNumber int `json:"page_number"`
-	PageSize   int `json:"page_size"`
-	Total      int `json:"total"`
+// QueryPage defines pagination request parameters
+type QueryPage struct {
+	Page  int `json:"page"`  // Current page number (1-based)
+	Limit int `json:"limit"` // Items per page
+	Total int `json:"total"` // Total items count (usually set by server)
 }
 
-func (p Page) ToQuery() string {
-	s := []string{}
-	s = append(s, fmt.Sprintf("page=%d", p.PageNumber))
-	s = append(s, fmt.Sprintf("page-size=%d", p.PageSize))
-	return strings.Join(s, "&")
+func (p QueryPage) ToQuery() string {
+	return strings.Join([]string{
+		fmt.Sprintf("page=%d", p.Page),
+		fmt.Sprintf("limit=%d", p.Limit),
+	}, "&")
 }
 
-func NewPageFromRequest(req *http.Request) Page {
-	var p Page
+func NewPageFromRequest(req *http.Request) QueryPage {
+	var p QueryPage
 
-	pageNumber, err := strconv.Atoi(req.URL.Query().Get("page"))
+	page, err := strconv.Atoi(req.URL.Query().Get("page"))
 	if err != nil {
-		pageNumber = 1
+		page = 1
 	}
-	p.PageNumber = pageNumber
+	p.Page = page
 
-	size, err := strconv.Atoi(req.URL.Query().Get("page-size"))
+	limit, err := strconv.Atoi(req.URL.Query().Get("limit"))
 	if err != nil {
-		size = 100
+		limit = 100
 	}
-	p.PageSize = size
+	p.Limit = limit
 
 	return p
+}
+
+// QueryPageResp represents a paginated response with generic data type
+type QueryPageResp[T any] struct {
+	QueryPage
+	Data []T `json:"data"`
+}
+
+// QueryWithPage performs pagination on a dataset with optional filtering
+// Parameters:
+//   - data: The full dataset to paginate
+//   - req: Pagination request parameters (page/limit)
+//   - filter: Optional filter function (nil means no filtering)
+//
+// Returns:
+//   - Paginated response with metadata
+//   - Error if pagination parameters are invalid
+func QueryWithPage[T any](data []T, req *QueryPage, filter func(T) bool) *QueryPageResp[T] {
+	// Initialize default values if request is nil
+	if req == nil {
+		req = &QueryPage{Page: 1, Limit: 100}
+	}
+
+	// Validate and normalize pagination parameters
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Limit < 1 {
+		req.Limit = 100
+	} else {
+		req.Limit = min(req.Limit, 100)
+	}
+
+	// First pass: count total matches (no allocation)
+	total := 0
+	if filter != nil {
+		for _, item := range data {
+			if filter(item) {
+				total++
+			}
+		}
+	} else {
+		total = len(data)
+	}
+
+	resp := &QueryPageResp[T]{
+		QueryPage: QueryPage{
+			Page:  req.Page,
+			Limit: req.Limit,
+			Total: total,
+		},
+		Data: make([]T, 0, min(req.Limit, total)),
+	}
+
+	// Early return if no data or page out of range
+	if total == 0 || (req.Page-1)*req.Limit >= total {
+		return resp
+	}
+
+	// Second pass: collect only needed items
+	itemsNeeded := req.Limit
+	itemsSkipped := (req.Page - 1) * req.Limit
+	currentPos := 0
+
+	for _, item := range data {
+		if filter == nil || filter(item) {
+			if currentPos >= itemsSkipped && itemsNeeded > 0 {
+				resp.Data = append(resp.Data, item)
+				itemsNeeded--
+			}
+			currentPos++
+			if itemsNeeded == 0 {
+				break
+			}
+		}
+	}
+	return resp
 }
 
 type reqOpts struct {

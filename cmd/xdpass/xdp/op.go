@@ -22,9 +22,9 @@ const (
 )
 
 var (
-	listPage     int
-	listPageSize int
-	listAll      bool
+	listPage  int
+	listLimit int
+	listAll   bool
 )
 
 var listCmd = cobra.Command{
@@ -36,21 +36,21 @@ var listCmd = cobra.Command{
 		action := cmd.Parent().Name()
 		utils.CheckEqualAndExit(validateAction(action), "Unsupport xdp action: %s", action)
 
-		var ipActions []api.IPAction
+		var ips []netaddr.IPv4Prefix
 		if listAll {
 			listPage = 1
-			listPageSize = 100
+			listLimit = 100
 			total := 0
 			for {
 				resp, err := api.NewReqMessage[api.QueryIPsResp](
 					api.InstantiateAPIURL(api.APIPathQueryIPsAction, map[string]string{":action": action}),
 					api.WithReqAddr(defaultAPIAddr),
-					api.WithReqQuery(api.Page{PageNumber: listPage, PageSize: listPageSize}.ToQuery()),
+					api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
 				)
 				utils.CheckErrorAndExit(err, "Query ips failed")
 
-				total += len(resp.IPs)
-				ipActions = append(ipActions, resp.IPs...)
+				total += len(resp.Data)
+				ips = append(ips, resp.Data...)
 				if total >= int(resp.Total) {
 					break
 				}
@@ -60,20 +60,20 @@ var listCmd = cobra.Command{
 			resp, err := api.NewReqMessage[api.QueryIPsResp](
 				api.InstantiateAPIURL(api.APIPathQueryIPsAction, map[string]string{":action": action}),
 				api.WithReqAddr(defaultAPIAddr),
-				api.WithReqQuery(api.Page{PageNumber: listPage, PageSize: listPageSize}.ToQuery()),
+				api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
 			)
 			utils.CheckErrorAndExit(err, "Query ips failed")
-			ipActions = resp.IPs
+			ips = resp.Data
 		}
 
-		ips := []string{}
-		for _, ia := range ipActions {
-			ips = append(ips, ia.IP.String())
+		ss := []string{}
+		for _, ip := range ips {
+			ss = append(ss, ip.String())
 		}
-		slices.Sort(ips)
+		slices.Sort(ss)
 
 		data := [][]any{}
-		for _, ip := range ips {
+		for _, ip := range ss {
 			data = append(data, []any{ip})
 		}
 
@@ -145,7 +145,7 @@ var delCmd = cobra.Command{
 
 func init() {
 	listCmd.Flags().IntVar(&listPage, "page", 1, "Page number to list")
-	listCmd.Flags().IntVar(&listPageSize, "page-size", 100, "Size per page")
+	listCmd.Flags().IntVar(&listLimit, "limit", 100, "Limit size per page")
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "List all ip")
 }
 
