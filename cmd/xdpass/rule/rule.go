@@ -3,6 +3,7 @@ package rule
 import (
 	"github.com/spf13/cobra"
 	"github.com/zxhio/xdpass/internal/rule"
+	"github.com/zxhio/xdpass/pkg/fastpkt"
 	"github.com/zxhio/xdpass/pkg/netaddr"
 )
 
@@ -46,6 +47,11 @@ type RulePortFlags struct {
 }
 
 type RuleTCPFlags struct {
+	FlagSYN        bool
+	FlagACK        bool
+	FlagPSH        bool
+	FlagRST        bool
+	FlagFIN        bool
 	SpoofHandshake bool
 	ResetHandshake bool
 }
@@ -120,6 +126,27 @@ var tcpCmd = &cobra.Command{
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchTCP{})
+
+		var tf fastpkt.TCPFlags
+		if F.TCP.FlagSYN {
+			tf.Set(fastpkt.TCPFlagSYN)
+		}
+		if F.TCP.FlagACK {
+			tf.Set(fastpkt.TCPFlagACK)
+		}
+		if F.TCP.FlagPSH {
+			tf.Set(fastpkt.TCPFlagPSH)
+		}
+		if F.TCP.FlagRST {
+			tf.Set(fastpkt.TCPFlagRST)
+		}
+		if F.TCP.FlagFIN {
+			tf.Set(fastpkt.TCPFlagFIN)
+		}
+		if tf != 0 {
+			R.Matchs = append(R.Matchs, rule.MatchTCPFlags(tf))
+		}
+
 		if F.TCP.SpoofHandshake {
 			R.Target = rule.TargetTCPSpoofHandshake{}
 		} else if F.TCP.ResetHandshake {
@@ -182,6 +209,11 @@ func init() {
 	// rule tcp
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofHandshake, "spoof-handshake", false, "Target for TCP handshake spoofing (SYN/ACK)")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.ResetHandshake, "reset-handshake", false, "Target for TCP handshake reseting (RST/ACK)")
+	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagSYN, "flag-syn", "S", false, "TCP flag SYN")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.FlagACK, "flag-ack", false, "TCP flag ACK")
+	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagPSH, "flag-psh", "P", false, "TCP flag PSH")
+	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagRST, "flag-rst", "R", false, "TCP flag RST")
+	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagFIN, "flag-fin", "F", false, "TCP flag FIN")
 	tcpCmd.AddGroup(&group)
 	setCommandFlagsPorts(tcpCmd)
 

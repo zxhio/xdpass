@@ -88,7 +88,7 @@ var getCmd = cobra.Command{
 
 var addCmd = cobra.Command{
 	Use:   "add",
-	Short: "Get rules",
+	Short: "Add rule",
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := addRule(&R)
