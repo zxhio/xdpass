@@ -154,6 +154,10 @@ var matchTypeToSerializer = map[MatchType]serializer[Match]{
 		matchTypeMarshal(func(m Match) MatchHTTP { return m.(MatchHTTP) }),
 		matchTypeUnmarshal(func(v MatchHTTP) Match { return v }),
 	},
+	MatchTypeTCPFlags: {
+		matchTypeMarshal(func(m Match) MatchTCPFlags { return m.(MatchTCPFlags) }),
+		matchTypeUnmarshal(func(v MatchTCPFlags) Match { return v }),
+	},
 }
 
 func matchTypeMarshal[T any](m2v func(m Match) T) func(Match) ([]byte, error) {
