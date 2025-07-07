@@ -156,26 +156,30 @@ func getPacketMatcher(r *rule.Rule, fn func(m rule.Match) (string, bool)) string
 	return "*"
 }
 
+func getLastProto(r *rule.Rule) string {
+	protos := []rule.MatchType{
+		rule.MatchTypeARP,
+		rule.MatchTypeUDP,
+		rule.MatchTypeICMP,
+		rule.MatchTypeTCP,
+		rule.MatchTypeHTTP,
+	}
+
+	var lastProto rule.MatchType
+	for _, m := range r.Matchs {
+		if slices.Contains(protos, m.MatchType()) {
+			lastProto = m.MatchType()
+		}
+	}
+	return lastProto.String()
+}
+
 func display(rules []*rule.Rule) {
 	data := [][]any{}
 	for _, r := range rules {
 		data = append(data, []any{
 			r.ID,
-			strings.ToLower(getPacketMatcher(r, func(m rule.Match) (string, bool) {
-				protos := []rule.MatchType{
-					rule.MatchTypeARP,
-					rule.MatchTypeTCP,
-					rule.MatchTypeUDP,
-					rule.MatchTypeICMP,
-					rule.MatchTypeHTTP,
-				}
-
-				idx := slices.Index(protos, m.MatchType())
-				if idx != -1 {
-					return m.MatchType().String(), true
-				}
-				return "", false
-			})),
+			strings.ToLower(getLastProto(r)),
 			getPacketMatcher(r, func(m rule.Match) (string, bool) {
 				switch m.MatchType() {
 				case rule.MatchTypeIPv4PrefixSrc:
