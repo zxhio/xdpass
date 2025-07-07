@@ -55,10 +55,11 @@ type RuleICMPFlags struct {
 }
 
 type RuleHTTPFlags struct {
-	Method  string
-	URI     string
-	Version string
-	Host    string
+	Method        string
+	URI           string
+	Version       string
+	Host          string
+	SpoofNotFound bool
 }
 
 var (
@@ -157,6 +158,9 @@ var httpCmd = &cobra.Command{
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		R.Matchs = append(R.Matchs, rule.MatchHTTP{})
+		if F.SpoofNotFound {
+			R.Target = rule.TargetHTTPRespSpoofNotFound{}
+		}
 	},
 }
 
@@ -193,6 +197,7 @@ func init() {
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
 	httpCmd.PersistentFlags().StringVar(&F.Host, "host", "", "HTTP request host")
+	httpCmd.PersistentFlags().BoolVar(&F.SpoofNotFound, "spoof-not-found", false, "Target for http response 404 not found spoofing")
 }
 
 func setCommandFlagsPorts(cmd *cobra.Command) {

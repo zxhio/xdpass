@@ -303,12 +303,15 @@ type MatchHTTP struct {
 func (m MatchHTTP) MatchType() MatchType { return MatchTypeHTTP }
 
 func (m MatchHTTP) Match(pkt *fastpkt.Packet) bool {
-	if pkt.L7Proto != fastpkt.L7ProtoHTTPReq || pkt.LazyHTTP == nil {
+	if pkt.L7Proto != fastpkt.L7ProtoHTTPReq {
 		return false
 	}
 
-	if !pkt.LazyHTTP.Decoded {
-		pkt.LazyHTTP.DecodeFromPacket(pkt)
+	if pkt.LazyHTTP == nil {
+		pkt.LazyHTTP = &fastpkt.LazyHTTP{}
+		if !pkt.LazyHTTP.Decoded {
+			pkt.LazyHTTP.DecodeFromPacket(pkt)
+		}
 	}
 	if !pkt.LazyHTTP.Valid {
 		return false

@@ -43,7 +43,7 @@ var targetTypeToStr = map[TargetType]string{
 	TargetTypeTCPResetHandshake:  "reset-handshake",
 	TargetTypeTCPSpoofHandshake:  "spoof-handshake",
 	TargetTypeICMPSpoofEchoReply: "spoof-echo-reply",
-	TargetTypeHTTPSpoofNotFound:  "spoof-notfound",
+	TargetTypeHTTPSpoofNotFound:  "spoof-not-found",
 }
 
 var strToTargetType = make(map[string]TargetType)
