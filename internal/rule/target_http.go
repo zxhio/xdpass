@@ -49,7 +49,8 @@ func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	txTCP := buf.AllocTCPHeader()
 	txTCP.SrcPort = rxTCP.DstPort
 	txTCP.DstPort = rxTCP.SrcPort
-	txTCP.AckSeq = netutil.Htonl(netutil.Ntohl(rxTCP.Seq) + 1)
+	txTCP.Seq = rxTCP.AckSeq
+	txTCP.AckSeq = netutil.Htonl(netutil.Ntohl(rxTCP.Seq) + uint32(len(pkt.RxData)-int(pkt.L2Len+pkt.L3Len+pkt.L4Len)))
 	txTCP.SetHeaderLen(uint8(fastpkt.SizeofTCP))
 	txTCP.Flags.Clear(fastpkt.TCPFlagsMask)
 	txTCP.Flags.Set(fastpkt.TCPFlagPSH | fastpkt.TCPFlagACK)
