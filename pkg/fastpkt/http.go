@@ -45,7 +45,10 @@ type LazyHTTP struct {
 	Host         []byte
 }
 
-var emptyLazyHTTP LazyHTTP
+var (
+	emptyLazyHTTP LazyHTTP
+	crlf          = [2]byte{'\r', '\n'}
+)
 
 func (h *LazyHTTP) Reset() {
 	*h = emptyLazyHTTP
@@ -60,7 +63,7 @@ func (h *LazyHTTP) DecodeFromData(data []byte) error {
 	h.Decoded = true
 
 	// Decode request line
-	idx := bytes.IndexByte(data, '\n')
+	idx := bytes.Index(data, crlf[:])
 	if idx < 0 {
 		return fmt.Errorf("invalid http request line, no line breaks")
 	}
@@ -85,7 +88,7 @@ func (h *LazyHTTP) DecodeFromData(data []byte) error {
 	idxHost := bytes.Index(data[idx:], []byte("Host:"))
 	if idxHost != -1 {
 		idxHost += idx + 5
-		idxHostLine := bytes.IndexByte(data[idxHost+1:], '\n')
+		idxHostLine := bytes.Index(data[idxHost+1:], crlf[:])
 		if idxHostLine != -1 {
 			idxHostLine += idxHost + 1
 			h.Host = bytes.TrimSpace(data[idxHost+1 : idxHostLine])

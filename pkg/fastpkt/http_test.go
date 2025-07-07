@@ -37,7 +37,7 @@ func TestDecodeLazyHTTP(t *testing.T) {
 		lazy    LazyHTTP
 	}{
 		{
-			"GET / HTTP/1.1\n",
+			"GET / HTTP/1.1\r\n",
 			LazyHTTP{
 				Decoded:      true,
 				Valid:        true,
@@ -48,7 +48,7 @@ func TestDecodeLazyHTTP(t *testing.T) {
 			},
 		},
 		{
-			"POST /foo HTTP/2.0\n",
+			"POST /foo HTTP/2.0\r\n",
 			LazyHTTP{
 				Decoded:      true,
 				Valid:        true,
@@ -59,7 +59,7 @@ func TestDecodeLazyHTTP(t *testing.T) {
 			},
 		},
 		{
-			"POST /foo HTTP/2.0\nHost: 192.168.110.200:5555\n",
+			"POST /foo HTTP/2.0\r\nHost: 192.168.110.200:5555\r\n",
 			LazyHTTP{
 				Decoded:      true,
 				Valid:        true,
@@ -71,21 +71,21 @@ func TestDecodeLazyHTTP(t *testing.T) {
 			},
 		},
 		{
-			"HTTP/1.1 200 OK\n",
+			"HTTP/1.1 200 OK\r\n",
 			LazyHTTP{
 				Decoded: true,
 				Valid:   false,
 			},
 		},
 		{
-			"GET2 / HTTP/1.1\n",
+			"GET2 / HTTP/1.1\r\n",
 			LazyHTTP{
 				Decoded: true,
 				Valid:   false,
 			},
 		},
 		{
-			"GET / HTTP/1.1",
+			"GET / HTTP/1.1\n",
 			LazyHTTP{
 				Decoded: true,
 				Valid:   false,
