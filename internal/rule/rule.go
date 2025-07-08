@@ -174,27 +174,13 @@ func matchTypeUnmarshal[T any](v2m func(T) Match) func([]byte) (Match, error) {
 	}
 }
 
-var targetTypeToSerializer = map[TargetType]serializer[Target]{
-	TargetTypeARPSpoofReply: {
-		targetTypeMarshal[TargetARPReplySpoof](),
-		targetTypeUnmarshal(func(v TargetARPReplySpoof) Target { return TargetARPReplySpoof(v) }),
-	},
-	TargetTypeTCPSpoofHandshake: {
-		targetTypeMarshal[TargetTCPSpoofHandshake](),
-		targetTypeUnmarshal(func(v TargetTCPSpoofHandshake) Target { return TargetTCPSpoofHandshake(v) }),
-	},
-	TargetTypeTCPResetHandshake: {
-		targetTypeMarshal[TargetTCPResetHandshake](),
-		targetTypeUnmarshal(func(v TargetTCPResetHandshake) Target { return TargetTCPResetHandshake(v) }),
-	},
-	TargetTypeICMPSpoofEchoReply: {
-		targetTypeMarshal[TargetICMPEchoReplySpoof](),
-		targetTypeUnmarshal(func(v TargetICMPEchoReplySpoof) Target { return TargetICMPEchoReplySpoof(v) }),
-	},
-	TargetTypeHTTPSpoofNotFound: {
-		targetTypeMarshal[TargetHTTPRespSpoofNotFound](),
-		targetTypeUnmarshal(func(v TargetHTTPRespSpoofNotFound) Target { return TargetHTTPRespSpoofNotFound(v) }),
-	},
+var targetTypeToSerializer = map[TargetType]serializer[Target]{}
+
+func registerTargetSerializer[T Target](v T) {
+	targetTypeToSerializer[v.TargetType()] = serializer[Target]{
+		marshaler:   targetTypeMarshal[T](),
+		unmarshaler: targetTypeUnmarshal(func(v T) Target { return T(v) }),
+	}
 }
 
 func targetTypeMarshal[T any]() func(Target) ([]byte, error) {
@@ -209,4 +195,15 @@ func targetTypeUnmarshal[T any](v2t func(T) Target) func([]byte) (Target, error)
 		}
 		return v2t(v), nil
 	}
+}
+
+func init() {
+	registerTargetSerializer(TargetARPReplySpoof{})
+	registerTargetSerializer(TargetTCPSpoofSYNACK{})
+	registerTargetSerializer(TargetTCPSpoofRSTACK{})
+	registerTargetSerializer(TargetTCPSpoofPSHACK{})
+	registerTargetSerializer(TargetTCPSpoofFINACK{})
+	registerTargetSerializer(TargetTCPSpoofACK{})
+	registerTargetSerializer(TargetICMPEchoReplySpoof{})
+	registerTargetSerializer(TargetHTTPRespSpoofNotFound{})
 }

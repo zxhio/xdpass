@@ -18,42 +18,54 @@ var targetTCPMatchTypes = []MatchType{
 	MatchTypePortRangeDst,
 }
 
-type TargetTCPSpoofHandshake struct{}
+type TargetTCPSpoofSYNACK struct{}
 
-func (TargetTCPSpoofHandshake) TargetType() TargetType {
-	return TargetTypeTCPSpoofHandshake
-}
-
-func (TargetTCPSpoofHandshake) MatchTypes() []MatchType {
-	return targetTCPMatchTypes
-}
-
-func (TargetTCPSpoofHandshake) Execute(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofSYNACK) TargetType() TargetType     { return TargetTypeTCPSpoofSYNACK }
+func (TargetTCPSpoofSYNACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
+func (t TargetTCPSpoofSYNACK) Compare(other Target) int { return CompareTargetType(t, other) }
+func (TargetTCPSpoofSYNACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagSYN|fastpkt.TCPFlagACK)
 	return nil
 }
 
-func (t TargetTCPSpoofHandshake) Compare(other Target) int {
-	return CompareTargetType(t, other)
-}
+type TargetTCPSpoofRSTACK struct{}
 
-type TargetTCPResetHandshake struct{}
-
-func (TargetTCPResetHandshake) TargetType() TargetType {
-	return TargetTypeTCPResetHandshake
-}
-
-func (TargetTCPResetHandshake) MatchTypes() []MatchType {
-	return targetTCPMatchTypes
-}
-
-func (TargetTCPResetHandshake) Execute(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofRSTACK) TargetType() TargetType     { return TargetTypeTCPSpoofRSTACK }
+func (TargetTCPSpoofRSTACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
+func (t TargetTCPSpoofRSTACK) Compare(other Target) int { return CompareTargetType(t, other) }
+func (TargetTCPSpoofRSTACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagRST|fastpkt.TCPFlagACK)
 	return nil
 }
 
-func (t TargetTCPResetHandshake) Compare(other Target) int {
-	return CompareTargetType(t, other)
+type TargetTCPSpoofPSHACK struct{}
+
+func (TargetTCPSpoofPSHACK) TargetType() TargetType     { return TargetTypeTCPSpoofPSHACK }
+func (TargetTCPSpoofPSHACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
+func (t TargetTCPSpoofPSHACK) Compare(other Target) int { return CompareTargetType(t, other) }
+func (TargetTCPSpoofPSHACK) Execute(pkt *fastpkt.Packet) error {
+	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagPSH|fastpkt.TCPFlagACK)
+	return nil
+}
+
+type TargetTCPSpoofFINACK struct{}
+
+func (TargetTCPSpoofFINACK) TargetType() TargetType     { return TargetTypeTCPSpoofFINACK }
+func (TargetTCPSpoofFINACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
+func (t TargetTCPSpoofFINACK) Compare(other Target) int { return CompareTargetType(t, other) }
+func (TargetTCPSpoofFINACK) Execute(pkt *fastpkt.Packet) error {
+	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagFIN|fastpkt.TCPFlagACK)
+	return nil
+}
+
+type TargetTCPSpoofACK struct{}
+
+func (TargetTCPSpoofACK) TargetType() TargetType     { return TargetTypeTCPSpoofACK }
+func (TargetTCPSpoofACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
+func (t TargetTCPSpoofACK) Compare(other Target) int { return CompareTargetType(t, other) }
+func (TargetTCPSpoofACK) Execute(pkt *fastpkt.Packet) error {
+	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagACK)
+	return nil
 }
 
 func makeTCPDataWithFlags(pkt *fastpkt.Packet, flags fastpkt.TCPFlags) {
@@ -66,7 +78,7 @@ func makeTCPDataWithFlags(pkt *fastpkt.Packet, flags fastpkt.TCPFlags) {
 	txTCP := buf.AllocTCPHeader()
 	txTCP.SrcPort = rxTCP.DstPort
 	txTCP.DstPort = rxTCP.SrcPort
-	txTCP.Seq = rxTCP.Seq/2 + 1<<24
+	txTCP.Seq = rxTCP.AckSeq
 	txTCP.AckSeq = netutil.Htonl(netutil.Ntohl(rxTCP.Seq) + 1)
 	txTCP.SetHeaderLen(uint8(fastpkt.SizeofTCP))
 	txTCP.Flags.Clear(fastpkt.TCPFlagsMask)

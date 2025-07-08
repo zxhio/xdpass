@@ -29,8 +29,11 @@ const (
 
 // TCP
 const (
-	TargetTypeTCPResetHandshake = iota + iotaTCP
-	TargetTypeTCPSpoofHandshake
+	TargetTypeTCPSpoofSYNACK = iota + iotaTCP
+	TargetTypeTCPSpoofRSTACK
+	TargetTypeTCPSpoofFINACK
+	TargetTypeTCPSpoofPSHACK
+	TargetTypeTCPSpoofACK
 )
 
 // HTTP
@@ -40,8 +43,11 @@ const (
 
 var targetTypeToStr = map[TargetType]string{
 	TargetTypeARPSpoofReply:      "spoof-arp-reply",
-	TargetTypeTCPResetHandshake:  "reset-handshake",
-	TargetTypeTCPSpoofHandshake:  "spoof-handshake",
+	TargetTypeTCPSpoofSYNACK:     "spoof-syn-ack",
+	TargetTypeTCPSpoofRSTACK:     "spoof-rst-ack",
+	TargetTypeTCPSpoofFINACK:     "spoof-fin-ack",
+	TargetTypeTCPSpoofPSHACK:     "spoof-psh-ack",
+	TargetTypeTCPSpoofACK:        "spoof-ack",
 	TargetTypeICMPSpoofEchoReply: "spoof-echo-reply",
 	TargetTypeHTTPSpoofNotFound:  "spoof-not-found",
 }

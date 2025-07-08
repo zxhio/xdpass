@@ -15,7 +15,7 @@ func TestRule(t *testing.T) {
 			MatchPortRangeDst{1, 1024},
 			MatchMultiPortSrc{80, 443},
 		},
-		Target: TargetTCPSpoofHandshake{},
+		Target: TargetTCPSpoofSYNACK{},
 	}
 
 	data, err := json.Marshal(r)

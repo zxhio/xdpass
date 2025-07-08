@@ -47,13 +47,18 @@ type RulePortFlags struct {
 }
 
 type RuleTCPFlags struct {
-	FlagSYN        bool
-	FlagACK        bool
-	FlagPSH        bool
-	FlagRST        bool
-	FlagFIN        bool
-	SpoofHandshake bool
-	ResetHandshake bool
+	FlagSYN bool
+	FlagACK bool
+	FlagPSH bool
+	FlagRST bool
+	FlagFIN bool
+
+	// Target
+	SpoofSYNACK bool
+	SpoofRSTACK bool
+	SpoofFINACK bool
+	SpoofPSHACK bool
+	SpoofACK    bool
 }
 
 type RuleICMPFlags struct {
@@ -147,10 +152,16 @@ var tcpCmd = &cobra.Command{
 			R.Matchs = append(R.Matchs, rule.MatchTCPFlags(tf))
 		}
 
-		if F.TCP.SpoofHandshake {
-			R.Target = rule.TargetTCPSpoofHandshake{}
-		} else if F.TCP.ResetHandshake {
-			R.Target = rule.TargetTCPResetHandshake{}
+		if F.TCP.SpoofSYNACK {
+			R.Target = rule.TargetTCPSpoofSYNACK{}
+		} else if F.TCP.SpoofRSTACK {
+			R.Target = rule.TargetTCPSpoofRSTACK{}
+		} else if F.TCP.SpoofFINACK {
+			R.Target = rule.TargetTCPSpoofFINACK{}
+		} else if F.TCP.SpoofPSHACK {
+			R.Target = rule.TargetTCPSpoofPSHACK{}
+		} else if F.TCP.SpoofACK {
+			R.Target = rule.TargetTCPSpoofACK{}
 		}
 	},
 }
@@ -207,13 +218,16 @@ func init() {
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "Target MAC for ARP-Reply spoofing")
 
 	// rule tcp
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofHandshake, "spoof-handshake", false, "Target for TCP handshake spoofing (SYN/ACK)")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.ResetHandshake, "reset-handshake", false, "Target for TCP handshake reseting (RST/ACK)")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagSYN, "flag-syn", "S", false, "TCP flag SYN")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.FlagACK, "flag-ack", false, "TCP flag ACK")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagPSH, "flag-psh", "P", false, "TCP flag PSH")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagRST, "flag-rst", "R", false, "TCP flag RST")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagFIN, "flag-fin", "F", false, "TCP flag FIN")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofSYNACK, "spoof-syn-ack", false, "Target for TCP flag SYN/ACK spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofRSTACK, "spoof-rst-ack", false, "Target for TCP flag RST/ACK spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofPSHACK, "spoof-psh-ack", false, "Target for TCP flag PSH/ACK spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofFINACK, "spoof-fin-ack", false, "Target for TCP flag FIN/ACK spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofACK, "spoof-ack", false, "Target for TCP flag ACK spoofing")
 	tcpCmd.AddGroup(&group)
 	setCommandFlagsPorts(tcpCmd)
 
