@@ -29,11 +29,16 @@ func (tgt TargetHTTPRespSpoofNotFound) Compare(other Target) int {
 	return CompareTargetType(tgt, other)
 }
 
-const notFoundText = `HTTP/1.1 404 Not Found
-Content-Type: text/plain; charset=utf-8
-Content-Length: 19
-
-404 page not found`
+const notFoundText = "HTTP/1.1 404 Not Found\r\n" +
+	"Content-Type: text/html\r\n" +
+	"Content-Length: 97\r\n" +
+	"\r\n" +
+	"<html>\n" +
+	"<body>\n" +
+	"<h1>404 Not Found</h1>\n" +
+	"<p>The requested resource was not found.</p>\n" +
+	"</body>\n" +
+	"</html>"
 
 func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	var (
