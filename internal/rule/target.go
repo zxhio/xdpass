@@ -94,8 +94,10 @@ func (t TargetType) Compare(t1 TargetType) int {
 type Target interface {
 	TargetType() TargetType
 	MatchTypes() []MatchType
-	Execute(pkt *fastpkt.Packet) error
 	Compare(other Target) int
+	Open() error
+	OnPacket(pkt *fastpkt.Packet) error
+	Close() error
 }
 
 func CompareTargetType(t1, t2 Target) int {

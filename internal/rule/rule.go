@@ -211,7 +211,7 @@ func targetTypeUnmarshal[T any](v2t func(T) Target) func([]byte) (Target, error)
 
 func init() {
 	registerTargetSerializer(MirrorStdout{})
-	registerTargetSerializer(MirrorTap{})
+	registerTargetSerializer(&MirrorTap{})
 	registerTargetSerializer(TargetARPReplySpoof{})
 	registerTargetSerializer(TargetTCPSpoofSYNACK{})
 	registerTargetSerializer(TargetTCPSpoofRSTACK{})

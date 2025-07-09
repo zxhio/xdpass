@@ -307,7 +307,7 @@ func (x *LinkHandle) apply(pkt *fastpkt.Packet, rules []*rule.Rule) {
 	r := rules[idx]
 	r.Packets++
 	r.Bytes += uint64(len(pkt.RxData))
-	err := r.Target.Execute(pkt)
+	err := r.Target.OnPacket(pkt)
 	if err != nil {
 		logrus.WithError(err).Error("Fail to execute target")
 	}
@@ -342,6 +342,11 @@ func (x *LinkHandle) QueryRules(req *api.QueryRulesReq) (*api.QueryRulesResp, er
 }
 
 func (x *LinkHandle) AddRule(r *rule.Rule) (int, error) {
+	err := r.Target.Open()
+	if err != nil {
+		return 0, err
+	}
+
 	x.mu.Lock()
 	defer x.mu.Unlock()
 
@@ -365,8 +370,9 @@ func (x *LinkHandle) DeleteRule(ruleID int) error {
 	if idx == -1 {
 		return errors.Errorf("no such rule id: %d", ruleID)
 	}
-	x.rules = slices.DeleteFunc(x.rules, ruleIDMatcher(ruleID))
+	x.rules[idx].Target.Close()
 
+	x.rules = slices.DeleteFunc(x.rules, ruleIDMatcher(ruleID))
 	x.mirrorRules = slices.DeleteFunc(x.mirrorRules, ruleIDMatcher(ruleID))
 	x.protoRules = slices.DeleteFunc(x.protoRules, ruleIDMatcher(ruleID))
 	return nil

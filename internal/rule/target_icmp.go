@@ -27,7 +27,13 @@ func (TargetICMPEchoReplySpoof) MatchTypes() []MatchType {
 	}
 }
 
-func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
+func (tgt TargetICMPEchoReplySpoof) Compare(other Target) int {
+	return CompareTargetType(tgt, other)
+}
+
+func (TargetICMPEchoReplySpoof) Open() error { return nil }
+
+func (TargetICMPEchoReplySpoof) OnPacket(pkt *fastpkt.Packet) error {
 	var (
 		rxEther = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
 		rxIPv4  = fastpkt.DataPtrIPv4Header(pkt.RxData, int(pkt.L2Len))
@@ -82,6 +88,4 @@ func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	return nil
 }
 
-func (tgt TargetICMPEchoReplySpoof) Compare(other Target) int {
-	return CompareTargetType(tgt, other)
-}
+func (TargetICMPEchoReplySpoof) Close() error { return nil }

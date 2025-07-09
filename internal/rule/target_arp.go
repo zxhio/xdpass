@@ -32,7 +32,17 @@ func (TargetARPReplySpoof) MatchTypes() []MatchType {
 	}
 }
 
-func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
+func (tgt TargetARPReplySpoof) Compare(other Target) int {
+	if tgt.TargetType() != other.TargetType() {
+		return CompareTargetType(tgt, other)
+	}
+	t := other.(TargetARPReplySpoof)
+	return bytes.Compare(tgt.HwAddr[:], t.HwAddr[:])
+}
+
+func (TargetARPReplySpoof) Open() error { return nil }
+
+func (tgt TargetARPReplySpoof) OnPacket(pkt *fastpkt.Packet) error {
 	var (
 		rxEther   = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
 		rxPayload = pkt.RxData[pkt.L2Len+uint8(fastpkt.SizeofARP):]
@@ -84,10 +94,4 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	return nil
 }
 
-func (tgt TargetARPReplySpoof) Compare(other Target) int {
-	if tgt.TargetType() != other.TargetType() {
-		return CompareTargetType(tgt, other)
-	}
-	t := other.(TargetARPReplySpoof)
-	return bytes.Compare(tgt.HwAddr[:], t.HwAddr[:])
-}
+func (TargetARPReplySpoof) Close() error { return nil }

@@ -112,6 +112,8 @@ var ruleCmd = &cobra.Command{
 		// Mirror
 		if F.MirrorStdout {
 			R.Target = rule.MirrorStdout{}
+		} else if F.MirrorTap != "" {
+			R.Target = &rule.MirrorTap{Name: F.MirrorTap}
 		}
 	},
 }

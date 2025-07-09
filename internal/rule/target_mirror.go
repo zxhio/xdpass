@@ -3,6 +3,7 @@ package rule
 import (
 	"fmt"
 
+	"github.com/vishvananda/netlink"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
 )
 
@@ -11,17 +12,41 @@ type MirrorStdout struct{}
 func (MirrorStdout) TargetType() TargetType     { return TargetTypeMirrorStdout }
 func (MirrorStdout) MatchTypes() []MatchType    { return []MatchType{} }
 func (t MirrorStdout) Compare(other Target) int { return CompareTargetType(t, other) }
-func (MirrorStdout) Execute(pkt *fastpkt.Packet) error {
+func (MirrorStdout) Open() error                { return nil }
+func (MirrorStdout) OnPacket(pkt *fastpkt.Packet) error {
 	fmt.Println(fastpkt.Format(pkt.RxData, fastpkt.WithFormatEthernet()))
 	return nil
 }
+func (MirrorStdout) Close() error { return nil }
 
-type MirrorTap struct{}
-
-func (MirrorTap) TargetType() TargetType     { return TargetTypeMirrorTap }
-func (MirrorTap) MatchTypes() []MatchType    { return []MatchType{} }
-func (t MirrorTap) Compare(other Target) int { return CompareTargetType(t, other) }
-func (MirrorTap) Execute(pkt *fastpkt.Packet) error {
-	// TODO:
-	return nil
+type MirrorTap struct {
+	Name string `json:"name"`
+	tap  *netlink.Tuntap
 }
+
+func (MirrorTap) TargetType() TargetType      { return TargetTypeMirrorTap }
+func (MirrorTap) MatchTypes() []MatchType     { return []MatchType{} }
+func (t *MirrorTap) Compare(other Target) int { return CompareTargetType(t, other) }
+
+func (t *MirrorTap) Open() error {
+	t.tap = &netlink.Tuntap{
+		LinkAttrs: netlink.LinkAttrs{Name: t.Name},
+		Mode:      netlink.TUNTAP_MODE_TAP,
+		Flags:     netlink.TUNTAP_NO_PI | netlink.TUNTAP_ONE_QUEUE,
+		Queues:    1,
+	}
+	if err := netlink.LinkAdd(t.tap); err != nil {
+		return err
+	}
+	return netlink.LinkSetUp(t.tap)
+}
+
+func (t *MirrorTap) OnPacket(pkt *fastpkt.Packet) error {
+	if t.tap == nil {
+		return nil
+	}
+	_, err := t.tap.Fds[0].Write(pkt.RxData)
+	return err
+}
+
+func (*MirrorTap) Close() error { return nil }

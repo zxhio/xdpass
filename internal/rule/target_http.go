@@ -29,6 +29,8 @@ func (tgt TargetHTTPRespSpoofNotFound) Compare(other Target) int {
 	return CompareTargetType(tgt, other)
 }
 
+func (TargetHTTPRespSpoofNotFound) Open() error { return nil }
+
 const notFoundText = "HTTP/1.1 404 Not Found\r\n" +
 	"Content-Type: text/html\r\n" +
 	"Content-Length: 97\r\n" +
@@ -40,7 +42,7 @@ const notFoundText = "HTTP/1.1 404 Not Found\r\n" +
 	"</body>\n" +
 	"</html>"
 
-func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
+func (TargetHTTPRespSpoofNotFound) OnPacket(pkt *fastpkt.Packet) error {
 	var (
 		rxTCP = fastpkt.DataPtrTCPHeader(pkt.RxData, int(pkt.L2Len+pkt.L3Len))
 		buf   = fastpkt.NewBuildBuffer(pkt.TxData)
@@ -67,3 +69,5 @@ func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	pkt.TxData = buf.Bytes()
 	return nil
 }
+
+func (TargetHTTPRespSpoofNotFound) Close() error { return nil }
