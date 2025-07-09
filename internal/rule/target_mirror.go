@@ -42,11 +42,19 @@ func (t *MirrorTap) Open() error {
 }
 
 func (t *MirrorTap) OnPacket(pkt *fastpkt.Packet) error {
-	if t.tap == nil {
+	if t.tap == nil || len(t.tap.Fds) == 0 {
 		return nil
 	}
 	_, err := t.tap.Fds[0].Write(pkt.RxData)
 	return err
 }
 
-func (*MirrorTap) Close() error { return nil }
+func (t *MirrorTap) Close() error {
+	if t.tap == nil {
+		return nil
+	}
+	for _, f := range t.tap.Fds {
+		f.Close()
+	}
+	return netlink.LinkSetDown(t.tap)
+}
