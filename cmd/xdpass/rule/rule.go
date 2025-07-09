@@ -210,12 +210,12 @@ func init() {
 	ruleCmd.PersistentFlags().VarP(&F.DstIPv4Prefix, "destination", "d", "Destionation ip address")
 	ruleCmd.PersistentFlags().Var(&F.SrcIPv4Range, "iprange-src", "Source ipv4 range address")
 	ruleCmd.PersistentFlags().Var(&F.DstIPv4Range, "iprange-dst", "Destionation ipv4 range address")
-	ruleCmd.PersistentFlags().BoolVar(&F.MirrorStdout, "mirror-stdout", false, "Target for mirror traffic to stdout")
-	ruleCmd.PersistentFlags().StringVar(&F.MirrorTap, "mirror-tap", "", "Target for mirror traffic to tap device")
+	ruleCmd.PersistentFlags().BoolVar(&F.MirrorStdout, "mirror-stdout", false, "[Target] Mirror traffic to stdout")
+	ruleCmd.PersistentFlags().StringVar(&F.MirrorTap, "mirror-tap", "", "[Target] Mirror traffic to tap device")
 	ruleCmd.AddGroup(&group)
 
 	// rule arp
-	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "Target MAC for ARP-Reply spoofing")
+	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "[Target] MAC ARP-Reply spoofing")
 
 	// rule tcp
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagSYN, "flag-syn", "S", false, "TCP flag SYN")
@@ -223,11 +223,11 @@ func init() {
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagPSH, "flag-psh", "P", false, "TCP flag PSH")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagRST, "flag-rst", "R", false, "TCP flag RST")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagFIN, "flag-fin", "F", false, "TCP flag FIN")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofSYNACK, "spoof-syn-ack", false, "Target for TCP flag SYN/ACK spoofing")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofRSTACK, "spoof-rst-ack", false, "Target for TCP flag RST/ACK spoofing")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofPSHACK, "spoof-psh-ack", false, "Target for TCP flag PSH/ACK spoofing")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofFINACK, "spoof-fin-ack", false, "Target for TCP flag FIN/ACK spoofing")
-	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofACK, "spoof-ack", false, "Target for TCP flag ACK spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofSYNACK, "spoof-syn-ack", false, "[Target] TCP SYN/ACK reply spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofRSTACK, "spoof-rst-ack", false, "[Target] TCP RST/ACK reply spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofPSHACK, "spoof-psh-ack", false, "[Target] TCP PSH/ACK reply spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofFINACK, "spoof-fin-ack", false, "[Target] TCP FIN/ACK reply spoofing")
+	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofACK, "spoof-ack", false, "[Target] TCP ACK reply spoofing")
 	tcpCmd.AddGroup(&group)
 	setCommandFlagsPorts(tcpCmd)
 
@@ -235,7 +235,7 @@ func init() {
 	setCommandFlagsPorts(udpCmd)
 
 	// rule icmp
-	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "Target for ICMP Echo Reply spoofing")
+	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "[Target] ICMP Echo-Reply spoofing")
 	setCommandFlagsPorts(icmpCmd)
 
 	// rule http
@@ -243,7 +243,7 @@ func init() {
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
 	httpCmd.PersistentFlags().StringVar(&F.Host, "host", "", "HTTP request host")
-	httpCmd.PersistentFlags().BoolVar(&F.SpoofNotFound, "spoof-not-found", false, "Target for http response 404 not found spoofing")
+	httpCmd.PersistentFlags().BoolVar(&F.SpoofNotFound, "spoof-not-found", false, "[Target] HTTP 404 not found response spoofing")
 }
 
 func setCommandFlagsPorts(cmd *cobra.Command) {
