@@ -30,7 +30,7 @@ const (
 	MatchTypeARP
 	MatchTypeUDP
 	MatchTypeICMP
-	MatchTypeTCP MatchType = iota + 400
+	MatchTypeTCP
 	MatchTypeTCPFlags
 	MatchTypeHTTP
 )

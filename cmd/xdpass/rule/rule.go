@@ -108,6 +108,11 @@ var ruleCmd = &cobra.Command{
 		} else if F.DstMultiPort.Compare(netaddr.MultiPort{}) != 0 {
 			R.Matchs = append(R.Matchs, rule.MatchMultiPortDst(F.DstMultiPort))
 		}
+
+		// Mirror
+		if F.MirrorStdout {
+			R.Target = rule.MirrorStdout{}
+		}
 	},
 }
 

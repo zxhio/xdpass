@@ -93,7 +93,7 @@ var addCmd = cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := addRule(&R)
 		utils.CheckErrorAndExit(err, "Add rule failed")
-		utils.VerbosePrintln("Add rule success, id: %d", ruleID)
+		utils.VerbosePrintln("rule [%d] was added successfully", ruleID)
 	},
 }
 
@@ -108,8 +108,7 @@ var delCmd = cobra.Command{
 
 		err = deleteRule(ruleID)
 		utils.CheckErrorAndExit(err, "Delete rule failed")
-
-		utils.VerbosePrintln("Delete rule success, id: %d", ruleID)
+		utils.VerbosePrintln("rule [%d] was deleted successfully", ruleID)
 	},
 }
 
@@ -157,6 +156,10 @@ func getPacketMatcher(r *rule.Rule, fn func(m rule.Match) (string, bool)) string
 }
 
 func getLastProto(r *rule.Rule) string {
+	if len(r.Matchs) == 0 {
+		return "*"
+	}
+
 	protos := []rule.MatchType{
 		rule.MatchTypeARP,
 		rule.MatchTypeUDP,

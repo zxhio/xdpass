@@ -62,6 +62,8 @@ type LinkHandle struct {
 	mu          *sync.RWMutex
 	ruleID      int
 	rules       []*rule.Rule
+	mirrorRules []*rule.Rule
+	protoRules  []*rule.Rule
 	passIPs     []netaddr.IPv4Prefix
 	redirectIPs []netaddr.IPv4Prefix
 }
@@ -282,45 +284,29 @@ func (x *LinkHandle) waitPoll(fds []unix.PollFd) error {
 }
 
 func (x *LinkHandle) handlePacket(pkt *fastpkt.Packet) {
-	if logrus.GetLevel() >= logrus.DebugLevel {
-		logrus.WithFields(logrus.Fields{
-			"l3_proto": pkt.L3Proto,
-			"l4_proto": pkt.L4Proto,
-			"l7_proto": pkt.L7Proto,
-			"src_ip":   pkt.SrcIP,
-			"dst_ip":   pkt.DstIP,
-			"src_port": pkt.SrcPort,
-			"dst_port": pkt.DstPort,
-		}).Debug("Handle packet")
-	}
+	x.mu.RLock()
+	defer x.mu.RUnlock()
 
-	for _, rule := range x.rules {
+	x.apply(pkt, x.mirrorRules)
+	x.apply(pkt, x.protoRules)
+}
+
+func (x *LinkHandle) apply(pkt *fastpkt.Packet, rules []*rule.Rule) {
+	for _, r := range rules {
 		matched := true
-
-		for _, m := range rule.Matchs {
-			if !m.Match(pkt) {
-				matched = false
+		for _, m := range r.Matchs {
+			matched = m.Match(pkt)
+			if !matched {
 				break
 			}
 		}
+		if !matched {
+			continue
+		}
 
-		if matched {
-			if logrus.GetLevel() >= logrus.DebugLevel {
-				logrus.WithFields(logrus.Fields{
-					"l3_proto":    pkt.L3Proto,
-					"l4_proto":    pkt.L4Proto,
-					"l7_proto":    pkt.L7Proto,
-					"src_ip":      pkt.SrcIP,
-					"dst_ip":      pkt.DstIP,
-					"src_port":    pkt.SrcPort,
-					"dst_port":    pkt.DstPort,
-					"target_type": rule.Target.TargetType(),
-				}).Debug("Handle packet")
-			}
-			if err := rule.Target.Execute(pkt); err != nil {
-				logrus.WithError(err).Error("Handle packet error")
-			}
-			break
+		err := r.Target.Execute(pkt)
+		if err != nil {
+			logrus.WithError(err).Error("Fail to execute target")
 		}
 	}
 }
@@ -360,6 +346,12 @@ func (x *LinkHandle) AddRule(r *rule.Rule) (int, error) {
 	x.ruleID++
 	r.ID = x.ruleID
 	x.rules = append(x.rules, r)
+
+	if slices.Contains(rule.TargetMirrorTypes, r.Target.TargetType()) {
+		x.mirrorRules = append(x.mirrorRules, r)
+	} else {
+		x.protoRules = append(x.protoRules, r)
+	}
 	return r.ID, nil
 }
 
@@ -372,6 +364,9 @@ func (x *LinkHandle) DeleteRule(ruleID int) error {
 		return errors.Errorf("no such rule id: %d", ruleID)
 	}
 	x.rules = slices.DeleteFunc(x.rules, ruleIDMatcher(ruleID))
+
+	x.mirrorRules = slices.DeleteFunc(x.mirrorRules, ruleIDMatcher(ruleID))
+	x.protoRules = slices.DeleteFunc(x.protoRules, ruleIDMatcher(ruleID))
 	return nil
 }
 

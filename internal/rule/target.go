@@ -7,41 +7,39 @@ import (
 	"github.com/zxhio/xdpass/pkg/fastpkt"
 )
 
-const (
-	iotaARP = iota*1000 + 1001
-	iotaTCP
-	iotaICMP
-	iotaUDP
-	iotaHTTP
-)
-
 type TargetType int
 
-// ARP
 const (
-	TargetTypeARPSpoofReply = iota + iotaARP
-)
+	// Mirror
+	TargetTypeMirrorStdout TargetType = iota + 1
+	TargetTypeMirrorTap
 
-// ICMP
-const (
-	TargetTypeICMPSpoofEchoReply = iota + iotaICMP
-)
+	// Protocol
+	// ARP
+	TargetTypeARPSpoofReply
 
-// TCP
-const (
-	TargetTypeTCPSpoofSYNACK = iota + iotaTCP
+	// ICMP
+	TargetTypeICMPSpoofEchoReply
+
+	// TCP
+	TargetTypeTCPSpoofSYNACK
 	TargetTypeTCPSpoofRSTACK
 	TargetTypeTCPSpoofFINACK
 	TargetTypeTCPSpoofPSHACK
 	TargetTypeTCPSpoofACK
+
+	// HTTP
+	TargetTypeHTTPSpoofNotFound
 )
 
-// HTTP
-const (
-	TargetTypeHTTPSpoofNotFound = iota + iotaHTTP
-)
+var TargetMirrorTypes = []TargetType{
+	TargetTypeMirrorStdout,
+	TargetTypeMirrorTap,
+}
 
 var targetTypeToStr = map[TargetType]string{
+	TargetTypeMirrorStdout:       "mirror-stdout",
+	TargetTypeMirrorTap:          "mirror-tap",
 	TargetTypeARPSpoofReply:      "spoof-arp-reply",
 	TargetTypeTCPSpoofSYNACK:     "spoof-syn-ack",
 	TargetTypeTCPSpoofRSTACK:     "spoof-rst-ack",
