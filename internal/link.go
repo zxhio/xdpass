@@ -292,22 +292,24 @@ func (x *LinkHandle) handlePacket(pkt *fastpkt.Packet) {
 }
 
 func (x *LinkHandle) apply(pkt *fastpkt.Packet, rules []*rule.Rule) {
-	for _, r := range rules {
-		matched := true
+	idx := slices.IndexFunc(rules, func(r *rule.Rule) bool {
 		for _, m := range r.Matchs {
-			matched = m.Match(pkt)
-			if !matched {
-				break
+			if !m.Match(pkt) {
+				return false
 			}
 		}
-		if !matched {
-			continue
-		}
+		return true
+	})
+	if idx == -1 {
+		return
+	}
 
-		err := r.Target.Execute(pkt)
-		if err != nil {
-			logrus.WithError(err).Error("Fail to execute target")
-		}
+	r := rules[idx]
+	r.Packets++
+	r.Bytes += uint64(len(pkt.RxData))
+	err := r.Target.Execute(pkt)
+	if err != nil {
+		logrus.WithError(err).Error("Fail to execute target")
 	}
 }
 

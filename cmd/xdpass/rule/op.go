@@ -182,6 +182,8 @@ func display(rules []*rule.Rule) {
 	for _, r := range rules {
 		data = append(data, []any{
 			r.ID,
+			r.Packets,
+			r.Bytes,
 			strings.ToLower(getLastProto(r)),
 			getPacketMatcher(r, func(m rule.Match) (string, bool) {
 				switch m.MatchType() {
@@ -233,7 +235,7 @@ func display(rules []*rule.Rule) {
 		})),
 		tablewriter.WithRowAlignment(tw.AlignCenter),
 	)
-	table.Header("ID", "Proto", "Source", "Destination", "Source Ports", "Destination Ports", "Target")
+	table.Header("ID", "Pkts", "Bytes", "Proto", "Source", "Destination", "Source Ports", "Destination Ports", "Target")
 	table.Bulk(data)
 	table.Render()
 }

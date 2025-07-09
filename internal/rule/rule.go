@@ -8,9 +8,11 @@ import (
 )
 
 type Rule struct {
-	ID     int
-	Matchs []Match
-	Target Target
+	ID      int
+	Matchs  []Match
+	Target  Target
+	Bytes   uint64
+	Packets uint64
 }
 
 type matchWrapper struct {
@@ -24,9 +26,11 @@ type targetWrapper struct {
 }
 
 type ruleWrapper struct {
-	ID     int            `json:"id"`
-	Matchs []matchWrapper `json:"matchs"`
-	Target targetWrapper  `json:"target"`
+	ID      int            `json:"id"`
+	Matchs  []matchWrapper `json:"matchs"`
+	Target  targetWrapper  `json:"target"`
+	Bytes   uint64         `json:"bytes"`
+	Packets uint64         `json:"packets"`
 }
 
 func (r Rule) MarshalJSON() ([]byte, error) {
@@ -58,7 +62,13 @@ func (r Rule) MarshalJSON() ([]byte, error) {
 		wrappedTarget = targetWrapper{Type: r.Target.TargetType(), Value: data}
 	}
 
-	return json.Marshal(ruleWrapper{ID: r.ID, Matchs: wrappedMatchs, Target: wrappedTarget})
+	return json.Marshal(ruleWrapper{
+		ID:      r.ID,
+		Matchs:  wrappedMatchs,
+		Target:  wrappedTarget,
+		Bytes:   r.Bytes,
+		Packets: r.Packets,
+	})
 }
 
 func (r *Rule) UnmarshalJSON(data []byte) error {
@@ -93,6 +103,8 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 	}
 	r.Target = tgt
 
+	r.Bytes = w.Bytes
+	r.Packets = w.Packets
 	return nil
 }
 
