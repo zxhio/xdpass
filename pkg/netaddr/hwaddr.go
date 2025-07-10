@@ -2,7 +2,6 @@ package netaddr
 
 import (
 	"bytes"
-	"encoding/json"
 	"net"
 )
 
@@ -30,7 +29,7 @@ func (addr HwAddr) Compare(other HwAddr) int {
 }
 
 func (addr HwAddr) MarshalJSON() ([]byte, error) {
-	return json.Marshal(addr.String())
+	return marshal(addr)
 }
 
 func (addr *HwAddr) UnmarshalJSON(data []byte) error {

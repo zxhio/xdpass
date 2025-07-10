@@ -46,8 +46,17 @@ func (p *IPv4Prefix) Set(s string) error {
 }
 
 func (p IPv4Prefix) String() string {
-	ipnet := net.IPNet{IP: p.Addr.ToIP(), Mask: net.CIDRMask(int(p.PrefixLen), 32)}
+	addr := p.Addr & (0xffffffff << (32 - p.PrefixLen))
+	ipnet := net.IPNet{IP: addr.ToIP(), Mask: net.CIDRMask(int(p.PrefixLen), 32)}
 	return ipnet.String()
+}
+
+func (p IPv4Prefix) MarshalJSON() ([]byte, error) {
+	return marshal(p)
+}
+
+func (p *IPv4Prefix) UnmarshalJSON(data []byte) error {
+	return unmarshal(p, data)
 }
 
 func NewIPv4PrefixFromCIDRStr(cidr string) (IPv4Prefix, error) {

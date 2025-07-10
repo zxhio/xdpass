@@ -1,7 +1,6 @@
 package netaddr
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 )
@@ -31,7 +30,7 @@ func (v4 *IPv4Addr) Set(s string) error {
 }
 
 func (v4 IPv4Addr) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v4.String())
+	return marshal(v4)
 }
 
 func (v4 *IPv4Addr) UnmarshalJSON(data []byte) error {

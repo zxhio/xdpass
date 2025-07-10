@@ -1,7 +1,6 @@
 package netaddr
 
 import (
-	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,7 +48,7 @@ func (p MultiPort) Compare(other MultiPort) int {
 }
 
 func (p MultiPort) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.String())
+	return marshal(p)
 }
 
 func (p *MultiPort) UnmarshalJSON(data []byte) error {

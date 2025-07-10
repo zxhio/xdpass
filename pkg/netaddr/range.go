@@ -1,7 +1,6 @@
 package netaddr
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
@@ -93,7 +92,7 @@ func (r *IPv4Range) Set(s string) error {
 }
 
 func (r IPv4Range) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.String())
+	return marshal(r)
 }
 
 func (r *IPv4Range) UnmarshalJSON(data []byte) error {
@@ -171,7 +170,7 @@ func (r *PortRange) Set(s string) error {
 }
 
 func (r PortRange) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.String())
+	return marshal(r)
 }
 
 func (r *PortRange) UnmarshalJSON(data []byte) error {
