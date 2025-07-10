@@ -42,7 +42,7 @@ const notFoundText = "HTTP/1.1 404 Not Found\r\n" +
 	"</body>\n" +
 	"</html>"
 
-func (TargetHTTPRespSpoofNotFound) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	var (
 		rxTCP = fastpkt.DataPtrTCPHeader(pkt.RxData, int(pkt.L2Len+pkt.L3Len))
 		buf   = fastpkt.NewBuildBuffer(pkt.TxData)

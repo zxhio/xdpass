@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/zxhio/xdpass/pkg/fastpkt"
 	"github.com/zxhio/xdpass/pkg/netaddr"
 )
 
@@ -31,6 +32,15 @@ type ruleWrapper struct {
 	Target  targetWrapper  `json:"target"`
 	Bytes   uint64         `json:"bytes"`
 	Packets uint64         `json:"packets"`
+}
+
+func (r *Rule) Match(pkt *fastpkt.Packet) bool {
+	for _, m := range r.Matchs {
+		if !m.Match(pkt) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r Rule) MarshalJSON() ([]byte, error) {

@@ -249,13 +249,13 @@ func (x *LinkHandle) handleXSK(xsk *xdp.XDPSocket, rxDataVec, tmpTxDataVec [][]b
 	}
 
 	txIdx := 0
-	for i := uint32(0); i < n; i++ {
+	for i := range n {
 		err := pkts[i].DecodeFromData(rxDataVec[i])
 		if err != nil {
 			continue
 		}
 
-		x.handlePacket(pkts[i])
+		x.onPacket(pkts[i])
 
 		if len(pkts[i].TxData) > 0 {
 			tmpTxDataVec[txIdx] = pkts[i].TxData
@@ -283,33 +283,27 @@ func (x *LinkHandle) waitPoll(fds []unix.PollFd) error {
 	return nil
 }
 
-func (x *LinkHandle) handlePacket(pkt *fastpkt.Packet) {
+func (x *LinkHandle) onPacket(pkt *fastpkt.Packet) {
 	x.mu.RLock()
 	defer x.mu.RUnlock()
 
-	x.apply(pkt, x.mirrorRules)
-	x.apply(pkt, x.protoRules)
-}
-
-func (x *LinkHandle) apply(pkt *fastpkt.Packet, rules []*rule.Rule) {
-	idx := slices.IndexFunc(rules, func(r *rule.Rule) bool {
-		for _, m := range r.Matchs {
-			if !m.Match(pkt) {
-				return false
-			}
+	// Protocol
+	for _, r := range x.protoRules {
+		if r.Match(pkt) {
+			r.Bytes += uint64(len(pkt.RxData))
+			r.Packets++
+			r.Target.Execute(pkt)
+			break
 		}
-		return true
-	})
-	if idx == -1 {
-		return
 	}
 
-	r := rules[idx]
-	r.Packets++
-	r.Bytes += uint64(len(pkt.RxData))
-	err := r.Target.OnPacket(pkt)
-	if err != nil {
-		logrus.WithError(err).Error("Fail to execute target")
+	// Mirror
+	for _, r := range x.mirrorRules {
+		if r.Match(pkt) {
+			r.Bytes += uint64(len(pkt.RxData))
+			r.Packets++
+			r.Target.Execute(pkt)
+		}
 	}
 }
 

@@ -91,12 +91,14 @@ func (t TargetType) Compare(t1 TargetType) int {
 	return int(t - t1)
 }
 
+type TargetOpt func()
+
 type Target interface {
 	TargetType() TargetType
 	MatchTypes() []MatchType
 	Compare(other Target) int
 	Open() error
-	OnPacket(pkt *fastpkt.Packet) error
+	Execute(pkt *fastpkt.Packet) error
 	Close() error
 }
 

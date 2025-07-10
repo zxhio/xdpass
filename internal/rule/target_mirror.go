@@ -13,8 +13,11 @@ func (MirrorStdout) TargetType() TargetType     { return TargetTypeMirrorStdout 
 func (MirrorStdout) MatchTypes() []MatchType    { return []MatchType{} }
 func (t MirrorStdout) Compare(other Target) int { return CompareTargetType(t, other) }
 func (MirrorStdout) Open() error                { return nil }
-func (MirrorStdout) OnPacket(pkt *fastpkt.Packet) error {
+func (MirrorStdout) Execute(pkt *fastpkt.Packet) error {
 	fmt.Println(fastpkt.Format(pkt.RxData, fastpkt.WithFormatEthernet()))
+	if len(pkt.TxData) != 0 {
+		fmt.Println(fastpkt.Format(pkt.TxData, fastpkt.WithFormatEthernet()))
+	}
 	return nil
 }
 func (MirrorStdout) Close() error { return nil }
@@ -41,11 +44,17 @@ func (t *MirrorTap) Open() error {
 	return netlink.LinkSetUp(t.tap)
 }
 
-func (t *MirrorTap) OnPacket(pkt *fastpkt.Packet) error {
+func (t *MirrorTap) Execute(pkt *fastpkt.Packet) error {
 	if t.tap == nil || len(t.tap.Fds) == 0 {
 		return nil
 	}
 	_, err := t.tap.Fds[0].Write(pkt.RxData)
+	if err != nil {
+		return err
+	}
+	if len(pkt.TxData) != 0 {
+		_, err = t.tap.Fds[0].Write(pkt.TxData)
+	}
 	return err
 }
 

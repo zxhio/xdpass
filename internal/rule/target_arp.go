@@ -42,7 +42,7 @@ func (tgt TargetARPReplySpoof) Compare(other Target) int {
 
 func (TargetARPReplySpoof) Open() error { return nil }
 
-func (tgt TargetARPReplySpoof) OnPacket(pkt *fastpkt.Packet) error {
+func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	var (
 		rxEther   = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
 		rxPayload = pkt.RxData[pkt.L2Len+uint8(fastpkt.SizeofARP):]

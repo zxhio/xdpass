@@ -33,7 +33,7 @@ func (tgt TargetICMPEchoReplySpoof) Compare(other Target) int {
 
 func (TargetICMPEchoReplySpoof) Open() error { return nil }
 
-func (TargetICMPEchoReplySpoof) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	var (
 		rxEther = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
 		rxIPv4  = fastpkt.DataPtrIPv4Header(pkt.RxData, int(pkt.L2Len))

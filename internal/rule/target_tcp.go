@@ -24,7 +24,7 @@ func (TargetTCPSpoofSYNACK) TargetType() TargetType     { return TargetTypeTCPSp
 func (TargetTCPSpoofSYNACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
 func (t TargetTCPSpoofSYNACK) Compare(other Target) int { return CompareTargetType(t, other) }
 func (TargetTCPSpoofSYNACK) Open() error                { return nil }
-func (TargetTCPSpoofSYNACK) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofSYNACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagSYN|fastpkt.TCPFlagACK)
 	return nil
 }
@@ -36,7 +36,7 @@ func (TargetTCPSpoofRSTACK) TargetType() TargetType     { return TargetTypeTCPSp
 func (TargetTCPSpoofRSTACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
 func (t TargetTCPSpoofRSTACK) Compare(other Target) int { return CompareTargetType(t, other) }
 func (TargetTCPSpoofRSTACK) Open() error                { return nil }
-func (TargetTCPSpoofRSTACK) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofRSTACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagRST|fastpkt.TCPFlagACK)
 	return nil
 }
@@ -48,7 +48,7 @@ func (TargetTCPSpoofPSHACK) TargetType() TargetType     { return TargetTypeTCPSp
 func (TargetTCPSpoofPSHACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
 func (t TargetTCPSpoofPSHACK) Compare(other Target) int { return CompareTargetType(t, other) }
 func (TargetTCPSpoofPSHACK) Open() error                { return nil }
-func (TargetTCPSpoofPSHACK) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofPSHACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagPSH|fastpkt.TCPFlagACK)
 	return nil
 }
@@ -60,7 +60,7 @@ func (TargetTCPSpoofFINACK) TargetType() TargetType     { return TargetTypeTCPSp
 func (TargetTCPSpoofFINACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
 func (t TargetTCPSpoofFINACK) Compare(other Target) int { return CompareTargetType(t, other) }
 func (TargetTCPSpoofFINACK) Open() error                { return nil }
-func (TargetTCPSpoofFINACK) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofFINACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagFIN|fastpkt.TCPFlagACK)
 	return nil
 }
@@ -72,7 +72,7 @@ func (TargetTCPSpoofACK) TargetType() TargetType     { return TargetTypeTCPSpoof
 func (TargetTCPSpoofACK) MatchTypes() []MatchType    { return targetTCPMatchTypes }
 func (t TargetTCPSpoofACK) Compare(other Target) int { return CompareTargetType(t, other) }
 func (TargetTCPSpoofACK) Open() error                { return nil }
-func (TargetTCPSpoofACK) OnPacket(pkt *fastpkt.Packet) error {
+func (TargetTCPSpoofACK) Execute(pkt *fastpkt.Packet) error {
 	makeTCPDataWithFlags(pkt, fastpkt.TCPFlagACK)
 	return nil
 }
