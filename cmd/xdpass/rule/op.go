@@ -156,10 +156,6 @@ func getPacketMatcher(r *rule.Rule, fn func(m rule.Match) (string, bool)) string
 }
 
 func getLastProto(r *rule.Rule) string {
-	if len(r.Matchs) == 0 {
-		return "*"
-	}
-
 	protos := []rule.MatchType{
 		rule.MatchTypeARP,
 		rule.MatchTypeUDP,
@@ -174,7 +170,11 @@ func getLastProto(r *rule.Rule) string {
 			lastProto = m.MatchType()
 		}
 	}
-	return lastProto.String()
+	s := lastProto.String()
+	if s == "" {
+		s = "*"
+	}
+	return s
 }
 
 func display(rules []*rule.Rule) {
