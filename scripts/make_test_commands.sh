@@ -5,11 +5,14 @@ hwaddr=$(cat /sys/class/net/$interface/address)
 
 set -x
 
-# pass
-xdpass xdp redirect add 172.16.23.0/24
+# xdp attachment
+xdpass xdp attach br1
+
+# xdp ip
+xdpass xdp ip add 172.16.23.0/24 --action redirect
 
 # mirror rule
-xdpass rule add -d 172.16.23.3 --mirror-tap tap0
+xdpass rule add -d 172.16.23.1 --mirror-tap tap0
 
 # protocol rule
 xdpass arp add --spoof-arp-reply "$hwaddr"

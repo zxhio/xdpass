@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -11,21 +10,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
-	"github.com/zxhio/xdpass/internal"
 	"github.com/zxhio/xdpass/internal/api"
+	"github.com/zxhio/xdpass/internal/service"
 	"github.com/zxhio/xdpass/pkg/builder"
 )
 
 var (
-	version   bool
-	verbose   bool
-	ifaceName string
+	version bool
+	verbose bool
 )
 
 func main() {
 	pflag.BoolVarP(&version, "version", "V", false, "Print version")
 	pflag.BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
-	pflag.StringVarP(&ifaceName, "interface", "i", "", "Interface name")
+	// pflag.StringVarP(&ifaceName, "interface", "i", "", "Interface name")
 	pflag.Parse()
 
 	if version {
@@ -43,33 +41,27 @@ func main() {
 	}
 	defer lis.Close()
 
-	link, err := internal.NewLinkHandle(ifaceName)
-	if err != nil {
-		logrus.WithError(err).Fatal("Fatal to new link handle")
-	}
-	defer link.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGUSR1)
 	go func() {
 		sig := <-sigCh
-		cancel()
 		lis.Close()
 		logrus.WithField("sig", sig).Info("Recv signal")
 	}()
 
-	go func() {
-		err = link.Run(ctx)
-		if err != nil {
-			logrus.WithError(err).Fatal("Fatal to run link handle")
-		}
-	}()
+	rule, err := service.NewRuleService()
+	if err != nil {
+		logrus.WithError(err).Error("Fail to new rule service")
+	}
+
+	attachment, err := service.NewAttachmentService(rule)
+	if err != nil {
+		logrus.WithError(err).Error("Fatal to new attachment service")
+	}
 
 	g := gin.Default()
-	api.SetRuleRouter(g, link)
-	api.SetIPRouter(g, link)
+	api.SetRuleRouter(g, rule)
+	api.SetIPRouter(g, attachment)
+	api.SetAttachmentRouter(g, attachment)
 	g.RunListener(lis)
 }

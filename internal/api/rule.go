@@ -1,39 +1,30 @@
 package api
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/zxhio/xdpass/internal/rule"
+	"github.com/zxhio/xdpass/internal/service"
 )
-
-type QueryRulesReq struct {
-	QueryPage
-	MatchTypes []rule.MatchType
-}
 
 type QueryRulesResp QueryPageResp[*rule.Rule]
 
-type RuleAPI interface {
-	QueryRule(int) (*rule.Rule, error)
-	QueryRules(*QueryRulesReq) (*QueryRulesResp, error)
-	AddRule(*rule.Rule) (int, error)
-	DeleteRule(int) error
+type RuleHandler struct {
+	service *service.RuleService
 }
 
-type httpRuleWrapper struct {
-	impl RuleAPI
-}
-
-func (w httpRuleWrapper) QueryRule(c *gin.Context) {
+func (h *RuleHandler) QueryRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return
 	}
 
-	rule, err := w.impl.QueryRule(ruleID)
+	rule, err := h.service.QueryRule(ruleID)
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return
@@ -41,32 +32,42 @@ func (w httpRuleWrapper) QueryRule(c *gin.Context) {
 	SetResponseData(c, rule)
 }
 
-func (w httpRuleWrapper) QueryRules(c *gin.Context) {
-	req := QueryRulesReq{
-		QueryPage: NewPageFromRequest(c.Request),
+func (h RuleHandler) QueryRules(c *gin.Context) {
+	queryPage := NewPageFromRequest(c.Request)
+
+	matchTypes := []rule.MatchType{}
+	protos := rule.GetProtocolMatchTypes()
+	idx := slices.IndexFunc(protos, func(mt rule.MatchType) bool {
+		return strings.EqualFold(mt.String(), c.Request.URL.Query().Get("proto"))
+	})
+	if idx != -1 {
+		matchTypes = append(matchTypes, protos[idx])
 	}
 
-	var mt rule.MatchType
-	if err := mt.Set(c.Request.URL.Query().Get("proto")); err == nil {
-		req.MatchTypes = append(req.MatchTypes, mt)
-	}
-
-	resp, err := w.impl.QueryRules(&req)
+	rules, total, err := h.service.QueryRules(matchTypes, queryPage.Page, queryPage.Limit)
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return
 	}
+	resp := QueryRulesResp{
+		QueryPage: QueryPage{
+			Page:  queryPage.Page,
+			Limit: queryPage.Limit,
+			Total: total,
+		},
+		Data: rules,
+	}
 	SetResponseData(c, resp)
 }
 
-func (w httpRuleWrapper) AddRule(c *gin.Context) {
+func (h RuleHandler) AddRule(c *gin.Context) {
 	var rule rule.Rule
 	if err := c.ShouldBindJSON(&rule); err != nil {
 		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
 		return
 	}
 
-	ruleID, err := w.impl.AddRule(&rule)
+	ruleID, err := h.service.AddRule(&rule)
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return
@@ -74,14 +75,14 @@ func (w httpRuleWrapper) AddRule(c *gin.Context) {
 	SetResponseData(c, ruleID)
 }
 
-func (w httpRuleWrapper) DeletePacetRule(c *gin.Context) {
+func (h RuleHandler) DeletePacetRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return
 	}
 
-	err = w.impl.DeleteRule(ruleID)
+	err = h.service.DeleteRule(ruleID)
 	if err != nil {
 		SetResponseError(c, ErrorCodeInvalid, err)
 		return

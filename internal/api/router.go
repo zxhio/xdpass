@@ -5,6 +5,11 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zxhio/xdpass/internal/service"
+)
+
+const (
+	DefaultAPIAddr = "127.0.0.1:9921"
 )
 
 const (
@@ -13,24 +18,39 @@ const (
 	APIPathAddRule    = "/api/rules"
 	APIPathDeleteRule = "/api/rules/:rule_id"
 
-	APIPathQueryIPsAction = "/api/xdp/:action/ips"
-	APIPathAddIPAction    = "/api/xdp/:action/ips"
-	APIPathDeleteIPAction = "/api/xdp/:action/ips/:ip"
+	PathXDPAttachment = "/api/xdp/attachments"
+	PathXDPIP         = "/api/xdp/ips"
 )
 
-func SetRuleRouter(g *gin.Engine, rule RuleAPI) {
-	w := httpRuleWrapper{impl: rule}
-	g.GET(APIPathQueryRules, w.QueryRules)
-	g.GET(APIPathQueryRule, w.QueryRule)
-	g.POST(APIPathAddRule, w.AddRule)
-	g.DELETE(APIPathDeleteRule, w.DeletePacetRule)
+var (
+	ipHandler         IPHandler
+	ruleHandler       RuleHandler
+	attachemtnHandler AttachmentHandler
+)
+
+func SetRuleRouter(g *gin.Engine, s *service.RuleService) {
+	ruleHandler.service = s
+
+	g.GET(APIPathQueryRules, ruleHandler.QueryRules)
+	g.GET(APIPathQueryRule, ruleHandler.QueryRule)
+	g.POST(APIPathAddRule, ruleHandler.AddRule)
+	g.DELETE(APIPathDeleteRule, ruleHandler.DeletePacetRule)
 }
 
-func SetIPRouter(g *gin.Engine, ip XDPAPI) {
-	w := httpXDPWrapper{impl: ip}
-	g.GET(APIPathQueryIPsAction, w.QueryIPs)
-	g.POST(APIPathAddIPAction, w.AddIP)
-	g.DELETE(APIPathDeleteIPAction, w.DeleteIP)
+func SetIPRouter(r *gin.Engine, s *service.AttachmentService) {
+	ipHandler.service = s
+
+	r.GET(PathXDPIP, ipHandler.QueryIP)
+	r.POST(PathXDPIP, ipHandler.AddIP)
+	r.DELETE(PathXDPIP, ipHandler.DeleteIP)
+}
+
+func SetAttachmentRouter(r *gin.Engine, s *service.AttachmentService) {
+	attachemtnHandler.service = s
+
+	r.GET(PathXDPAttachment, attachemtnHandler.QueryAttachment)
+	r.POST(PathXDPAttachment, attachemtnHandler.AddAttachment)
+	r.DELETE(PathXDPAttachment+"/:id", attachemtnHandler.DeleteAttachment)
 }
 
 func InstantiateRuleAPIURL(apiPath string, ruleID int) string {

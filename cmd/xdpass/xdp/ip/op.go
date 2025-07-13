@@ -1,4 +1,4 @@
-package xdp
+package ip
 
 import (
 	"bytes"
@@ -6,19 +6,16 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"slices"
+	"strings"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
 	"github.com/zxhio/xdpass/internal/api"
+	"github.com/zxhio/xdpass/internal/model"
 	"github.com/zxhio/xdpass/pkg/netaddr"
 	"github.com/zxhio/xdpass/pkg/utils"
-)
-
-const (
-	defaultAPIAddr = "http://127.0.0.1:9921"
 )
 
 var (
@@ -33,48 +30,57 @@ var listCmd = cobra.Command{
 	Aliases: []string{"ls"},
 	Args:    cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		action := cmd.Parent().Name()
-		utils.CheckEqualAndExit(validateAction(action), "Unsupport xdp action: %s", action)
-
-		var ips []netaddr.IPv4Prefix
+		var (
+			attachements []api.AttachmentIP
+			total        int
+		)
 		if listAll {
 			listPage = 1
 			listLimit = 100
-			total := 0
 			for {
-				resp, err := api.NewReqMessage[api.QueryIPsResp](
-					api.InstantiateAPIURL(api.APIPathQueryIPsAction, map[string]string{":action": action}),
-					api.WithReqAddr(defaultAPIAddr),
-					api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+				resp, err := api.NewReqMessage[api.QueryIPResp](
+					api.PathXDPIP,
+					api.WithReqAddr(api.DefaultAPIAddr),
+					api.WithReqQuery(
+						api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery(),
+						fmt.Sprintf("attachment-id=%s", ipAttachmentID),
+						fmt.Sprintf("action=%s", ipAction),
+					),
 				)
 				utils.CheckErrorAndExit(err, "Query ips failed")
 
-				total += len(resp.Data)
-				ips = append(ips, resp.Data...)
+				for _, a := range resp.Attachments {
+					for _, ac := range a.Actions {
+						total += len(ac.IPs)
+					}
+				}
+				attachements = append(attachements, resp.Attachments...)
 				if total >= int(resp.Total) {
 					break
 				}
 				listPage++
 			}
 		} else {
-			resp, err := api.NewReqMessage[api.QueryIPsResp](
-				api.InstantiateAPIURL(api.APIPathQueryIPsAction, map[string]string{":action": action}),
-				api.WithReqAddr(defaultAPIAddr),
-				api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+			resp, err := api.NewReqMessage[api.QueryIPResp](
+				api.PathXDPIP,
+				api.WithReqAddr(api.DefaultAPIAddr),
+				api.WithReqQuery(
+					api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery(),
+					fmt.Sprintf("attachment-id=%s", ipAttachmentID),
+					fmt.Sprintf("action=%s", ipAction),
+				),
 			)
 			utils.CheckErrorAndExit(err, "Query ips failed")
-			ips = resp.Data
+			attachements = resp.Attachments
 		}
-
-		ss := []string{}
-		for _, ip := range ips {
-			ss = append(ss, ip.String())
-		}
-		slices.Sort(ss)
 
 		data := [][]any{}
-		for _, ip := range ss {
-			data = append(data, []any{ip})
+		for _, a := range attachements {
+			for _, ai := range a.Actions {
+				for _, ip := range ai.IPs {
+					data = append(data, []any{a.ID, strings.ToUpper(string(ai.Action)), ip})
+				}
+			}
 		}
 
 		table := tablewriter.NewTable(os.Stdout,
@@ -86,6 +92,7 @@ var listCmd = cobra.Command{
 				},
 			})),
 		)
+		table.Header("ID", "Action", "IP")
 		table.Bulk(data)
 		table.Render()
 	},
@@ -96,24 +103,26 @@ var addCmd = cobra.Command{
 	Short: "Add ip for XDP program",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		action := cmd.Parent().Name()
-		utils.CheckEqualAndExit(validateAction(action), "Unsupport xdp action: %s", action)
-
 		ip, err := netaddr.NewIPv4PrefixFromStr(args[0])
 		utils.CheckErrorAndExit(err, "Invalid ip")
 
-		data, err := json.Marshal(api.AddIPReq{IP: ip})
+		req := api.AddIPReq{Attachments: []api.AttachmentIP{{
+			ID: ipAttachmentID,
+			Actions: []api.XDPActionIP{{
+				Action: model.XDPAction(ipAction),
+				IPs:    []netaddr.IPv4Prefix{ip},
+			}},
+		}}}
+		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
 
-		resp, err := api.NewReqMessage[api.AddIPResp](
-			api.InstantiateAPIURL(api.APIPathAddIPAction, map[string]string{":action": action}),
-			api.WithReqAddr(defaultAPIAddr),
+		_, err = api.NewReqMessage[api.AddIPResp](
+			api.PathXDPIP,
+			api.WithReqAddr(api.DefaultAPIAddr),
 			api.WithReqMethod(http.MethodPost),
 			api.WithReqBody(bytes.NewBuffer(data)),
 		)
 		utils.CheckErrorAndExit(err, "Query ips failed")
-
-		fmt.Printf("Add %s to %s ips success\n", resp.IP, resp.Action)
 	},
 }
 
@@ -123,23 +132,24 @@ var delCmd = cobra.Command{
 	Aliases: []string{"del"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		action := cmd.Parent().Name()
-		utils.CheckEqualAndExit(validateAction(action), "Unsupport xdp action: %s", action)
-
 		ip, err := netaddr.NewIPv4PrefixFromStr(args[0])
 		utils.CheckErrorAndExit(err, "Invalid ip: %s", args[0])
 
-		resp, err := api.NewReqMessage[api.DeleteIPResp](
-			api.InstantiateAPIURL(api.APIPathDeleteIPAction, map[string]string{
-				":action": action,
-				":ip":     api.IPv4PrefixToPath(ip),
-			}),
+		req := api.DeleteIPReq{
+			AttachmentID: ipAttachmentID,
+			Action:       model.XDPAction(ipAction),
+			IP:           ip,
+		}
+		data, err := json.Marshal(req)
+		utils.CheckErrorAndExit(err, "json.Marshal")
+
+		_, err = api.NewReqMessage[api.DeleteIPResp](
+			api.PathXDPIP,
 			api.WithReqMethod(http.MethodDelete),
-			api.WithReqAddr(defaultAPIAddr),
+			api.WithReqAddr(api.DefaultAPIAddr),
+			api.WithReqBody(bytes.NewBuffer(data)),
 		)
 		utils.CheckErrorAndExit(err, "Query ips failed")
-
-		fmt.Printf("Delete %s to %s ips success\n", resp.IP, resp.Action)
 	},
 }
 
@@ -159,11 +169,4 @@ func setOpCommands(cmds ...*cobra.Command) {
 			cmd.AddCommand(&sub)
 		}
 	}
-}
-
-func validateAction(action string) bool {
-	return slices.Contains([]api.XDPAction{
-		api.XDPActionPass,
-		api.XDPActionRedirect,
-	}, api.XDPAction(action))
 }

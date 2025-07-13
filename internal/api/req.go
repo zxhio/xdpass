@@ -137,15 +137,21 @@ type reqOpts struct {
 type reqOpt func(opts *reqOpts)
 
 func WithReqAddr(addr string) reqOpt {
-	return func(opts *reqOpts) { opts.addr = addr }
+	return func(opts *reqOpts) {
+		if !strings.HasPrefix(addr, "http") {
+			opts.addr = "http://" + addr
+		} else {
+			opts.addr = addr
+		}
+	}
 }
 
 func WithReqMethod(method string) reqOpt {
 	return func(opts *reqOpts) { opts.method = method }
 }
 
-func WithReqQuery(query string) reqOpt {
-	return func(opts *reqOpts) { opts.query = query }
+func WithReqQuery(fields ...string) reqOpt {
+	return func(opts *reqOpts) { opts.query = strings.Join(fields, "&") }
 }
 
 func WithReqBody(body io.Reader) reqOpt {
@@ -190,7 +196,7 @@ func newReq(reqURI string, opts ...reqOpt) (*http.Response, error) {
 	}
 
 	// Get api address from env
-	addr := os.Getenv("XDPASS_API_ADDR")
+	addr := os.Getenv("HTTP_API_ADDR")
 	if addr != "" {
 		o.addr = addr
 	}
@@ -237,6 +243,10 @@ func respValue[T any](data []byte) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.Code != ErrorCodeOk {
+		return nil, fmt.Errorf(resp.Message)
+	}
+
 	data, err = json.Marshal(resp.Data)
 	if err != nil {
 		return nil, err
