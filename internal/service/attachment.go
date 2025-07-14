@@ -60,7 +60,7 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment) error {
 	}
 	s.attachments = append(s.attachments, attachment)
 
-	go attachment.Run()
+	go attachment.Run(context.Background())
 	return nil
 }
 
@@ -221,7 +221,6 @@ type Attachment struct {
 	closers utils.NamedClosers
 	ctx     context.Context
 	cancel  func()
-	doneCh  chan struct{}
 }
 
 func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
@@ -306,19 +305,11 @@ func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
 		mu:         &sync.RWMutex{},
 		ctx:        ctx,
 		cancel:     cancel,
-		doneCh:     make(chan struct{}),
 	}, nil
 }
 
 func (a *Attachment) Close() error {
 	a.cancel()
-	<-a.doneCh
-
-	a.closers.Close(&utils.CloseOpt{
-		ReverseOrder: true,
-		Output:       logrus.WithField("iface", a.Name).Info,
-		ErrorOutput:  logrus.WithField("iface", a.Name).Error,
-	})
 	return nil
 }
 
@@ -328,13 +319,24 @@ type xskGroup struct {
 	fds  []unix.PollFd
 }
 
-func (a *Attachment) Run() error {
+func (a *Attachment) Run(ctx context.Context) error {
+	defer func() {
+		a.closers.Close(&utils.CloseOpt{
+			ReverseOrder: true,
+			Output:       logrus.WithField("iface", a.Name).Info,
+			ErrorOutput:  logrus.WithField("iface", a.Name).Error,
+		})
+		a.cancel()
+	}()
+
 	done := false
 	go func() {
-		<-a.ctx.Done()
+		select {
+		case <-a.ctx.Done():
+		case <-ctx.Done():
+		}
 		done = true
 	}()
-	defer close(a.doneCh)
 
 	cores := a.Cores[:min(len(a.xsks), len(a.Cores))]
 	if len(cores) == 0 {
