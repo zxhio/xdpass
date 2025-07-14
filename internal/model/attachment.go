@@ -19,8 +19,8 @@ type Attachment struct {
 	Queues      []int         `json:"queues,omitempty"`
 	Cores       []int         `json:"cores,omitempty"`
 	PullTimeout time.Duration `json:"pull_timeout,omitempty"`
+	BindFlags   uint16        `json:"bind_flags"`
 	// ProgramID   string        `json:"program_id"`
-	// TODO: add xdp options
 }
 
 type IP struct {

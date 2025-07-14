@@ -41,9 +41,19 @@ func NewAttachmentService(h PacketHandler) (*AttachmentService, error) {
 	}, nil
 }
 
-func (s *AttachmentService) AddAttachment(a *model.Attachment) error {
+func (s *AttachmentService) AddAttachment(a *model.Attachment, forceZeroCopy, forceCopy, noNeedWakeup bool) error {
 	if a.PullTimeout > 0 {
 		a.PullTimeout = max(a.PullTimeout, time.Millisecond*10)
+	}
+
+	var opts []xdp.XDPOpt
+	if forceZeroCopy {
+		opts = append(opts, xdp.WithZeroCopy())
+	} else if forceCopy {
+		opts = append(opts, xdp.WithCopy())
+	}
+	if noNeedWakeup {
+		opts = append(opts, xdp.WithNoNeedWakeup())
 	}
 
 	s.mu.Lock()
@@ -54,7 +64,7 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment) error {
 		return fmt.Errorf("exist attachment: %s", a.Name)
 	}
 
-	attachment, err := NewAttachment(a, s.handler)
+	attachment, err := NewAttachment(a, s.handler, opts...)
 	if err != nil {
 		return err
 	}
@@ -223,8 +233,14 @@ type Attachment struct {
 	cancel  func()
 }
 
-func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
+func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*Attachment, error) {
 	l := logrus.WithField("name", a.Name)
+
+	o := xdp.XDPDefaultOpts()
+	for _, opt := range opts {
+		opt(&o)
+	}
+	a.BindFlags = uint16(o.BindFlags)
 
 	ifaceLink, err := netlink.LinkByName(a.Name)
 	if err != nil {
@@ -274,7 +290,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
 
 	var xsks []*xdp.XDPSocket
 	for _, queueID := range queues {
-		s, err := xdp.NewXDPSocket(uint32(ifaceLink.Attrs().Index), uint32(queueID), xdp.WithFrameSize(xdp.UmemFrameSize2048))
+		s, err := xdp.NewXDPSocket(uint32(ifaceLink.Attrs().Index), uint32(queueID), append(opts, xdp.WithFrameSize(xdp.UmemFrameSize2048))...)
 		if err != nil {
 			return nil, err
 		}

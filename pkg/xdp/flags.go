@@ -3,6 +3,7 @@ package xdp
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -108,11 +109,13 @@ var bindFlagsStrLookup = map[XSKBindFlags]string{
 }
 
 func (f XSKBindFlags) String() string {
-	s, ok := bindFlagsStrLookup[f]
-	if !ok {
-		return fmt.Sprintf("<invalid flag: %d>", f)
+	var s []string
+	for k, v := range bindFlagsStrLookup {
+		if k&f != 0 {
+			s = append(s, v)
+		}
 	}
-	return s
+	return strings.Join(s, ",")
 }
 
 func (f *XSKBindFlags) Set(s string) error {

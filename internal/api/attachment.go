@@ -10,9 +10,14 @@ import (
 )
 
 type AddAttachmentReq struct {
-	Interface   string        `json:"interface" binding:"required"`
-	Mode        string        `json:"mode"`
-	PullTimeout time.Duration `json:"pull_timeout,omitempty"`
+	Interface     string        `json:"interface" binding:"required"`
+	Mode          string        `json:"mode"`
+	PullTimeout   time.Duration `json:"pull_timeout,omitempty"`
+	Queues        []int         `json:"queues,omitempty"`
+	Cores         []int         `json:"cores,omitempty"`
+	ForceZeroCopy bool          `json:"force_zero_copy,omitempty"`
+	ForceCopy     bool          `json:"force_copy,omitempty"`
+	NoNeedWakeup  bool          `json:"no_need_wakeup,omitempty"`
 }
 
 type AddAttachmentResp struct{}
@@ -24,7 +29,10 @@ type QueryAttachmentResp QueryPageResp[AttachmentInfo]
 type AttachmentInfo struct {
 	Name        string        `json:"name"`
 	Mode        string        `json:"mode"`
-	PullTimeout time.Duration `json:"pull_timeout,omitempty"`
+	PullTimeout time.Duration `json:"pull_timeout"`
+	Queues      []int         `json:"queues"`
+	Cores       []int         `json:"cores"`
+	BindFlags   uint16        `json:"bind_flags"`
 }
 
 type AttachmentHandler struct {
@@ -38,11 +46,16 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 		return
 	}
 
-	err := h.service.AddAttachment(&model.Attachment{
-		Name:        req.Interface,
-		Mode:        req.Mode,
-		PullTimeout: req.PullTimeout,
-	})
+	err := h.service.AddAttachment(
+		&model.Attachment{
+			Name:        req.Interface,
+			Mode:        req.Mode,
+			PullTimeout: req.PullTimeout,
+		},
+		req.ForceCopy,
+		req.ForceZeroCopy,
+		req.NoNeedWakeup,
+	)
 	if err != nil {
 		Error(c, ErrorCodeInternal, err)
 	} else {
@@ -73,6 +86,9 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 			Name:        attachment.Name,
 			Mode:        attachment.Mode,
 			PullTimeout: attachment.PullTimeout,
+			Queues:      attachment.Queues,
+			Cores:       attachment.Cores,
+			BindFlags:   attachment.BindFlags,
 		})
 	} else {
 		p := NewPageFromRequest(c.Request)
@@ -82,11 +98,14 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 			return
 		}
 		resp.Total = total
-		for _, a := range attachments {
+		for _, attachment := range attachments {
 			resp.Data = append(resp.Data, AttachmentInfo{
-				Name:        a.Name,
-				Mode:        a.Mode,
-				PullTimeout: a.PullTimeout,
+				Name:        attachment.Name,
+				Mode:        attachment.Mode,
+				PullTimeout: attachment.PullTimeout,
+				Queues:      attachment.Queues,
+				Cores:       attachment.Cores,
+				BindFlags:   attachment.BindFlags,
 			})
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/pkg/utils"
+	"github.com/zxhio/xdpass/pkg/xdp"
 )
 
 var group = &cobra.Group{ID: "attachment", Title: "Attachment commands:"}
@@ -34,9 +35,14 @@ var attachCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		req := api.AddAttachmentReq{
-			Interface:   args[0],
-			Mode:        attachMode,
-			PullTimeout: pullTimeout,
+			Interface:     args[0],
+			Mode:          getAttachMode(),
+			PullTimeout:   pullTimeout,
+			Queues:        queues,
+			Cores:         cores,
+			ForceZeroCopy: forceZeroCopy,
+			ForceCopy:     foreceNoZeroCopy,
+			NoNeedWakeup:  noNeedWakeup,
 		}
 		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
@@ -80,7 +86,9 @@ var listCmd = &cobra.Command{
 
 		data := [][]any{}
 		for _, a := range attachements {
-			data = append(data, []any{a.Name, a.Mode, a.PullTimeout})
+			data = append(data, []any{
+				a.Name, a.Mode, a.PullTimeout, a.Cores, a.Queues, xdp.XSKBindFlags(a.BindFlags),
+			})
 		}
 
 		table := tablewriter.NewTable(os.Stdout,
@@ -92,7 +100,7 @@ var listCmd = &cobra.Command{
 				},
 			})),
 		)
-		table.Header("Name", "Model", "Timeout")
+		table.Header("Name", "Mode", "Timeout", "Cores", "Queues", "Flags")
 		table.Bulk(data)
 		table.Render()
 	},
@@ -100,8 +108,15 @@ var listCmd = &cobra.Command{
 
 var (
 	// attach
-	attachMode  string
-	pullTimeout time.Duration
+	attachGeneric    bool
+	attachNative     bool
+	attachDriver     bool
+	pullTimeout      time.Duration
+	cores            []int
+	queues           []int
+	forceZeroCopy    bool
+	foreceNoZeroCopy bool
+	noNeedWakeup     bool
 
 	// list
 	listPage  int
@@ -109,12 +124,30 @@ var (
 	listAll   bool
 )
 
+func getAttachMode() string {
+	if attachGeneric {
+		return xdp.XDPAttachModeStrGeneric
+	} else if attachNative {
+		return xdp.XDPAttachModeStrNative
+	} else if attachDriver {
+		return xdp.XDPAttachModeStrOffload
+	}
+	return ""
+}
+
 func init() {
 	attachmentCmd.AddGroup(group)
 
 	// attach
-	attachCmd.Flags().StringVarP(&attachMode, "mode", "m", "", "XDP attach mode")
+	attachCmd.Flags().BoolVarP(&attachGeneric, "generic", "g", false, "XDP generic(SKB) attach mode")
+	attachCmd.Flags().BoolVarP(&attachNative, "native", "n", false, "XDP native attach mode")
+	attachCmd.Flags().BoolVarP(&attachDriver, "offload", "o", false, "XDP offload(hardware) attach mode")
 	attachCmd.Flags().DurationVarP(&pullTimeout, "timeout", "w", 0, "XDP pull timeout")
+	attachCmd.Flags().IntSliceVarP(&cores, "cores", "c", []int{}, "Affinity cores")
+	attachCmd.Flags().IntSliceVarP(&queues, "queues", "q", []int{}, "Interface queues")
+	attachCmd.Flags().BoolVar(&forceZeroCopy, "copy", false, "Force copy")
+	attachCmd.Flags().BoolVar(&foreceNoZeroCopy, "zero-copy", false, "Force zero copy")
+	attachCmd.Flags().BoolVar(&noNeedWakeup, "no-need-wakeup", false, "Disable use wakeup")
 
 	// detach
 
