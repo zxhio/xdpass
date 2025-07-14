@@ -51,6 +51,8 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 			Name:        req.Interface,
 			Mode:        req.Mode,
 			PullTimeout: req.PullTimeout,
+			Queues:      req.Queues,
+			Cores:       req.Cores,
 		},
 		req.ForceCopy,
 		req.ForceZeroCopy,
