@@ -50,7 +50,7 @@ func SetAttachmentRouter(r *gin.Engine, s *service.AttachmentService) {
 
 	r.GET(PathXDPAttachment, attachemtnHandler.QueryAttachment)
 	r.POST(PathXDPAttachment, attachemtnHandler.AddAttachment)
-	r.DELETE(PathXDPAttachment+"/:id", attachemtnHandler.DeleteAttachment)
+	r.DELETE(PathXDPAttachment+"/:name", attachemtnHandler.DeleteAttachment)
 }
 
 func InstantiateRuleAPIURL(apiPath string, ruleID int) string {

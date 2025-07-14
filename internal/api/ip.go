@@ -17,7 +17,7 @@ type AddIPReq struct {
 }
 
 type AttachmentIP struct {
-	ID      string        `json:"id"`
+	Name    string        `json:"name"`
 	Actions []XDPActionIP `json:"actions" binding:"required"`
 }
 
@@ -29,9 +29,9 @@ type XDPActionIP struct {
 type AddIPResp struct{}
 
 type DeleteIPReq struct {
-	AttachmentID string             `json:"attachment_id"`
-	Action       model.XDPAction    `json:"action"`
-	IP           netaddr.IPv4Prefix `json:"ip"`
+	AttachmentName string             `json:"attachment_name"`
+	Action         model.XDPAction    `json:"action"`
+	IP             netaddr.IPv4Prefix `json:"ip"`
 }
 
 type DeleteIPResp struct{}
@@ -60,9 +60,9 @@ func (h *IPHandler) QueryIP(c *gin.Context) {
 	}
 
 	for _, ip := range ips {
-		attachmentIdx := slices.IndexFunc(resp.Data, func(a AttachmentIP) bool { return a.ID == ip.AttachmentID })
+		attachmentIdx := slices.IndexFunc(resp.Data, func(a AttachmentIP) bool { return a.Name == ip.AttachmentName })
 		if attachmentIdx == -1 {
-			resp.Data = append(resp.Data, AttachmentIP{ID: ip.AttachmentID})
+			resp.Data = append(resp.Data, AttachmentIP{Name: ip.AttachmentName})
 			attachmentIdx = len(resp.Data) - 1
 		}
 		actionIdx := slices.IndexFunc(resp.Data[attachmentIdx].Actions, func(a XDPActionIP) bool { return a.Action == ip.Action })
@@ -89,9 +89,9 @@ func (h *IPHandler) AddIP(c *gin.Context) {
 		for _, action := range attachment.Actions {
 			for _, ip := range action.IPs {
 				ips = append(ips, &model.IP{
-					AttachmentID: attachment.ID,
-					Action:       action.Action,
-					IP:           ip,
+					AttachmentName: attachment.Name,
+					Action:         action.Action,
+					IP:             ip,
 				})
 			}
 		}
@@ -112,9 +112,9 @@ func (h *IPHandler) DeleteIP(c *gin.Context) {
 	}
 
 	ip := model.IP{
-		AttachmentID: req.AttachmentID,
-		Action:       req.Action,
-		IP:           req.IP,
+		AttachmentName: req.AttachmentName,
+		Action:         req.Action,
+		IP:             req.IP,
 	}
 
 	if err := h.service.DeleteIP(&ip); err != nil {

@@ -39,7 +39,7 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 	}
 
 	err := h.service.AddAttachment(&model.Attachment{
-		ID:          req.Interface,
+		Name:        req.Interface,
 		Mode:        req.Mode,
 		PullTimeout: req.PullTimeout,
 	})
@@ -51,7 +51,7 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 }
 
 func (h *AttachmentHandler) DeleteAttachment(c *gin.Context) {
-	err := h.service.DeleteAttachment(c.Param("id"))
+	err := h.service.DeleteAttachment(c.Param("name"))
 	if err != nil {
 		Error(c, ErrorCodeInternal, err)
 	} else {
@@ -62,15 +62,15 @@ func (h *AttachmentHandler) DeleteAttachment(c *gin.Context) {
 func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 	var resp QueryAttachmentResp
 
-	id := c.Request.URL.Query().Get("id")
-	if id != "" {
-		attachment, err := h.service.QueryAttachment(id)
+	name := c.Request.URL.Query().Get("name")
+	if name != "" {
+		attachment, err := h.service.QueryAttachment(name)
 		if err != nil {
 			Error(c, ErrorCodeInternal, err)
 			return
 		}
 		resp.Data = append(resp.Data, AttachmentInfo{
-			ID:          attachment.ID,
+			ID:          attachment.Name,
 			Mode:        attachment.Mode,
 			PullTimeout: attachment.PullTimeout,
 		})
@@ -84,7 +84,7 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 		resp.Total = total
 		for _, a := range attachments {
 			resp.Data = append(resp.Data, AttachmentInfo{
-				ID:          a.ID,
+				ID:          a.Name,
 				Mode:        a.Mode,
 				PullTimeout: a.PullTimeout,
 			})

@@ -49,9 +49,9 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.ID == a.ID })
+	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.Name == a.Name })
 	if idx != -1 {
-		return fmt.Errorf("exist attachment: %s", a.ID)
+		return fmt.Errorf("exist attachment: %s", a.Name)
 	}
 
 	attachment, err := NewAttachment(a, s.handler)
@@ -64,26 +64,26 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment) error {
 	return nil
 }
 
-func (s *AttachmentService) DeleteAttachment(id string) error {
+func (s *AttachmentService) DeleteAttachment(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.ID == id })
+	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.Name == name })
 	if idx == -1 {
-		return fmt.Errorf("no such attachment: %s", id)
+		return fmt.Errorf("no such attachment: %s", name)
 	}
 	s.attachments[idx].Close()
 	s.attachments = slices.Delete(s.attachments, idx, idx+1)
 	return nil
 }
 
-func (s *AttachmentService) QueryAttachment(id string) (*model.Attachment, error) {
+func (s *AttachmentService) QueryAttachment(name string) (*model.Attachment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.ID == id })
+	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == name })
 	if idx == -1 {
-		return nil, fmt.Errorf("no such attachment: %s", id)
+		return nil, fmt.Errorf("no such attachment: %s", name)
 	}
 	return s.attachments[idx].Attachment, nil
 }
@@ -120,12 +120,12 @@ func (s *AttachmentService) addIP(ip *model.IP) error {
 	}
 
 	var attachments []*Attachment
-	if ip.AttachmentID == "" {
+	if ip.AttachmentName == "" {
 		attachments = s.attachments
 	} else {
-		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.ID == ip.AttachmentID })
+		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
 		if idx == -1 {
-			return fmt.Errorf("no such attachment: %s", ip.AttachmentID)
+			return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
 		}
 		attachments = []*Attachment{s.attachments[idx]}
 	}
@@ -134,20 +134,20 @@ func (s *AttachmentService) addIP(ip *model.IP) error {
 		var err error
 		switch ip.Action {
 		case model.XDPActionPass:
-			if !slices.Contains(s.passIPs[a.Attachment.ID], ip.IP) {
-				s.passIPs[a.Attachment.ID] = append(s.passIPs[a.Attachment.ID], ip.IP)
+			if !slices.Contains(s.passIPs[a.Attachment.Name], ip.IP) {
+				s.passIPs[a.Attachment.Name] = append(s.passIPs[a.Attachment.Name], ip.IP)
 			}
 			err = a.Objects.PassLpmTrie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
 		case model.XDPActionRedirect:
-			if !slices.Contains(s.redirectIPs[a.Attachment.ID], ip.IP) {
-				s.redirectIPs[a.Attachment.ID] = append(s.redirectIPs[a.Attachment.ID], ip.IP)
+			if !slices.Contains(s.redirectIPs[a.Attachment.Name], ip.IP) {
+				s.redirectIPs[a.Attachment.Name] = append(s.redirectIPs[a.Attachment.Name], ip.IP)
 			}
 			err = a.Objects.RedirectLpmTrie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
 		}
 		if err != nil {
 			return err
 		}
-		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentID, "action": ip.Action}).Info("Added xdp ip")
+		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentName, "action": ip.Action}).Info("Added xdp ip")
 	}
 	return nil
 }
@@ -161,12 +161,12 @@ func (s *AttachmentService) DeleteIP(ip *model.IP) error {
 	defer s.mu.Unlock()
 
 	var attachments []*Attachment
-	if ip.AttachmentID == "" {
+	if ip.AttachmentName == "" {
 		attachments = s.attachments
 	} else {
-		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.ID == ip.AttachmentID })
+		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
 		if idx == -1 {
-			return fmt.Errorf("no such attachment: %s", ip.AttachmentID)
+			return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
 		}
 		attachments = []*Attachment{s.attachments[idx]}
 	}
@@ -182,7 +182,7 @@ func (s *AttachmentService) DeleteIP(ip *model.IP) error {
 		if err != nil {
 			return err
 		}
-		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentID, "action": ip.Action}).Info("Deleted xdp ip")
+		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentName, "action": ip.Action}).Info("Deleted xdp ip")
 	}
 	return nil
 }
@@ -192,28 +192,28 @@ func (s *AttachmentService) deleteIP(ip *model.IP, ips map[string][]netaddr.IPv4
 	if err != nil {
 		return err
 	}
-	idx := slices.Index(ips[ip.AttachmentID], ip.IP)
+	idx := slices.Index(ips[ip.AttachmentName], ip.IP)
 	if idx != -1 {
-		ips[ip.AttachmentID] = slices.Delete(ips[ip.AttachmentID], idx, idx+1)
+		ips[ip.AttachmentName] = slices.Delete(ips[ip.AttachmentName], idx, idx+1)
 	}
 	return nil
 }
 
-func (s *AttachmentService) QueryIP(attachmentID string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
+func (s *AttachmentService) QueryIP(attachmentName string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	switch action {
 	case model.XDPActionPass:
-		return s.queryIP(s.passIPs, attachmentID, action, page, limit)
+		return s.queryIP(s.passIPs, attachmentName, action, page, limit)
 	case model.XDPActionRedirect:
-		return s.queryIP(s.redirectIPs, attachmentID, action, page, limit)
+		return s.queryIP(s.redirectIPs, attachmentName, action, page, limit)
 	default:
-		pass, pt, err := s.queryIP(s.passIPs, attachmentID, model.XDPActionPass, page, limit)
+		pass, pt, err := s.queryIP(s.passIPs, attachmentName, model.XDPActionPass, page, limit)
 		if err != nil {
 			return nil, 0, err
 		}
-		redirect, rt, err := s.queryIP(s.redirectIPs, attachmentID, model.XDPActionRedirect, page, limit)
+		redirect, rt, err := s.queryIP(s.redirectIPs, attachmentName, model.XDPActionRedirect, page, limit)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -221,32 +221,32 @@ func (s *AttachmentService) QueryIP(attachmentID string, action model.XDPAction,
 	}
 }
 
-func (s *AttachmentService) queryIP(ips map[string][]netaddr.IPv4Prefix, attachmentID string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
-	var ids []string
-	if attachmentID == "" {
-		for id := range ips {
-			ids = append(ids, id)
+func (s *AttachmentService) queryIP(ips map[string][]netaddr.IPv4Prefix, attachmentName string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
+	var names []string
+	if attachmentName == "" {
+		for name := range ips {
+			names = append(names, name)
 		}
 	} else {
-		ids = []string{attachmentID}
+		names = []string{attachmentName}
 	}
 
 	var (
 		results []*model.IP
 		total   int
 	)
-	for _, id := range ids {
-		aips, ok := ips[id]
+	for _, name := range names {
+		aips, ok := ips[name]
 		if !ok {
-			return nil, 0, fmt.Errorf("no such ip by attachment: %s", attachmentID)
+			return nil, 0, fmt.Errorf("no such ip by attachment: %s", attachmentName)
 		}
 		data, t := utils.LimitPageSlice(aips, page, limit)
 		total += t
 		for _, ip := range data {
 			results = append(results, &model.IP{
-				AttachmentID: id,
-				Action:       action,
-				IP:           ip,
+				AttachmentName: name,
+				Action:         action,
+				IP:             ip,
 			})
 		}
 	}
@@ -267,9 +267,9 @@ type Attachment struct {
 }
 
 func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
-	l := logrus.WithField("name", a.ID)
+	l := logrus.WithField("name", a.Name)
 
-	ifaceLink, err := netlink.LinkByName(a.ID)
+	ifaceLink, err := netlink.LinkByName(a.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "netlink.LinkByName")
 	}
@@ -306,7 +306,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler) (*Attachment, error) {
 	// Generate xdp socket per queue
 	var queues []int
 	if len(a.Queues) == 0 {
-		queues, err = netutil.GetRxQueues(a.ID)
+		queues, err = netutil.GetRxQueues(a.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -358,8 +358,8 @@ func (a *Attachment) Close() error {
 
 	a.closers.Close(&utils.CloseOpt{
 		ReverseOrder: true,
-		Output:       logrus.WithField("iface", a.ID).Info,
-		ErrorOutput:  logrus.WithField("iface", a.ID).Error,
+		Output:       logrus.WithField("iface", a.Name).Info,
+		ErrorOutput:  logrus.WithField("iface", a.Name).Error,
 	})
 	return nil
 }

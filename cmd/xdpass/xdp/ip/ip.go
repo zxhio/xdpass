@@ -5,8 +5,8 @@ import (
 )
 
 var (
-	ipAction       string
-	ipAttachmentID string
+	action string
+	iface  string
 )
 
 var ipCmd = &cobra.Command{
@@ -17,8 +17,8 @@ var ipCmd = &cobra.Command{
 
 func init() {
 	// ip
-	ipCmd.PersistentFlags().StringVar(&ipAction, "action", "", "XDP action pass|redirect")
-	ipCmd.PersistentFlags().StringVarP(&ipAttachmentID, "interface", "i", "", "XDP attachment interface")
+	ipCmd.PersistentFlags().StringVar(&action, "action", "redirect", "XDP action")
+	ipCmd.PersistentFlags().StringVarP(&iface, "interface", "i", "", "XDP attachment interface")
 }
 
 func Export(parent *cobra.Command) {

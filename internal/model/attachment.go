@@ -14,7 +14,7 @@ const (
 )
 
 type Attachment struct {
-	ID          string        `json:"id"`
+	Name        string        `json:"name"`
 	Mode        string        `json:"mode"`
 	Queues      []int         `json:"queues,omitempty"`
 	Cores       []int         `json:"cores,omitempty"`
@@ -24,7 +24,7 @@ type Attachment struct {
 }
 
 type IP struct {
-	AttachmentID string             `json:"attachment_id"`
-	Action       XDPAction          `json:"action"`
-	IP           netaddr.IPv4Prefix `json:"ip"`
+	AttachmentName string             `json:"attachment_name"`
+	Action         XDPAction          `json:"action"`
+	IP             netaddr.IPv4Prefix `json:"ip"`
 }

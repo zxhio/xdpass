@@ -123,7 +123,7 @@ var listCmd = &cobra.Command{
 				},
 			})),
 		)
-		table.Header("ID", "Model", "Timeout")
+		table.Header("Name", "Model", "Timeout")
 		table.Bulk(data)
 		table.Render()
 	},

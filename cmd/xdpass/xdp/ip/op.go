@@ -42,8 +42,8 @@ var listCmd = cobra.Command{
 					api.GetBodyData,
 					utils.WithReqAddr(api.DefaultAPIAddr),
 					utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
-					utils.WithReqQueryKV("attachment-id", ipAttachmentID),
-					utils.WithReqQueryKV("action", ipAction),
+					utils.WithReqQueryKV("attachment-id", iface),
+					utils.WithReqQueryKV("action", action),
 				)
 				utils.CheckErrorAndExit(err, "Query ips failed")
 
@@ -64,8 +64,8 @@ var listCmd = cobra.Command{
 				api.GetBodyData,
 				utils.WithReqAddr(api.DefaultAPIAddr),
 				utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
-				utils.WithReqQueryKV("attachment-id", ipAttachmentID),
-				utils.WithReqQueryKV("action", ipAction),
+				utils.WithReqQueryKV("attachment-id", iface),
+				utils.WithReqQueryKV("action", action),
 			)
 			utils.CheckErrorAndExit(err, "Query ips failed")
 			attachements = resp.Data
@@ -75,7 +75,7 @@ var listCmd = cobra.Command{
 		for _, a := range attachements {
 			for _, ai := range a.Actions {
 				for _, ip := range ai.IPs {
-					data = append(data, []any{a.ID, strings.ToUpper(string(ai.Action)), ip})
+					data = append(data, []any{a.Name, strings.ToUpper(string(ai.Action)), ip})
 				}
 			}
 		}
@@ -104,9 +104,9 @@ var addCmd = cobra.Command{
 		utils.CheckErrorAndExit(err, "Invalid ip")
 
 		req := api.AddIPReq{Attachments: []api.AttachmentIP{{
-			ID: ipAttachmentID,
+			Name: iface,
 			Actions: []api.XDPActionIP{{
-				Action: model.XDPAction(ipAction),
+				Action: model.XDPAction(action),
 				IPs:    []netaddr.IPv4Prefix{ip},
 			}},
 		}}}
@@ -134,9 +134,9 @@ var delCmd = cobra.Command{
 		utils.CheckErrorAndExit(err, "Invalid ip: %s", args[0])
 
 		req := api.DeleteIPReq{
-			AttachmentID: ipAttachmentID,
-			Action:       model.XDPAction(ipAction),
-			IP:           ip,
+			AttachmentName: iface,
+			Action:         model.XDPAction(action),
+			IP:             ip,
 		}
 		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
