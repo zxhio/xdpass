@@ -10,10 +10,7 @@ import (
 	"github.com/zxhio/xdpass/pkg/netaddr"
 )
 
-type QueryIPResp struct {
-	QueryPage
-	Attachments []AttachmentIP `json:"attachments"`
-}
+type QueryIPResp QueryPageResp[AttachmentIP]
 
 type AddIPReq struct {
 	Attachments []AttachmentIP `json:"attachments" binding:"required"`
@@ -50,7 +47,7 @@ func (h *IPHandler) QueryIP(c *gin.Context) {
 
 	ips, total, err := h.service.QueryIP(attachmentID, action, p.Page, p.Limit)
 	if err != nil {
-		SetResponseError(c, ErrorCodeInternal, errors.Wrap(err, "Query IP"))
+		Error(c, ErrorCodeInternal, errors.Wrap(err, "Query IP"))
 		return
 	}
 
@@ -63,27 +60,27 @@ func (h *IPHandler) QueryIP(c *gin.Context) {
 	}
 
 	for _, ip := range ips {
-		attachmentIdx := slices.IndexFunc(resp.Attachments, func(a AttachmentIP) bool { return a.ID == ip.AttachmentID })
+		attachmentIdx := slices.IndexFunc(resp.Data, func(a AttachmentIP) bool { return a.ID == ip.AttachmentID })
 		if attachmentIdx == -1 {
-			resp.Attachments = append(resp.Attachments, AttachmentIP{ID: ip.AttachmentID})
-			attachmentIdx = len(resp.Attachments) - 1
+			resp.Data = append(resp.Data, AttachmentIP{ID: ip.AttachmentID})
+			attachmentIdx = len(resp.Data) - 1
 		}
-		actionIdx := slices.IndexFunc(resp.Attachments[attachmentIdx].Actions, func(a XDPActionIP) bool { return a.Action == ip.Action })
+		actionIdx := slices.IndexFunc(resp.Data[attachmentIdx].Actions, func(a XDPActionIP) bool { return a.Action == ip.Action })
 		if actionIdx == -1 {
-			resp.Attachments[attachmentIdx].Actions = append(resp.Attachments[attachmentIdx].Actions, XDPActionIP{
+			resp.Data[attachmentIdx].Actions = append(resp.Data[attachmentIdx].Actions, XDPActionIP{
 				Action: ip.Action,
 			})
-			actionIdx = len(resp.Attachments[attachmentIdx].Actions) - 1
+			actionIdx = len(resp.Data[attachmentIdx].Actions) - 1
 		}
-		resp.Attachments[attachmentIdx].Actions[actionIdx].IPs = append(resp.Attachments[attachmentIdx].Actions[actionIdx].IPs, ip.IP)
+		resp.Data[attachmentIdx].Actions[actionIdx].IPs = append(resp.Data[attachmentIdx].Actions[actionIdx].IPs, ip.IP)
 	}
-	SetResponseData(c, resp)
+	Success(c, resp)
 }
 
 func (h *IPHandler) AddIP(c *gin.Context) {
 	var req AddIPReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
 		return
 	}
 
@@ -101,16 +98,16 @@ func (h *IPHandler) AddIP(c *gin.Context) {
 	}
 
 	if err := h.service.AddIP(ips); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "Add IP"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "Add IP"))
 		return
 	}
-	SetResponseData(c, AddIPResp{})
+	Success(c, AddIPResp{})
 }
 
 func (h *IPHandler) DeleteIP(c *gin.Context) {
 	var req DeleteIPReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
 		return
 	}
 
@@ -121,8 +118,8 @@ func (h *IPHandler) DeleteIP(c *gin.Context) {
 	}
 
 	if err := h.service.DeleteIP(&ip); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "Delete IP"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "Delete IP"))
 		return
 	}
-	SetResponseData(c, DeleteIPResp{})
+	Success(c, DeleteIPResp{})
 }

@@ -20,16 +20,16 @@ type RuleHandler struct {
 func (h *RuleHandler) QueryRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
 
 	rule, err := h.service.QueryRule(ruleID)
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
-	SetResponseData(c, rule)
+	Success(c, rule)
 }
 
 func (h RuleHandler) QueryRules(c *gin.Context) {
@@ -46,7 +46,7 @@ func (h RuleHandler) QueryRules(c *gin.Context) {
 
 	rules, total, err := h.service.QueryRules(matchTypes, queryPage.Page, queryPage.Limit)
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
 	resp := QueryRulesResp{
@@ -57,35 +57,35 @@ func (h RuleHandler) QueryRules(c *gin.Context) {
 		},
 		Data: rules,
 	}
-	SetResponseData(c, resp)
+	Success(c, resp)
 }
 
 func (h RuleHandler) AddRule(c *gin.Context) {
 	var rule rule.Rule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
 		return
 	}
 
 	ruleID, err := h.service.AddRule(&rule)
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
-	SetResponseData(c, ruleID)
+	Success(c, ruleID)
 }
 
 func (h RuleHandler) DeletePacetRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
 
 	err = h.service.DeleteRule(ruleID)
 	if err != nil {
-		SetResponseError(c, ErrorCodeInvalid, err)
+		Error(c, ErrorCodeInvalid, err)
 		return
 	}
-	SetResponseData(c, ruleID)
+	Success(c, ruleID)
 }

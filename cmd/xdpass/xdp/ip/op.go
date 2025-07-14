@@ -3,7 +3,6 @@ package ip
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -38,40 +37,38 @@ var listCmd = cobra.Command{
 			listPage = 1
 			listLimit = 100
 			for {
-				resp, err := api.NewReqMessage[api.QueryIPResp](
+				resp, err := utils.NewHTTPRequestMessage[api.QueryIPResp](
 					api.PathXDPIP,
-					api.WithReqAddr(api.DefaultAPIAddr),
-					api.WithReqQuery(
-						api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery(),
-						fmt.Sprintf("attachment-id=%s", ipAttachmentID),
-						fmt.Sprintf("action=%s", ipAction),
-					),
+					api.GetBodyData,
+					utils.WithReqAddr(api.DefaultAPIAddr),
+					utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+					utils.WithReqQueryKV("attachment-id", ipAttachmentID),
+					utils.WithReqQueryKV("action", ipAction),
 				)
 				utils.CheckErrorAndExit(err, "Query ips failed")
 
-				for _, a := range resp.Attachments {
+				for _, a := range resp.Data {
 					for _, ac := range a.Actions {
 						total += len(ac.IPs)
 					}
 				}
-				attachements = append(attachements, resp.Attachments...)
+				attachements = append(attachements, resp.Data...)
 				if total >= int(resp.Total) {
 					break
 				}
 				listPage++
 			}
 		} else {
-			resp, err := api.NewReqMessage[api.QueryIPResp](
+			resp, err := utils.NewHTTPRequestMessage[api.QueryIPResp](
 				api.PathXDPIP,
-				api.WithReqAddr(api.DefaultAPIAddr),
-				api.WithReqQuery(
-					api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery(),
-					fmt.Sprintf("attachment-id=%s", ipAttachmentID),
-					fmt.Sprintf("action=%s", ipAction),
-				),
+				api.GetBodyData,
+				utils.WithReqAddr(api.DefaultAPIAddr),
+				utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+				utils.WithReqQueryKV("attachment-id", ipAttachmentID),
+				utils.WithReqQueryKV("action", ipAction),
 			)
 			utils.CheckErrorAndExit(err, "Query ips failed")
-			attachements = resp.Attachments
+			attachements = resp.Data
 		}
 
 		data := [][]any{}
@@ -116,11 +113,12 @@ var addCmd = cobra.Command{
 		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
 
-		_, err = api.NewReqMessage[api.AddIPResp](
+		_, err = utils.NewHTTPRequestMessage[api.AddIPResp](
 			api.PathXDPIP,
-			api.WithReqAddr(api.DefaultAPIAddr),
-			api.WithReqMethod(http.MethodPost),
-			api.WithReqBody(bytes.NewBuffer(data)),
+			api.GetBodyData,
+			utils.WithReqAddr(api.DefaultAPIAddr),
+			utils.WithReqMethod(http.MethodPost),
+			utils.WithReqBody(bytes.NewBuffer(data)),
 		)
 		utils.CheckErrorAndExit(err, "Query ips failed")
 	},
@@ -143,11 +141,12 @@ var delCmd = cobra.Command{
 		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
 
-		_, err = api.NewReqMessage[api.DeleteIPResp](
+		_, err = utils.NewHTTPRequestMessage[api.DeleteIPResp](
 			api.PathXDPIP,
-			api.WithReqMethod(http.MethodDelete),
-			api.WithReqAddr(api.DefaultAPIAddr),
-			api.WithReqBody(bytes.NewBuffer(data)),
+			api.GetBodyData,
+			utils.WithReqMethod(http.MethodDelete),
+			utils.WithReqAddr(api.DefaultAPIAddr),
+			utils.WithReqBody(bytes.NewBuffer(data)),
 		)
 		utils.CheckErrorAndExit(err, "Query ips failed")
 	},

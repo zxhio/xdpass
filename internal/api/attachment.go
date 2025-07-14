@@ -19,10 +19,7 @@ type AddAttachmentResp struct{}
 
 type DeleteAttachmentResp struct{}
 
-type QueryAttachmentResp struct {
-	QueryPage
-	Attachments []AttachmentInfo
-}
+type QueryAttachmentResp QueryPageResp[AttachmentInfo]
 
 type AttachmentInfo struct {
 	ID          string        `json:"id"`
@@ -37,7 +34,7 @@ type AttachmentHandler struct {
 func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 	var req AddAttachmentReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		SetResponseError(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
 		return
 	}
 
@@ -47,18 +44,18 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 		PullTimeout: req.PullTimeout,
 	})
 	if err != nil {
-		SetResponseError(c, ErrorCodeInternal, err)
+		Error(c, ErrorCodeInternal, err)
 	} else {
-		SetResponseData(c, AddAttachmentResp{})
+		Success(c, AddAttachmentResp{})
 	}
 }
 
 func (h *AttachmentHandler) DeleteAttachment(c *gin.Context) {
 	err := h.service.DeleteAttachment(c.Param("id"))
 	if err != nil {
-		SetResponseError(c, ErrorCodeInternal, err)
+		Error(c, ErrorCodeInternal, err)
 	} else {
-		SetResponseData(c, AddAttachmentResp{})
+		Success(c, AddAttachmentResp{})
 	}
 }
 
@@ -69,10 +66,10 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 	if id != "" {
 		attachment, err := h.service.QueryAttachment(id)
 		if err != nil {
-			SetResponseError(c, ErrorCodeInternal, err)
+			Error(c, ErrorCodeInternal, err)
 			return
 		}
-		resp.Attachments = append(resp.Attachments, AttachmentInfo{
+		resp.Data = append(resp.Data, AttachmentInfo{
 			ID:          attachment.ID,
 			Mode:        attachment.Mode,
 			PullTimeout: attachment.PullTimeout,
@@ -81,17 +78,17 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 		p := NewPageFromRequest(c.Request)
 		attachments, total, err := h.service.QueryAttachments(p.Page, p.Limit)
 		if err != nil {
-			SetResponseError(c, ErrorCodeInternal, err)
+			Error(c, ErrorCodeInternal, err)
 			return
 		}
 		resp.Total = total
 		for _, a := range attachments {
-			resp.Attachments = append(resp.Attachments, AttachmentInfo{
+			resp.Data = append(resp.Data, AttachmentInfo{
 				ID:          a.ID,
 				Mode:        a.Mode,
 				PullTimeout: a.PullTimeout,
 			})
 		}
 	}
-	SetResponseData(c, resp)
+	Success(c, resp)
 }

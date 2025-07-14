@@ -3,7 +3,6 @@ package rule
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"slices"
@@ -241,14 +240,21 @@ func display(rules []*rule.Rule) {
 }
 
 func queryRules(queryPage api.QueryPage, proto string) (*api.QueryRulesResp, error) {
-	return api.NewReqMessage[api.QueryRulesResp](api.APIPathQueryRules,
-		api.WithReqAddr(defaultAPIAddr),
-		api.WithReqQuery(fmt.Sprintf("%s&proto=%s", queryPage.ToQuery(), proto)),
+	return utils.NewHTTPRequestMessage[api.QueryRulesResp](
+		api.APIPathQueryRules,
+		api.GetBodyData,
+		utils.WithReqAddr(defaultAPIAddr),
+		utils.WithReqQuery(queryPage.ToQuery()),
+		utils.WithReqQueryKV("proto", proto),
 	)
 }
 
 func queryRule(ruleID int) (*rule.Rule, error) {
-	return api.NewReqMessage[rule.Rule](api.InstantiateRuleAPIURL(api.APIPathQueryRule, ruleID), api.WithReqAddr(defaultAPIAddr))
+	return utils.NewHTTPRequestMessage[rule.Rule](
+		api.InstantiateRuleAPIURL(api.APIPathQueryRule, ruleID),
+		api.GetBodyData,
+		utils.WithReqAddr(defaultAPIAddr),
+	)
 }
 
 func addRule(rule *rule.Rule) (int, error) {
@@ -256,10 +262,12 @@ func addRule(rule *rule.Rule) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	ruleId, err := api.NewReqMessage[int](api.APIPathAddRule,
-		api.WithReqAddr(defaultAPIAddr),
-		api.WithReqMethod(http.MethodPost),
-		api.WithReqBody(bytes.NewBuffer(data)),
+	ruleId, err := utils.NewHTTPRequestMessage[int](
+		api.APIPathAddRule,
+		api.GetBodyData,
+		utils.WithReqAddr(defaultAPIAddr),
+		utils.WithReqMethod(http.MethodPost),
+		utils.WithReqBody(bytes.NewBuffer(data)),
 	)
 	if err != nil {
 		return 0, err
@@ -268,9 +276,11 @@ func addRule(rule *rule.Rule) (int, error) {
 }
 
 func deleteRule(ruleID int) error {
-	_, err := api.NewReqMessage[int](api.InstantiateRuleAPIURL(api.APIPathDeleteRule, ruleID),
-		api.WithReqAddr(defaultAPIAddr),
-		api.WithReqMethod(http.MethodDelete),
+	_, err := utils.NewHTTPRequestMessage[int](
+		api.InstantiateRuleAPIURL(api.APIPathDeleteRule, ruleID),
+		api.GetBodyData,
+		utils.WithReqAddr(defaultAPIAddr),
+		utils.WithReqMethod(http.MethodDelete),
 	)
 	return err
 }

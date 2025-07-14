@@ -41,11 +41,12 @@ var attachCmd = &cobra.Command{
 		data, err := json.Marshal(req)
 		utils.CheckErrorAndExit(err, "json.Marshal")
 
-		_, err = api.NewReqMessage[api.AddAttachmentResp](
+		_, err = utils.NewHTTPRequestMessage[api.AddAttachmentResp](
 			api.PathXDPAttachment,
-			api.WithReqAddr(api.DefaultAPIAddr),
-			api.WithReqMethod(http.MethodPost),
-			api.WithReqBody(bytes.NewBuffer(data)),
+			api.GetBodyData,
+			utils.WithReqAddr(api.DefaultAPIAddr),
+			utils.WithReqMethod(http.MethodPost),
+			utils.WithReqBody(bytes.NewBuffer(data)),
 		)
 		utils.CheckErrorAndExit(err, "Add xdp attachment failed")
 	},
@@ -58,10 +59,11 @@ var detachCmd = &cobra.Command{
 	GroupID: group.ID,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		_, err := api.NewReqMessage[api.AddAttachmentResp](
+		_, err := utils.NewHTTPRequestMessage[api.AddAttachmentResp](
 			fmt.Sprintf("%s/%s", api.PathXDPAttachment, args[0]),
-			api.WithReqAddr(api.DefaultAPIAddr),
-			api.WithReqMethod(http.MethodDelete),
+			api.GetBodyData,
+			utils.WithReqAddr(api.DefaultAPIAddr),
+			utils.WithReqMethod(http.MethodDelete),
 		)
 		utils.CheckErrorAndExit(err, "Add xdp attachment failed")
 	},
@@ -81,28 +83,30 @@ var listCmd = &cobra.Command{
 			listPage = 1
 			listLimit = 100
 			for {
-				resp, err := api.NewReqMessage[api.QueryAttachmentResp](
+				resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentResp](
 					api.PathXDPAttachment,
-					api.WithReqAddr(api.DefaultAPIAddr),
-					api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+					api.GetBodyData,
+					utils.WithReqAddr(api.DefaultAPIAddr),
+					utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
 				)
 				utils.CheckErrorAndExit(err, "Query attachment failed")
 
-				total += len(resp.Attachments)
-				attachements = append(attachements, resp.Attachments...)
+				total += len(resp.Data)
+				attachements = append(attachements, resp.Data...)
 				if total >= int(resp.Total) {
 					break
 				}
 				listPage++
 			}
 		} else {
-			resp, err := api.NewReqMessage[api.QueryAttachmentResp](
+			resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentResp](
 				api.PathXDPAttachment,
-				api.WithReqAddr(api.DefaultAPIAddr),
-				api.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
+				api.GetBodyData,
+				utils.WithReqAddr(api.DefaultAPIAddr),
+				utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
 			)
 			utils.CheckErrorAndExit(err, "Query attachment failed")
-			attachements = resp.Attachments
+			attachements = resp.Data
 		}
 
 		data := [][]any{}
