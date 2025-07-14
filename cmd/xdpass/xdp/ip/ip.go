@@ -179,6 +179,7 @@ func setFlagsAttachment(cmd *cobra.Command, required bool) {
 	cmd.Flags().BoolVarP(&opt.Pass, "pass", "P", false, "XDP_PASS action")
 	cmd.Flags().BoolVarP(&opt.Redirect, "redirect", "R", false, "XDP_REDIRECT action")
 	if required {
+		cmd.MarkFlagRequired("interface")
 		cmd.MarkFlagsOneRequired("pass", "redirect")
 	}
 }
