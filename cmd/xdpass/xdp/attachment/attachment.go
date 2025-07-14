@@ -75,43 +75,12 @@ var listCmd = &cobra.Command{
 	Aliases: []string{"ls", "attachment list", "attachment ls"},
 	GroupID: group.ID,
 	Run: func(cmd *cobra.Command, args []string) {
-		var (
-			attachements []api.AttachmentInfo
-			total        int
-		)
-		if listAll {
-			listPage = 1
-			listLimit = 100
-			for {
-				resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentResp](
-					api.PathXDPAttachment,
-					api.GetBodyData,
-					utils.WithReqAddr(api.DefaultAPIAddr),
-					utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
-				)
-				utils.CheckErrorAndExit(err, "Query attachment failed")
-
-				total += len(resp.Data)
-				attachements = append(attachements, resp.Data...)
-				if total >= int(resp.Total) {
-					break
-				}
-				listPage++
-			}
-		} else {
-			resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentResp](
-				api.PathXDPAttachment,
-				api.GetBodyData,
-				utils.WithReqAddr(api.DefaultAPIAddr),
-				utils.WithReqQuery(api.QueryPage{Page: listPage, Limit: listLimit}.ToQuery()),
-			)
-			utils.CheckErrorAndExit(err, "Query attachment failed")
-			attachements = resp.Data
-		}
+		attachements, _, err := List(listAll, listPage, listLimit)
+		utils.CheckErrorAndExit(err, "Query attachment failed")
 
 		data := [][]any{}
 		for _, a := range attachements {
-			data = append(data, []any{a.ID, a.Mode, a.PullTimeout})
+			data = append(data, []any{a.Name, a.Mode, a.PullTimeout})
 		}
 
 		table := tablewriter.NewTable(os.Stdout,
@@ -159,4 +128,35 @@ func Export(parent *cobra.Command) {
 	parent.AddGroup(group)
 	parent.AddCommand(attachmentCmd, attachCmd, detachCmd, listCmd)
 	attachmentCmd.AddCommand(attachCmd, detachCmd, listCmd)
+}
+
+func List(all bool, page, limit int) ([]api.AttachmentInfo, int, error) {
+	var (
+		attachements []api.AttachmentInfo
+		total        int
+	)
+
+	if all {
+		page = 1
+		limit = 100
+	}
+	for {
+		resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentResp](
+			api.PathXDPAttachment,
+			api.GetBodyData,
+			utils.WithReqAddr(api.DefaultAPIAddr),
+			utils.WithReqQuery(api.QueryPage{Page: page, Limit: limit}.ToQuery()),
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		total += len(resp.Data)
+		attachements = append(attachements, resp.Data...)
+		if total >= int(resp.Total) || !all {
+			break
+		}
+		page++
+	}
+	return attachements, total, nil
 }

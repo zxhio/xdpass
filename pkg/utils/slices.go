@@ -1,5 +1,7 @@
 package utils
 
+import "slices"
+
 func LimitPageSlice[T any](s []T, page, limit int) ([]T, int) {
 	return LimitPageSliceFunc(s, page, limit, func(T) bool { return true })
 }
@@ -48,4 +50,12 @@ func LimitPageSliceFunc[T any](s []T, page, limit int, filter func(T) bool) ([]T
 		}
 	}
 	return data, total
+}
+
+func SliceAppendUnique[S ~[]E, E comparable](s S, v E) S {
+	if slices.Contains(s, v) {
+		return s
+	}
+	s = append(s, v)
+	return s
 }

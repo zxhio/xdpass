@@ -102,11 +102,11 @@ func (s *AttachmentService) QueryAttachments(page, limit int) ([]*model.Attachme
 }
 
 func (s *AttachmentService) AddIP(ips []*model.IP) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	for _, ip := range ips {
+		s.mu.Lock()
 		err := s.addIP(ip)
+		s.mu.Unlock()
+
 		if err != nil {
 			return err
 		}
@@ -115,76 +115,52 @@ func (s *AttachmentService) AddIP(ips []*model.IP) error {
 }
 
 func (s *AttachmentService) addIP(ip *model.IP) error {
-	if ip.Action != model.XDPActionPass && ip.Action != model.XDPActionRedirect {
-		return fmt.Errorf("invalid xdp action: %s", ip.Action)
+	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
+	if idx == -1 {
+		return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
 	}
+	att := s.attachments[idx]
 
-	var attachments []*Attachment
-	if ip.AttachmentName == "" {
-		attachments = s.attachments
-	} else {
-		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
-		if idx == -1 {
-			return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
-		}
-		attachments = []*Attachment{s.attachments[idx]}
+	switch ip.Action {
+	case model.XDPActionPass:
+		return s.checkIPAndAdd(ip, s.passIPs, att.Objects.PassLpmTrie)
+	case model.XDPActionRedirect:
+		return s.checkIPAndAdd(ip, s.redirectIPs, att.Objects.RedirectLpmTrie)
+	default:
+		return fmt.Errorf("unknown action: %s", ip.Action)
 	}
+}
 
-	for _, a := range attachments {
-		var err error
-		switch ip.Action {
-		case model.XDPActionPass:
-			if !slices.Contains(s.passIPs[a.Attachment.Name], ip.IP) {
-				s.passIPs[a.Attachment.Name] = append(s.passIPs[a.Attachment.Name], ip.IP)
-			}
-			err = a.Objects.PassLpmTrie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
-		case model.XDPActionRedirect:
-			if !slices.Contains(s.redirectIPs[a.Attachment.Name], ip.IP) {
-				s.redirectIPs[a.Attachment.Name] = append(s.redirectIPs[a.Attachment.Name], ip.IP)
-			}
-			err = a.Objects.RedirectLpmTrie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
-		}
-		if err != nil {
-			return err
-		}
-		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentName, "action": ip.Action}).Info("Added xdp ip")
+func (s *AttachmentService) checkIPAndAdd(ip *model.IP, ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) error {
+	if slices.Contains(ips[ip.AttachmentName], ip.IP) {
+		return fmt.Errorf("ip aleady exist")
 	}
+	err := trie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
+	if err != nil {
+		return err
+	}
+	logrus.WithFields(logrus.Fields{"attachment_name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Add ip")
+	ips[ip.AttachmentName] = append(ips[ip.AttachmentName], ip.IP)
 	return nil
 }
 
 func (s *AttachmentService) DeleteIP(ip *model.IP) error {
-	if ip.Action != model.XDPActionPass && ip.Action != model.XDPActionRedirect {
-		return fmt.Errorf("invalid xdp action: %s", ip.Action)
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var attachments []*Attachment
-	if ip.AttachmentName == "" {
-		attachments = s.attachments
-	} else {
-		idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
-		if idx == -1 {
-			return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
-		}
-		attachments = []*Attachment{s.attachments[idx]}
+	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
+	if idx == -1 {
+		return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
 	}
 
-	for _, a := range attachments {
-		var err error
-		switch ip.Action {
-		case model.XDPActionPass:
-			err = s.deleteIP(ip, s.passIPs, a.PassLpmTrie)
-		case model.XDPActionRedirect:
-			err = s.deleteIP(ip, s.passIPs, a.PassLpmTrie)
-		}
-		if err != nil {
-			return err
-		}
-		logrus.WithFields(logrus.Fields{"attachment": ip.AttachmentName, "action": ip.Action}).Info("Deleted xdp ip")
+	switch ip.Action {
+	case model.XDPActionPass:
+		return s.deleteIP(ip, s.passIPs, s.attachments[idx].PassLpmTrie)
+	case model.XDPActionRedirect:
+		return s.deleteIP(ip, s.redirectIPs, s.attachments[idx].RedirectLpmTrie)
+	default:
+		return fmt.Errorf("unknown action: %s", ip.Action)
 	}
-	return nil
 }
 
 func (s *AttachmentService) deleteIP(ip *model.IP, ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) error {
@@ -203,52 +179,34 @@ func (s *AttachmentService) QueryIP(attachmentName string, action model.XDPActio
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == attachmentName })
+	if idx == -1 {
+		return nil, 0, fmt.Errorf("no such attachment: %s", attachmentName)
+	}
+
 	switch action {
 	case model.XDPActionPass:
-		return s.queryIP(s.passIPs, attachmentName, action, page, limit)
+		return s.queryIP(s.passIPs[attachmentName], attachmentName, action, page, limit)
 	case model.XDPActionRedirect:
-		return s.queryIP(s.redirectIPs, attachmentName, action, page, limit)
+		return s.queryIP(s.redirectIPs[attachmentName], attachmentName, action, page, limit)
 	default:
-		pass, pt, err := s.queryIP(s.passIPs, attachmentName, model.XDPActionPass, page, limit)
-		if err != nil {
-			return nil, 0, err
-		}
-		redirect, rt, err := s.queryIP(s.redirectIPs, attachmentName, model.XDPActionRedirect, page, limit)
-		if err != nil {
-			return nil, 0, err
-		}
-		return append(pass, redirect...), pt + rt, nil
+		return nil, 0, fmt.Errorf("unknown action: %s", action)
 	}
 }
 
-func (s *AttachmentService) queryIP(ips map[string][]netaddr.IPv4Prefix, attachmentName string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
-	var names []string
-	if attachmentName == "" {
-		for name := range ips {
-			names = append(names, name)
-		}
-	} else {
-		names = []string{attachmentName}
-	}
-
+func (s *AttachmentService) queryIP(ips []netaddr.IPv4Prefix, attachmentName string, action model.XDPAction, page, limit int) ([]*model.IP, int, error) {
 	var (
 		results []*model.IP
 		total   int
 	)
-	for _, name := range names {
-		aips, ok := ips[name]
-		if !ok {
-			return nil, 0, fmt.Errorf("no such ip by attachment: %s", attachmentName)
-		}
-		data, t := utils.LimitPageSlice(aips, page, limit)
-		total += t
-		for _, ip := range data {
-			results = append(results, &model.IP{
-				AttachmentName: name,
-				Action:         action,
-				IP:             ip,
-			})
-		}
+
+	data, total := utils.LimitPageSlice(ips, page, limit)
+	for _, ip := range data {
+		results = append(results, &model.IP{
+			AttachmentName: attachmentName,
+			Action:         action,
+			IP:             ip,
+		})
 	}
 	return results, total, nil
 }

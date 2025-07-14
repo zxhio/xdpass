@@ -17,7 +17,7 @@ type AddIPReq struct {
 }
 
 type AttachmentIP struct {
-	Name    string        `json:"name"`
+	Name    string        `json:"name" binding:"required"`
 	Actions []XDPActionIP `json:"actions" binding:"required"`
 }
 
@@ -29,9 +29,9 @@ type XDPActionIP struct {
 type AddIPResp struct{}
 
 type DeleteIPReq struct {
-	AttachmentName string             `json:"attachment_name"`
-	Action         model.XDPAction    `json:"action"`
-	IP             netaddr.IPv4Prefix `json:"ip"`
+	AttachmentName string             `json:"attachment_name" binding:"required"`
+	Action         model.XDPAction    `json:"action" binding:"required"`
+	IP             netaddr.IPv4Prefix `json:"ip" binding:"required"`
 }
 
 type DeleteIPResp struct{}
@@ -42,7 +42,7 @@ type IPHandler struct {
 
 func (h *IPHandler) QueryIP(c *gin.Context) {
 	p := NewPageFromRequest(c.Request)
-	attachmentID := c.Request.URL.Query().Get("attachment-id")
+	attachmentID := c.Request.URL.Query().Get("attachment-name")
 	action := model.XDPAction(c.Request.URL.Query().Get("action"))
 
 	ips, total, err := h.service.QueryIP(attachmentID, action, p.Page, p.Limit)

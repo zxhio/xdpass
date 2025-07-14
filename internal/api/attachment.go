@@ -22,7 +22,7 @@ type DeleteAttachmentResp struct{}
 type QueryAttachmentResp QueryPageResp[AttachmentInfo]
 
 type AttachmentInfo struct {
-	ID          string        `json:"id"`
+	Name        string        `json:"name"`
 	Mode        string        `json:"mode"`
 	PullTimeout time.Duration `json:"pull_timeout,omitempty"`
 }
@@ -70,7 +70,7 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 			return
 		}
 		resp.Data = append(resp.Data, AttachmentInfo{
-			ID:          attachment.Name,
+			Name:        attachment.Name,
 			Mode:        attachment.Mode,
 			PullTimeout: attachment.PullTimeout,
 		})
@@ -84,7 +84,7 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 		resp.Total = total
 		for _, a := range attachments {
 			resp.Data = append(resp.Data, AttachmentInfo{
-				ID:          a.Name,
+				Name:        a.Name,
 				Mode:        a.Mode,
 				PullTimeout: a.PullTimeout,
 			})

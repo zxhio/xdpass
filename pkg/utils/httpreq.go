@@ -57,11 +57,11 @@ func WithReqQueryKVs(kvs ...QueryKV) reqOpt {
 	for _, kv := range kvs {
 		s = append(s, fmt.Sprintf("%s=%v", kv.K, kv.V))
 	}
-	return func(opts *reqOpts) { WithReqQuery(strings.Join(s, "&")) }
+	return WithReqQuery(strings.Join(s, "&"))
 }
 
 func WithReqQueryKV(k string, v any) reqOpt {
-	return func(opts *reqOpts) { WithReqQuery(fmt.Sprintf("%s=%v", k, v)) }
+	return WithReqQuery(fmt.Sprintf("%s=%v", k, v))
 }
 
 func WithReqBody(body io.Reader) reqOpt {
