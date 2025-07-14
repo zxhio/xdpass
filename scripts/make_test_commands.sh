@@ -9,7 +9,9 @@ set -x
 xdpass xdp attach br1
 
 # xdp ip
-xdpass xdp ip add 172.16.23.0/24 --action redirect
+xdpass xdp ip add 172.16.23.3 -i br1 --pass
+xdpass xdp ip add 172.16.23.0/24 -i br1 --redirect
+xdpass xdp ip ls --all
 
 # mirror rule
 xdpass rule add -d 172.16.23.1 --mirror-tap tap0
@@ -23,3 +25,5 @@ xdpass rule tcp add --flag-fin -d 172.16.23.0/24 --dports 1:1024 --spoof-fin-ack
 xdpass rule tcp add --flag-syn --flag-ack -d 172.16.23.0/24 --dports 1025 --spoof-rst-ack
 xdpass rule tcp add --flag-psh --flag-ack -d 172.16.23.0/24 --dports 1025 --spoof-ack
 xdpass rule tcp add --flag-syn --flag-ack -d 172.16.23.0/24 --dports 1026:65525 --spoof-rst-ack
+
+xdpass rule ls --all
