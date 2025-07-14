@@ -286,6 +286,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 	} else {
 		queues = a.Queues
 	}
+	a.Queues = queues
 	l.WithField("queues", queues).Info("Get rx queues")
 
 	var xsks []*xdp.XDPSocket
@@ -310,8 +311,13 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 		l.WithFields(logrus.Fields{"k": queueID, "v": s.SocketFD()}).Info("Update xsk map")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cores := a.Cores[:min(len(xsks), len(a.Cores))]
+	if len(cores) == 0 {
+		cores = []int{-1}
+	}
+	a.Cores = cores
 
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Attachment{
 		Attachment: a,
 		Objects:    objs,
@@ -354,13 +360,8 @@ func (a *Attachment) Run(ctx context.Context) error {
 		done = true
 	}()
 
-	cores := a.Cores[:min(len(a.xsks), len(a.Cores))]
-	if len(cores) == 0 {
-		cores = []int{-1}
-	}
-
 	var xskGroups []*xskGroup
-	for _, core := range cores {
+	for _, core := range a.Cores {
 		xskGroups = append(xskGroups, &xskGroup{core: core})
 	}
 	for k, xsk := range a.xsks {
