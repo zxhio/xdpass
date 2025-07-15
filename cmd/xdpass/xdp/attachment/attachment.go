@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
@@ -89,7 +88,7 @@ var listCmd = &cobra.Command{
 		data := [][]any{}
 		for _, a := range attachements {
 			data = append(data, []any{
-				a.Name, a.Mode, a.PullTimeout, formatSlices(a.Cores), formatSlices(a.Queues), xdp.XSKBindFlags(a.BindFlags),
+				a.Name, a.Mode, a.PullTimeout, utils.SliceString(a.Cores), utils.SliceString(a.Queues), xdp.XSKBindFlags(a.BindFlags),
 			})
 		}
 
@@ -168,14 +167,6 @@ var statsCmd = &cobra.Command{
 			queryAndDisplay()
 		}
 	},
-}
-
-func formatSlices[T any](sls []T) string {
-	s := make([]string, 0, len(sls))
-	for _, v := range sls {
-		s = append(s, fmt.Sprint(v))
-	}
-	return strings.Join(s, ",")
 }
 
 var (

@@ -1,6 +1,10 @@
 package utils
 
-import "slices"
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
 
 func LimitPageSlice[T any](s []T, page, limit int) ([]T, int) {
 	return LimitPageSliceFunc(s, page, limit, func(T) bool { return true })
@@ -58,4 +62,12 @@ func SliceAppendUnique[S ~[]E, E comparable](s S, v E) S {
 	}
 	s = append(s, v)
 	return s
+}
+
+func SliceString[T any](sls []T) string {
+	s := make([]string, 0, len(sls))
+	for _, v := range sls {
+		s = append(s, fmt.Sprint(v))
+	}
+	return strings.Join(s, ",")
 }

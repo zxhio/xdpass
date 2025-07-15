@@ -42,6 +42,14 @@ func NewAttachmentService(h PacketHandler) (*AttachmentService, error) {
 }
 
 func (s *AttachmentService) AddAttachment(a *model.Attachment, forceZeroCopy, forceCopy, noNeedWakeup bool) error {
+	l := logrus.WithField("name", a.Name)
+	l.WithFields(logrus.Fields{
+		"mode":    a.Mode,
+		"cores":   utils.SliceString(a.Cores),
+		"queues":  utils.SliceString(a.Queues),
+		"timeout": a.PullTimeout,
+	}).Info("Adding attachment")
+
 	if a.PullTimeout > 0 {
 		a.PullTimeout = max(a.PullTimeout, time.Millisecond*10)
 	}
@@ -71,10 +79,14 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment, forceZeroCopy, fo
 	s.attachments = append(s.attachments, attachment)
 
 	go attachment.Run(context.Background())
+
+	l.Info("Added attachment")
 	return nil
 }
 
 func (s *AttachmentService) DeleteAttachment(name string) error {
+	logrus.WithField("name", name).Info("Deleting attachment")
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -84,6 +96,8 @@ func (s *AttachmentService) DeleteAttachment(name string) error {
 	}
 	s.attachments[idx].Close()
 	s.attachments = slices.Delete(s.attachments, idx, idx+1)
+
+	logrus.WithField("name", name).Info("Deleted attachment")
 	return nil
 }
 
@@ -136,6 +150,8 @@ func (s *AttachmentService) AddIP(ips []*model.IP) error {
 }
 
 func (s *AttachmentService) addIP(ip *model.IP) error {
+	logrus.WithFields(logrus.Fields{"name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Adding ip to attachment")
+
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
 	if idx == -1 {
 		return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
@@ -160,12 +176,15 @@ func (s *AttachmentService) checkIPAndAdd(ip *model.IP, ips map[string][]netaddr
 	if err != nil {
 		return err
 	}
-	logrus.WithFields(logrus.Fields{"attachment_name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Add ip")
 	ips[ip.AttachmentName] = append(ips[ip.AttachmentName], ip.IP)
+	logrus.WithFields(logrus.Fields{"name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Added ip to attachment")
+
 	return nil
 }
 
 func (s *AttachmentService) DeleteIP(ip *model.IP) error {
+	logrus.WithFields(logrus.Fields{"name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Deleting ip from attachment")
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -192,6 +211,7 @@ func (s *AttachmentService) deleteIP(ip *model.IP, ips map[string][]netaddr.IPv4
 	idx := slices.Index(ips[ip.AttachmentName], ip.IP)
 	if idx != -1 {
 		ips[ip.AttachmentName] = slices.Delete(ips[ip.AttachmentName], idx, idx+1)
+		logrus.WithFields(logrus.Fields{"name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Deleted ip from attachment")
 	}
 	return nil
 }
@@ -242,6 +262,7 @@ type Attachment struct {
 	closers utils.NamedClosers
 	ctx     context.Context
 	cancel  func()
+	log     *logrus.Entry
 }
 
 func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*Attachment, error) {
@@ -258,9 +279,11 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 		return nil, errors.Wrap(err, "netlink.LinkByName")
 	}
 	l.WithFields(logrus.Fields{
-		"name": ifaceLink.Attrs().Name, "index": ifaceLink.Attrs().Index,
-		"num_rx": ifaceLink.Attrs().NumRxQueues, "num_tx": ifaceLink.Attrs().NumTxQueues,
-	}).Info("Found link")
+		"iface":  ifaceLink.Attrs().Name,
+		"index":  ifaceLink.Attrs().Index,
+		"num_rx": ifaceLink.Attrs().NumRxQueues,
+		"num_tx": ifaceLink.Attrs().NumTxQueues,
+	}).Info("Detected network link")
 
 	objs, err := xdpprog.LoadObjects(nil)
 	if err != nil {
@@ -284,7 +307,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 	if err != nil {
 		l.WithError(err).Warn("Fail to get xdp link info")
 	} else {
-		l.WithFields(logrus.Fields{"id": info.ID, "type": info.Type, "prog": info.Program}).Info("Get xdp link info")
+		l.WithFields(logrus.Fields{"id": info.ID, "type": info.Type, "prog": info.Program}).Info("Detected xdp link")
 	}
 
 	// Generate xdp socket per queue
@@ -298,7 +321,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 		queues = a.Queues
 	}
 	a.Queues = queues
-	l.WithField("queues", queues).Info("Get rx queues")
+	l.WithField("rx", utils.SliceString(queues)).Info("Select netlink queues")
 
 	var xsks []*xdp.XDPSocket
 	for _, queueID := range queues {
@@ -327,6 +350,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 		cores = []int{-1}
 	}
 	a.Cores = cores
+	l.WithField("cores", utils.SliceString(a.Cores)).Info("Select cpu")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Attachment{
@@ -338,6 +362,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 		mu:         &sync.RWMutex{},
 		ctx:        ctx,
 		cancel:     cancel,
+		log:        l,
 	}, nil
 }
 
@@ -356,8 +381,8 @@ func (a *Attachment) Run(ctx context.Context) error {
 	defer func() {
 		a.closers.Close(&utils.CloseOpt{
 			ReverseOrder: true,
-			Output:       logrus.WithField("iface", a.Name).Info,
-			ErrorOutput:  logrus.WithField("iface", a.Name).Error,
+			Output:       a.log.Info,
+			ErrorOutput:  a.log.Error,
 		})
 		a.cancel()
 	}()
@@ -390,12 +415,16 @@ func (a *Attachment) Run(ctx context.Context) error {
 			runtime.LockOSThread()
 			defer runtime.UnlockOSThread()
 
-			l := logrus.WithField("tid", unix.Gettid())
+			l := a.log.WithField("tid", unix.Gettid())
 			if g.core != -1 {
 				setAffinityCPU(g.core)
-				l = l.WithField("affinity_core", g.core)
+				l = l.WithField("core", g.core)
 			}
-			l.Info("Start xsk group")
+			var fds []int
+			for _, x := range g.xsks {
+				fds = append(fds, x.SocketFD())
+			}
+			l.WithField("sockets", utils.SliceString(fds)).Info("Run xdp rx loop")
 
 			// TODO: use option vec size
 			numRxTxData := 64
