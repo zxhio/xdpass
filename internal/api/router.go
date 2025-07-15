@@ -18,8 +18,9 @@ const (
 	APIPathAddRule    = "/api/rules"
 	APIPathDeleteRule = "/api/rules/:rule_id"
 
-	PathXDPAttachment = "/api/xdp/attachments"
-	PathXDPIP         = "/api/xdp/ips"
+	PathXDPAttachment      = "/api/xdp/attachments"
+	PathXDPAttachmentStats = "/api/xdp/attachments/:name/stats"
+	PathXDPIP              = "/api/xdp/ips"
 )
 
 var (
@@ -51,6 +52,7 @@ func SetAttachmentRouter(r *gin.Engine, s *service.AttachmentService) {
 	r.GET(PathXDPAttachment, attachemtnHandler.QueryAttachment)
 	r.POST(PathXDPAttachment, attachemtnHandler.AddAttachment)
 	r.DELETE(PathXDPAttachment+"/:name", attachemtnHandler.DeleteAttachment)
+	r.GET(PathXDPAttachmentStats, attachemtnHandler.QueryAttchmentStats)
 }
 
 func InstantiateRuleAPIURL(apiPath string, ruleID int) string {

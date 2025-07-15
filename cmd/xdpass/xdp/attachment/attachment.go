@@ -14,6 +14,7 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
 	"github.com/zxhio/xdpass/internal/api"
+	"github.com/zxhio/xdpass/pkg/netutil"
 	"github.com/zxhio/xdpass/pkg/utils"
 	"github.com/zxhio/xdpass/pkg/xdp"
 )
@@ -107,6 +108,68 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var statsCmd = &cobra.Command{
+	Use:     "stats",
+	Short:   "Display a live stream of network traffic statistics",
+	GroupID: group.ID,
+	Aliases: []string{"st", "attachment stats", "attachment st"},
+	Run: func(cmd *cobra.Command, args []string) {
+		fields := []StatsFields{}
+		addFields := func(b bool, field StatsFields) {
+			if b {
+				fields = append(fields, field)
+			}
+		}
+		addFields(stShowPackets, StatsFieldsPackets{})
+		addFields(stShowPps, StatsFieldsPps{})
+		addFields(stShowBytes, StatsFieldsBytes{})
+		addFields(stShowBps, StatsFieldsBps{})
+		addFields(stShowIops, StatsFieldsIops{})
+		addFields(stShowErrIops, StatsFieldsErrIops{})
+
+		if stShowAll || len(fields) == 0 {
+			fields = []StatsFields{
+				StatsFieldsPackets{}, StatsFieldsPps{},
+				StatsFieldsBytes{}, StatsFieldsBps{},
+				StatsFieldsIops{}, StatsFieldsErrIops{}}
+		}
+
+		prev := make(map[string]netutil.Statistics)
+		queryAndDisplay := func() {
+			if len(stIfaces) == 0 {
+				attachments, _, err := List(true, 0, 0)
+				utils.CheckErrorAndExit(err, "Query attachment failed")
+				for _, a := range attachments {
+					stIfaces = append(stIfaces, a.Name)
+				}
+			}
+
+			var ifaces []*api.QueryAttachmentStatsResp
+			for _, iface := range stIfaces {
+				resp, err := utils.NewHTTPRequestMessage[api.QueryAttachmentStatsResp](
+					api.InstantiateAPIURL(api.PathXDPAttachmentStats, map[string]string{":name": iface}),
+					api.GetBodyData,
+					utils.WithReqAddr(api.DefaultAPIAddr),
+					utils.WithReqMethod(http.MethodGet),
+				)
+				utils.CheckErrorAndExit(err, "Query stats failed")
+				ifaces = append(ifaces, resp)
+			}
+			displayStats(ifaces, fields, prev)
+		}
+
+		queryAndDisplay()
+
+		if stDur == 0 {
+			return
+		}
+		timer := time.NewTicker(max(stDur, time.Second))
+		for range timer.C {
+			queryAndDisplay()
+		}
+	},
+}
+
 func formatSlices[T any](sls []T) string {
 	s := make([]string, 0, len(sls))
 	for _, v := range sls {
@@ -131,6 +194,16 @@ var (
 	listPage  int
 	listLimit int
 	listAll   bool
+
+	stIfaces      []string
+	stDur         time.Duration
+	stShowPackets bool
+	stShowPps     bool
+	stShowBytes   bool
+	stShowBps     bool
+	stShowIops    bool
+	stShowErrIops bool
+	stShowAll     bool
 )
 
 func getAttachMode() string {
@@ -164,12 +237,23 @@ func init() {
 	listCmd.Flags().IntVar(&listPage, "page", 1, "Page number to list")
 	listCmd.Flags().IntVar(&listLimit, "limit", 100, "Limit size per page")
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "List all ip")
+
+	// stats
+	statsCmd.Flags().StringSliceVarP(&stIfaces, "interfaces", "i", []string{}, "Special attachment interface")
+	statsCmd.Flags().DurationVarP(&stDur, "duration", "d", 0, "Statistics duration")
+	statsCmd.Flags().BoolVarP(&stShowPackets, "packets", "p", false, "Show packets")
+	statsCmd.Flags().BoolVarP(&stShowPps, "pps", "P", false, "Show pps")
+	statsCmd.Flags().BoolVarP(&stShowBytes, "bytes", "b", false, "Show bytes")
+	statsCmd.Flags().BoolVarP(&stShowBps, "bps", "B", false, "Show bps")
+	statsCmd.Flags().BoolVarP(&stShowIops, "iops", "I", false, "Show iops")
+	statsCmd.Flags().BoolVarP(&stShowErrIops, "err-iops", "E", false, "Show error iops")
+	statsCmd.Flags().BoolVarP(&stShowAll, "all", "a", false, "Show all")
 }
 
 func Export(parent *cobra.Command) {
 	parent.AddGroup(group)
-	parent.AddCommand(attachmentCmd, attachCmd, detachCmd, listCmd)
-	attachmentCmd.AddCommand(attachCmd, detachCmd, listCmd)
+	parent.AddCommand(attachmentCmd, attachCmd, detachCmd, listCmd, statsCmd)
+	attachmentCmd.AddCommand(attachCmd, detachCmd, listCmd, statsCmd)
 }
 
 func List(all bool, page, limit int) ([]api.AttachmentInfo, int, error) {

@@ -111,6 +111,17 @@ func (s *AttachmentService) QueryAttachments(page, limit int) ([]*model.Attachme
 	return attachments, total, nil
 }
 
+func (s *AttachmentService) QueryAttachmentStats(name string) ([]model.AttachmentStats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == name })
+	if idx == -1 {
+		return nil, fmt.Errorf("no such attachment: %s", name)
+	}
+	return s.attachments[idx].GetAllQueueStats(), nil
+}
+
 func (s *AttachmentService) AddIP(ips []*model.IP) error {
 	for _, ip := range ips {
 		s.mu.Lock()
@@ -458,6 +469,18 @@ func (a *Attachment) waitPoll(fds []unix.PollFd) error {
 		return errors.Wrap(err, "unix.Poll")
 	}
 	return nil
+}
+
+func (x *Attachment) GetAllQueueStats() []model.AttachmentStats {
+	stats := make([]model.AttachmentStats, 0, len(x.xsks))
+	for _, xsk := range x.xsks {
+		stats = append(stats, model.AttachmentStats{
+			Name:       x.Name,
+			QueueID:    xsk.QueueID(),
+			Statistics: xsk.Stats(),
+		})
+	}
+	return stats
 }
 
 func setAffinityCPU(cpu int) error {

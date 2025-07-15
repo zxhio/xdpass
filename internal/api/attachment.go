@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zxhio/xdpass/internal/model"
 	"github.com/zxhio/xdpass/internal/service"
+	"github.com/zxhio/xdpass/pkg/netutil"
 )
 
 type AddAttachmentReq struct {
@@ -110,6 +111,32 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 				BindFlags:   attachment.BindFlags,
 			})
 		}
+	}
+	Success(c, resp)
+}
+
+type QueryAttachmentStatsResp struct {
+	Name   string                 `json:"name"`
+	Queues []AttachmentQueueStats `json:"queues"`
+}
+
+type AttachmentQueueStats struct {
+	QueueID uint32             `json:"queue_id"`
+	Stats   netutil.Statistics `json:"stats"`
+}
+
+func (h *AttachmentHandler) QueryAttchmentStats(c *gin.Context) {
+	name := c.Param("name")
+
+	stats, err := h.service.QueryAttachmentStats(name)
+	if err != nil {
+		Error(c, ErrorCodeInternal, err)
+		return
+	}
+
+	resp := QueryAttachmentStatsResp{Name: c.Param("name")}
+	for _, st := range stats {
+		resp.Queues = append(resp.Queues, AttachmentQueueStats{QueueID: st.QueueID, Stats: st.Statistics})
 	}
 	Success(c, resp)
 }

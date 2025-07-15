@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/zxhio/xdpass/pkg/netaddr"
+	"github.com/zxhio/xdpass/pkg/netutil"
 )
 
 type XDPAction string
@@ -21,6 +22,12 @@ type Attachment struct {
 	PullTimeout time.Duration `json:"pull_timeout,omitempty"`
 	BindFlags   uint16        `json:"bind_flags"`
 	// ProgramID   string        `json:"program_id"`
+}
+
+type AttachmentStats struct {
+	Name    string `json:"name"`
+	QueueID uint32 `json:"queue_id"`
+	netutil.Statistics
 }
 
 type IP struct {
