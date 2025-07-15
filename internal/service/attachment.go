@@ -274,6 +274,12 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 	}
 	a.BindFlags = uint16(o.BindFlags)
 
+	var m xdp.XDPAttachMode
+	err := m.Set(a.Mode)
+	if err != nil {
+		return nil, fmt.Errorf("invalid attach mode: %s", a.Mode)
+	}
+
 	ifaceLink, err := netlink.LinkByName(a.Name)
 	if err != nil {
 		return nil, errors.Wrap(err, "netlink.LinkByName")
@@ -295,7 +301,7 @@ func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*A
 	xdpLink, err := link.AttachXDP(link.XDPOptions{
 		Program:   objs.XdpRedirectXskProg,
 		Interface: ifaceLink.Attrs().Index,
-		Flags:     link.XDPGenericMode, // TODO: Add config API
+		Flags:     link.XDPAttachFlags(m),
 	})
 	if err != nil {
 		closers.Close(nil)
