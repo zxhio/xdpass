@@ -10,6 +10,7 @@ ExecStart=/usr/local/bin/xdpassd
 Restart=on-failure
 RestartSec=10
 KillMode=process
+KillSignal=10
 
 [Install]
 WantedBy=multi-user.target
