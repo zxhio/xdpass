@@ -13,18 +13,18 @@ type MatchARP struct{}
 
 func (m MatchARP) MatchType() MatchType           { return MatchTypeARP }
 func (m MatchARP) Match(pkt *fastpkt.Packet) bool { return pkt.L3Proto == unix.ETH_P_ARP }
-func (m MatchARP) Compare(other Match) int        { return CompareMatchType(m, other) }
+func (m MatchARP) Compare(other Matcher) int      { return CompareMatcherType(m, other) }
 
 type MatchTCP struct{}
 
 func (m MatchTCP) MatchType() MatchType           { return MatchTypeTCP }
 func (m MatchTCP) Match(pkt *fastpkt.Packet) bool { return pkt.L4Proto == unix.IPPROTO_TCP }
-func (m MatchTCP) Compare(other Match) int        { return CompareMatchType(m, other) }
+func (m MatchTCP) Compare(other Matcher) int      { return CompareMatcherType(m, other) }
 
 type MatchTCPFlags fastpkt.TCPFlags
 
-func (m MatchTCPFlags) MatchType() MatchType    { return MatchTypeTCPFlags }
-func (m MatchTCPFlags) Compare(other Match) int { return CompareMatchType(m, other) }
+func (m MatchTCPFlags) MatchType() MatchType      { return MatchTypeTCPFlags }
+func (m MatchTCPFlags) Compare(other Matcher) int { return CompareMatcherType(m, other) }
 func (m MatchTCPFlags) Match(pkt *fastpkt.Packet) bool {
 	if pkt.L4Proto != unix.IPPROTO_TCP {
 		return false
@@ -37,13 +37,13 @@ type MatchUDP struct{}
 
 func (m MatchUDP) MatchType() MatchType           { return MatchTypeUDP }
 func (m MatchUDP) Match(pkt *fastpkt.Packet) bool { return pkt.L4Proto == unix.IPPROTO_UDP }
-func (m MatchUDP) Compare(other Match) int        { return CompareMatchType(m, other) }
+func (m MatchUDP) Compare(other Matcher) int      { return CompareMatcherType(m, other) }
 
 type MatchICMP struct{}
 
 func (m MatchICMP) MatchType() MatchType           { return MatchTypeICMP }
 func (m MatchICMP) Match(pkt *fastpkt.Packet) bool { return pkt.L4Proto == unix.IPPROTO_ICMP }
-func (m MatchICMP) Compare(other Match) int        { return CompareMatchType(m, other) }
+func (m MatchICMP) Compare(other Matcher) int      { return CompareMatcherType(m, other) }
 
 type MatchHTTP struct {
 	Method  string `json:"method,omitempty"`
@@ -92,4 +92,4 @@ func (m MatchHTTP) Match(pkt *fastpkt.Packet) bool {
 	return true
 }
 
-func (m MatchHTTP) Compare(other Match) int { return CompareMatchType(m, other) }
+func (m MatchHTTP) Compare(other Matcher) int { return CompareMatcherType(m, other) }

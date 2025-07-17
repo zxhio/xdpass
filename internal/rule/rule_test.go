@@ -19,30 +19,30 @@ func TestMatchMarshal(t *testing.T) {
 	)
 
 	testCases := []struct {
-		match Match
-		str   string
+		matcher Matcher
+		str     string
 	}{
 		// IPv4
-		{match: MatchIPv4PrefixSrc(ipv4Prefix), str: `"127.0.0.0/8"`},
-		{match: MatchIPv4PrefixDst(ipv4Prefix), str: `"127.0.0.0/8"`},
-		{match: MatchIPv4RangeSrc(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
-		{match: MatchIPv4RangeDst(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
+		{matcher: MatchIPv4PrefixSrc(ipv4Prefix), str: `"127.0.0.0/8"`},
+		{matcher: MatchIPv4PrefixDst(ipv4Prefix), str: `"127.0.0.0/8"`},
+		{matcher: MatchIPv4RangeSrc(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
+		{matcher: MatchIPv4RangeDst(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
 
 		// Port
-		{match: MatchPortRangeSrc(portRage), str: `"80:81"`},
-		{match: MatchPortRangeDst(portRage), str: `"80:81"`},
-		{match: MatchMultiPortSrc(mulitPort), str: `"80,81"`},
-		{match: MatchMultiPortDst(mulitPort), str: `"80,81"`},
+		{matcher: MatchPortRangeSrc(portRage), str: `"80:81"`},
+		{matcher: MatchPortRangeDst(portRage), str: `"80:81"`},
+		{matcher: MatchMultiPortSrc(mulitPort), str: `"80,81"`},
+		{matcher: MatchMultiPortDst(mulitPort), str: `"80,81"`},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.match.MatchType().String(), func(t *testing.T) {
-			ser, ok := matchTypeToSerializer[tc.match.MatchType()]
+		t.Run(tc.matcher.MatchType().String(), func(t *testing.T) {
+			ser, ok := matchTypeToSerializer[tc.matcher.MatchType()]
 			if !assert.True(t, ok, "no such match type serializer") {
 				return
 			}
 
-			data, err := ser.marshaler(tc.match)
+			data, err := ser.marshaler(tc.matcher)
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -77,7 +77,7 @@ func BenchmarkMatch(b *testing.B) {
 	sip := netaddr.NewIPv4AddrFromIP(net.ParseIP("172.16.23.2"))
 
 	benchCases := []struct {
-		match Match
+		matcher Matcher
 	}{
 		{MatchIPv4PrefixSrc{sip, 32}},
 		{MatchIPv4RangeSrc{sip, sip + 100}},
@@ -86,9 +86,9 @@ func BenchmarkMatch(b *testing.B) {
 	}
 
 	for _, bc := range benchCases {
-		b.Run(bc.match.MatchType().String(), func(b *testing.B) {
+		b.Run(bc.matcher.MatchType().String(), func(b *testing.B) {
 			for range b.N {
-				bc.match.Match(pkt)
+				bc.matcher.Match(pkt)
 			}
 		})
 	}

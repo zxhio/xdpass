@@ -86,27 +86,27 @@ var ruleCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// L3
 		if F.SrcIPv4Prefix.Compare(netaddr.IPv4Prefix{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchIPv4PrefixSrc(F.SrcIPv4Prefix))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixSrc(F.SrcIPv4Prefix))
 		} else if F.SrcIPv4Range.Compare(netaddr.IPv4Range{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchIPv4RangeSrc(F.SrcIPv4Range))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeSrc(F.SrcIPv4Range))
 		}
 
 		if F.DstIPv4Prefix.Compare(netaddr.IPv4Prefix{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchIPv4PrefixDst(F.DstIPv4Prefix))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixDst(F.DstIPv4Prefix))
 		} else if F.DstIPv4Range.Compare(netaddr.IPv4Range{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchIPv4RangeDst(F.DstIPv4Range))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeDst(F.DstIPv4Range))
 		}
 
 		if F.SrcPortRange.Compare(netaddr.PortRange{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchPortRangeSrc(F.SrcPortRange))
+			R.Matchers = append(R.Matchers, rule.MatchPortRangeSrc(F.SrcPortRange))
 		} else if F.SrcMultiPort.Compare(netaddr.MultiPort{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchMultiPortSrc(F.SrcMultiPort))
+			R.Matchers = append(R.Matchers, rule.MatchMultiPortSrc(F.SrcMultiPort))
 		}
 
 		if F.DstPortRange.Compare(netaddr.PortRange{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchPortRangeDst(F.DstPortRange))
+			R.Matchers = append(R.Matchers, rule.MatchPortRangeDst(F.DstPortRange))
 		} else if F.DstMultiPort.Compare(netaddr.MultiPort{}) != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchMultiPortDst(F.DstMultiPort))
+			R.Matchers = append(R.Matchers, rule.MatchMultiPortDst(F.DstMultiPort))
 		}
 
 		// Mirror
@@ -124,7 +124,7 @@ var arpCmd = &cobra.Command{
 	Aliases: []string{"rule arp"},
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		R.Matchs = append(R.Matchs, rule.MatchARP{})
+		R.Matchers = append(R.Matchers, rule.MatchARP{})
 		if F.SpoofARPReplyAddr.Compare(netaddr.HwAddr{}) != 0 {
 			R.Target = rule.TargetARPReplySpoof{HwAddr: F.SpoofARPReplyAddr}
 		}
@@ -137,7 +137,7 @@ var tcpCmd = &cobra.Command{
 	Aliases: []string{"rule tcp"},
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		R.Matchs = append(R.Matchs, rule.MatchTCP{})
+		R.Matchers = append(R.Matchers, rule.MatchTCP{})
 
 		var tf fastpkt.TCPFlags
 		if F.TCP.FlagSYN {
@@ -156,7 +156,7 @@ var tcpCmd = &cobra.Command{
 			tf.Set(fastpkt.TCPFlagFIN)
 		}
 		if tf != 0 {
-			R.Matchs = append(R.Matchs, rule.MatchTCPFlags(tf))
+			R.Matchers = append(R.Matchers, rule.MatchTCPFlags(tf))
 		}
 
 		if F.TCP.SpoofSYNACK {
@@ -179,7 +179,7 @@ var udpCmd = &cobra.Command{
 	Aliases: []string{"rule udp"},
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		R.Matchs = append(R.Matchs, rule.MatchUDP{})
+		R.Matchers = append(R.Matchers, rule.MatchUDP{})
 	},
 }
 
@@ -189,7 +189,7 @@ var icmpCmd = &cobra.Command{
 	Aliases: []string{"rule icmp"},
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		R.Matchs = append(R.Matchs, rule.MatchICMP{})
+		R.Matchers = append(R.Matchers, rule.MatchICMP{})
 		if F.ICMP.SpoofEchoReply {
 			R.Target = rule.TargetICMPEchoReplySpoof{}
 		}
@@ -202,7 +202,7 @@ var httpCmd = &cobra.Command{
 	Aliases: []string{"rule http", "rule tcp http"},
 	GroupID: group.ID,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		R.Matchs = append(R.Matchs, rule.MatchHTTP{})
+		R.Matchers = append(R.Matchers, rule.MatchHTTP{})
 		if F.SpoofNotFound {
 			R.Target = rule.TargetHTTPRespSpoofNotFound{}
 		}

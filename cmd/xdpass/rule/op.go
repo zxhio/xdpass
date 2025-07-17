@@ -36,7 +36,7 @@ var listCmd = cobra.Command{
 	Args:    cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		var mt rule.MatchType
-		for _, m := range R.Matchs {
+		for _, m := range R.Matchers {
 			if slices.Contains(rule.GetProtocolMatchTypes(), m.MatchType()) {
 				mt = m.MatchType()
 			}
@@ -100,7 +100,7 @@ var delCmd = cobra.Command{
 	Use:     "delete",
 	Short:   "Delete rule for specified id",
 	Aliases: []string{"del"},
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ruleID, err := strconv.Atoi(args[0])
 		utils.CheckErrorAndExit(err, "Check invalid rule_id")
@@ -144,8 +144,8 @@ func setOpCommands(cmds ...*cobra.Command) {
 	}
 }
 
-func getPacketMatcher(r *rule.Rule, fn func(m rule.Match) (string, bool)) string {
-	for _, m := range r.Matchs {
+func getPacketMatcher(r *rule.Rule, fn func(m rule.Matcher) (string, bool)) string {
+	for _, m := range r.Matchers {
 		s, ok := fn(m)
 		if ok {
 			return s
@@ -164,7 +164,7 @@ func getLastProto(r *rule.Rule) string {
 	}
 
 	var lastProto rule.MatchType
-	for _, m := range r.Matchs {
+	for _, m := range r.Matchers {
 		if slices.Contains(protos, m.MatchType()) {
 			lastProto = m.MatchType()
 		}
@@ -184,7 +184,7 @@ func display(rules []*rule.Rule) {
 			r.Packets,
 			r.Bytes,
 			strings.ToLower(getLastProto(r)),
-			getPacketMatcher(r, func(m rule.Match) (string, bool) {
+			getPacketMatcher(r, func(m rule.Matcher) (string, bool) {
 				switch m.MatchType() {
 				case rule.MatchTypeIPv4PrefixSrc:
 					return netaddr.IPv4Prefix(m.(rule.MatchIPv4PrefixSrc)).String(), true
@@ -193,7 +193,7 @@ func display(rules []*rule.Rule) {
 				}
 				return "", false
 			}),
-			getPacketMatcher(r, func(m rule.Match) (string, bool) {
+			getPacketMatcher(r, func(m rule.Matcher) (string, bool) {
 				switch m.MatchType() {
 				case rule.MatchTypeIPv4PrefixDst:
 					return netaddr.IPv4Prefix(m.(rule.MatchIPv4PrefixDst)).String(), true
@@ -202,7 +202,7 @@ func display(rules []*rule.Rule) {
 				}
 				return "", false
 			}),
-			getPacketMatcher(r, func(m rule.Match) (string, bool) {
+			getPacketMatcher(r, func(m rule.Matcher) (string, bool) {
 				switch m.MatchType() {
 				case rule.MatchTypePortRangeSrc:
 					return netaddr.PortRange(m.(rule.MatchPortRangeSrc)).String(), true
@@ -211,7 +211,7 @@ func display(rules []*rule.Rule) {
 				}
 				return "", false
 			}),
-			getPacketMatcher(r, func(m rule.Match) (string, bool) {
+			getPacketMatcher(r, func(m rule.Matcher) (string, bool) {
 				switch m.MatchType() {
 				case rule.MatchTypePortRangeDst:
 					return netaddr.PortRange(m.(rule.MatchPortRangeDst)).String(), true

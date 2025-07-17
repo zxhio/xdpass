@@ -46,7 +46,7 @@ func (s *RuleService) QueryRules(matchTypes []rule.MatchType, page, limit int) (
 		if len(matchTypes) == 0 {
 			return true
 		}
-		return slices.ContainsFunc(r.Matchs, func(m rule.Match) bool {
+		return slices.ContainsFunc(r.Matchers, func(m rule.Matcher) bool {
 			return slices.Contains(matchTypes, m.MatchType())
 		})
 	}

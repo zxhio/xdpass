@@ -99,20 +99,20 @@ func (t *MatchType) UnmarshalJSON(data []byte) error {
 	return t.Set(s)
 }
 
-func (t MatchType) Compare(t1 MatchType) int {
-	return int(t - t1)
+func CompareMatchType(t1, t2 MatchType) int {
+	return int(t1 - t2)
 }
 
 func GetProtocolMatchTypes() []MatchType {
 	return protocolMatchTypes
 }
 
-type Match interface {
+type Matcher interface {
 	MatchType() MatchType
 	Match(*fastpkt.Packet) bool
-	Compare(Match) int
+	Compare(Matcher) int
 }
 
-func CompareMatchType(m1, m2 Match) int {
-	return m1.MatchType().Compare(m2.MatchType())
+func CompareMatcherType(m1, m2 Matcher) int {
+	return CompareMatchType(m1.MatchType(), m2.MatchType())
 }

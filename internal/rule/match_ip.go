@@ -18,9 +18,9 @@ func (m MatchIPv4PrefixSrc) Match(pkt *fastpkt.Packet) bool {
 	return (netaddr.IPv4Prefix(m)).ContainsAddrV4(pkt.SrcIP)
 }
 
-func (m MatchIPv4PrefixSrc) Compare(other Match) int {
+func (m MatchIPv4PrefixSrc) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
-		return CompareMatchType(m, other)
+		return CompareMatcherType(m, other)
 	}
 	return (netaddr.IPv4Prefix(m)).Compare(netaddr.IPv4Prefix(other.(MatchIPv4PrefixSrc)))
 }
@@ -36,9 +36,9 @@ func (m MatchIPv4PrefixDst) Match(pkt *fastpkt.Packet) bool {
 	return (netaddr.IPv4Prefix(m)).ContainsAddrV4(pkt.DstIP)
 }
 
-func (m MatchIPv4PrefixDst) Compare(other Match) int {
+func (m MatchIPv4PrefixDst) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
-		return CompareMatchType(m, other)
+		return CompareMatcherType(m, other)
 	}
 	return (netaddr.IPv4Prefix(m)).Compare(netaddr.IPv4Prefix(other.(MatchIPv4PrefixDst)))
 }
@@ -53,9 +53,9 @@ func (m MatchIPv4RangeSrc) Match(pkt *fastpkt.Packet) bool {
 	return netaddr.IPv4Range(m).Contains(pkt.SrcIP)
 }
 
-func (m MatchIPv4RangeSrc) Compare(other Match) int {
+func (m MatchIPv4RangeSrc) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
-		return CompareMatchType(m, other)
+		return CompareMatcherType(m, other)
 	}
 	return netaddr.IPv4Range(m).Compare(netaddr.IPv4Range(other.(MatchIPv4RangeSrc)))
 }
@@ -70,9 +70,9 @@ func (m MatchIPv4RangeDst) Match(pkt *fastpkt.Packet) bool {
 	return netaddr.IPv4Range(m).Contains(pkt.DstIP)
 }
 
-func (m MatchIPv4RangeDst) Compare(other Match) int {
+func (m MatchIPv4RangeDst) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
-		return CompareMatchType(m, other)
+		return CompareMatcherType(m, other)
 	}
 	return netaddr.IPv4Range(m).Compare(netaddr.IPv4Range(other.(MatchIPv4RangeDst)))
 }
