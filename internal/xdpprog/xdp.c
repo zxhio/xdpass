@@ -92,7 +92,8 @@ typedef __u8 BOOL;
 #define FALSE 0
 
 static BOOL validate_packet(struct ip_lpm_trie *, const struct packet *pkt);
-static BOOL validate_ip(struct ip_lpm_trie *, const struct packet *pkt);
+static BOOL validate_sip(struct ip_lpm_trie *, const struct packet *pkt);
+static BOOL validate_dip(struct ip_lpm_trie *, const struct packet *pkt);
 
 struct ip_lpm_trie redirect_lpm_trie SEC(".maps");
 struct ip_lpm_trie pass_lpm_trie SEC(".maps");
@@ -119,7 +120,6 @@ int xdp_redirect_xsk_prog(struct xdp_md *ctx)
             return bpf_redirect_map(&xsk_map, index, XDP_DROP);
     }
 
-    // TODO: updatable
     return XDP_DROP;
 }
 
@@ -127,22 +127,18 @@ static BOOL validate_packet(struct ip_lpm_trie *trie, const struct packet *pkt)
 {
     switch (pkt->l2_proto) {
     case ETH_P_802_3:
-        return validate_ip(trie, pkt);
     case ETH_P_8021Q:
-        return validate_ip(trie, pkt);
+        return validate_sip(trie, pkt) || validate_dip(trie, pkt);
     default:
         return FALSE;
     }
 }
 
-static BOOL validate_ip(struct ip_lpm_trie *trie, const struct packet *pkt)
+static BOOL validate_sip(struct ip_lpm_trie *trie, const struct packet *pkt)
 {
     struct ip_lpm_key key = {};
     switch (pkt->l3_proto) {
     case ETH_P_ARP:
-        key.prefix_len = 32;
-        __builtin_memcpy(key.data, &(pkt->saddr), sizeof(pkt->saddr));
-        break;
     case ETH_P_IP:
         key.prefix_len = 32;
         __builtin_memcpy(key.data, &(pkt->saddr), sizeof(pkt->saddr));
@@ -150,6 +146,25 @@ static BOOL validate_ip(struct ip_lpm_trie *trie, const struct packet *pkt)
     case ETH_P_IPV6:
         key.prefix_len = 128;
         __builtin_memcpy(key.data, &(pkt->saddr6), sizeof(pkt->saddr6));
+        break;
+    default:
+        return FALSE;
+    }
+    return bpf_map_lookup_elem(trie, &key) ? TRUE : FALSE;
+}
+
+static BOOL validate_dip(struct ip_lpm_trie *trie, const struct packet *pkt)
+{
+    struct ip_lpm_key key = {};
+    switch (pkt->l3_proto) {
+    case ETH_P_ARP:
+    case ETH_P_IP:
+        key.prefix_len = 32;
+        __builtin_memcpy(key.data, &(pkt->daddr), sizeof(pkt->daddr));
+        break;
+    case ETH_P_IPV6:
+        key.prefix_len = 128;
+        __builtin_memcpy(key.data, &(pkt->daddr6), sizeof(pkt->daddr6));
         break;
     default:
         return FALSE;
