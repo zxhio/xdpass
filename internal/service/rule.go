@@ -38,21 +38,24 @@ func (s *RuleService) QueryRule(ruleID int) (*rule.Rule, error) {
 	return s.rules[idx], nil
 }
 
-func (s *RuleService) QueryRules(matchTypes []rule.MatchType, page, limit int) ([]*rule.Rule, int, error) {
+func (s *RuleService) QueryRules(matchers []rule.Matcher, target rule.Target, page, limit int) ([]*rule.Rule, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	validateMatch := func(r *rule.Rule) bool {
-		if len(matchTypes) == 0 {
-			return true
+	validate := func(r *rule.Rule) bool {
+		if target != nil && r.Target.Compare(target) != 0 {
+			return false
 		}
-		return slices.ContainsFunc(r.Matchers, func(m rule.Matcher) bool {
-			return slices.Contains(matchTypes, m.MatchType())
-		})
+		for _, matcher := range matchers {
+			if !slices.ContainsFunc(r.Matchers, func(m rule.Matcher) bool { return matcher.Compare(m) == 0 }) {
+				return false
+			}
+		}
+		return true
 	}
-
-	data, total := utils.LimitPageSliceFunc(s.rules, page, limit, validateMatch)
+	data, total := utils.LimitPageSliceFunc(s.rules, page, limit, validate)
 	return data, total, nil
+
 }
 
 func (s *RuleService) AddRule(r *rule.Rule) (int, error) {

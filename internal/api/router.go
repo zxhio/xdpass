@@ -35,7 +35,7 @@ func SetRuleRouter(g *gin.Engine, s *service.RuleService) {
 	g.GET(APIPathQueryRules, ruleHandler.QueryRules)
 	g.GET(APIPathQueryRule, ruleHandler.QueryRule)
 	g.POST(APIPathAddRule, ruleHandler.AddRule)
-	g.DELETE(APIPathDeleteRule, ruleHandler.DeletePacetRule)
+	g.DELETE(APIPathDeleteRule, ruleHandler.DeletePacketRule)
 }
 
 func SetIPRouter(r *gin.Engine, s *service.AttachmentService) {

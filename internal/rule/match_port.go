@@ -9,70 +9,78 @@ import (
 
 // Port match
 
-type MatchPortRangeSrc netaddr.PortRange
+type MatchPortRangeSrc struct {
+	netaddr.PortRange
+}
 
 func (MatchPortRangeSrc) MatchType() MatchType {
 	return MatchTypePortRangeSrc
 }
 
 func (m MatchPortRangeSrc) Match(pkt *fastpkt.Packet) bool {
-	return netaddr.PortRange(m).Contains(pkt.SrcPort)
+	return m.PortRange.Contains(pkt.SrcPort)
 }
 
 func (m MatchPortRangeSrc) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
 		return CompareMatcherType(m, other)
 	}
-	return netaddr.PortRange(m).Compare(netaddr.PortRange(other.(MatchPortRangeSrc)))
+	return m.PortRange.Compare(other.(MatchPortRangeSrc).PortRange)
 }
 
-type MatchPortRangeDst netaddr.PortRange
+type MatchPortRangeDst struct {
+	netaddr.PortRange
+}
 
 func (MatchPortRangeDst) MatchType() MatchType {
 	return MatchTypePortRangeDst
 }
 
 func (m MatchPortRangeDst) Match(pkt *fastpkt.Packet) bool {
-	return netaddr.PortRange(m).Contains(pkt.DstPort)
+	return m.PortRange.Contains(pkt.DstPort)
 }
 
 func (m MatchPortRangeDst) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
 		return CompareMatcherType(m, other)
 	}
-	return netaddr.PortRange(m).Compare(netaddr.PortRange(other.(MatchPortRangeDst)))
+	return m.PortRange.Compare(other.(MatchPortRangeDst).PortRange)
 }
 
-type MatchMultiPortSrc netaddr.MultiPort
+type MatchMultiPortSrc struct {
+	netaddr.MultiPort
+}
 
 func (MatchMultiPortSrc) MatchType() MatchType {
 	return MatchTypeMultiPortSrc
 }
 
 func (m MatchMultiPortSrc) Match(pkt *fastpkt.Packet) bool {
-	return slices.Contains(m, pkt.SrcPort)
+	return slices.Contains(m.MultiPort, pkt.SrcPort)
 }
 
 func (m MatchMultiPortSrc) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
 		return CompareMatcherType(m, other)
 	}
-	return netaddr.MultiPort(m).Compare(netaddr.MultiPort(other.(MatchMultiPortSrc)))
+	return m.MultiPort.Compare(other.(MatchMultiPortSrc).MultiPort)
 }
 
-type MatchMultiPortDst netaddr.MultiPort
+type MatchMultiPortDst struct {
+	netaddr.MultiPort
+}
 
 func (MatchMultiPortDst) MatchType() MatchType {
 	return MatchTypeMultiPortDst
 }
 
 func (m MatchMultiPortDst) Match(pkt *fastpkt.Packet) bool {
-	return slices.Contains(m, pkt.DstPort)
+	return slices.Contains(m.MultiPort, pkt.DstPort)
 }
 
 func (m MatchMultiPortDst) Compare(other Matcher) int {
 	if m.MatchType() != other.MatchType() {
 		return CompareMatcherType(m, other)
 	}
-	return netaddr.MultiPort(m).Compare(netaddr.MultiPort(other.(MatchMultiPortDst)))
+	return m.MultiPort.Compare(other.(MatchMultiPortDst).MultiPort)
 }

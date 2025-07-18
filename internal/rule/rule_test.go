@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"encoding/json"
 	"net"
 	"testing"
 
@@ -23,26 +24,21 @@ func TestMatchMarshal(t *testing.T) {
 		str     string
 	}{
 		// IPv4
-		{matcher: MatchIPv4PrefixSrc(ipv4Prefix), str: `"127.0.0.0/8"`},
-		{matcher: MatchIPv4PrefixDst(ipv4Prefix), str: `"127.0.0.0/8"`},
-		{matcher: MatchIPv4RangeSrc(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
-		{matcher: MatchIPv4RangeDst(ipv4Range), str: `"127.0.0.1-127.0.0.2"`},
+		{matcher: MatchIPv4PrefixSrc{ipv4Prefix}, str: `"127.0.0.0/8"`},
+		{matcher: MatchIPv4PrefixDst{ipv4Prefix}, str: `"127.0.0.0/8"`},
+		{matcher: MatchIPv4RangeSrc{ipv4Range}, str: `"127.0.0.1-127.0.0.2"`},
+		{matcher: MatchIPv4RangeDst{ipv4Range}, str: `"127.0.0.1-127.0.0.2"`},
 
 		// Port
-		{matcher: MatchPortRangeSrc(portRage), str: `"80:81"`},
-		{matcher: MatchPortRangeDst(portRage), str: `"80:81"`},
-		{matcher: MatchMultiPortSrc(mulitPort), str: `"80,81"`},
-		{matcher: MatchMultiPortDst(mulitPort), str: `"80,81"`},
+		{matcher: MatchPortRangeSrc{portRage}, str: `"80:81"`},
+		{matcher: MatchPortRangeDst{portRage}, str: `"80:81"`},
+		{matcher: MatchMultiPortSrc{mulitPort}, str: `"80,81"`},
+		{matcher: MatchMultiPortDst{mulitPort}, str: `"80,81"`},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.matcher.MatchType().String(), func(t *testing.T) {
-			ser, ok := matchTypeToSerializer[tc.matcher.MatchType()]
-			if !assert.True(t, ok, "no such match type serializer") {
-				return
-			}
-
-			data, err := ser.marshaler(tc.matcher)
+			data, err := json.Marshal(tc.matcher)
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -56,7 +52,6 @@ var (
 	synData = []byte{106, 16, 233, 55, 99, 172, 10, 20, 138, 88, 14, 20, 8, 0, 69, 0, 0, 60, 246, 122, 64, 0, 64, 6, 190, 29, 172, 16, 23, 2, 172, 16, 23, 1, 203, 30, 4, 0, 128, 116, 92, 195, 0, 0, 0, 0, 160, 2, 250, 240, 134, 82, 0, 0, 71, 69, 84, 32, 47, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10, 72, 111, 115, 116}
 	sip     = netaddr.NewIPv4AddrFromIP(net.ParseIP("172.16.23.2"))
 	dip     = netaddr.NewIPv4AddrFromIP(net.ParseIP("172.16.23.1"))
-	sport   = uint16(51998)
 	dport   = uint16(1024)
 )
 
@@ -74,15 +69,13 @@ func BenchmarkMatch(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	sip := netaddr.NewIPv4AddrFromIP(net.ParseIP("172.16.23.2"))
-
 	benchCases := []struct {
 		matcher Matcher
 	}{
-		{MatchIPv4PrefixSrc{sip, 32}},
-		{MatchIPv4RangeSrc{sip, sip + 100}},
-		{MatchMultiPortDst(topPorts[:])},
-		{MatchPortRangeDst{1, 1024}},
+		{MatchIPv4PrefixSrc{netaddr.IPv4Prefix{Addr: sip, PrefixLen: 32}}},
+		{MatchIPv4RangeDst{netaddr.IPv4Range{Start: dip, End: dip}}},
+		{MatchMultiPortDst{netaddr.MultiPort(topPorts[:])}},
+		{MatchPortRangeDst{netaddr.PortRange{Start: dport, End: dport}}},
 	}
 
 	for _, bc := range benchCases {

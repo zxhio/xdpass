@@ -1,9 +1,9 @@
 package api
 
 import (
-	"slices"
+	"encoding/json"
+	"io"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -33,18 +33,23 @@ func (h *RuleHandler) QueryRule(c *gin.Context) {
 }
 
 func (h RuleHandler) QueryRules(c *gin.Context) {
-	queryPage := NewPageFromRequest(c.Request)
+	var r rule.Rule
 
-	matchTypes := []rule.MatchType{}
-	protos := rule.GetProtocolMatchTypes()
-	idx := slices.IndexFunc(protos, func(mt rule.MatchType) bool {
-		return strings.EqualFold(mt.String(), c.Request.URL.Query().Get("proto"))
-	})
-	if idx != -1 {
-		matchTypes = append(matchTypes, protos[idx])
+	data, err := io.ReadAll(c.Request.Body)
+	if err != nil && err != io.EOF {
+		Error(c, ErrorCodeInvalid, err)
+		return
+	}
+	if len(data) != 0 {
+		err = json.Unmarshal(data, &r)
+		if err != nil {
+			Error(c, ErrorCodeInvalid, err)
+			return
+		}
 	}
 
-	rules, total, err := h.service.QueryRules(matchTypes, queryPage.Page, queryPage.Limit)
+	queryPage := NewPageFromRequest(c.Request)
+	rules, total, err := h.service.QueryRules(r.Matchers, r.Target, queryPage.Page, queryPage.Limit)
 	if err != nil {
 		Error(c, ErrorCodeInvalid, err)
 		return
@@ -75,7 +80,7 @@ func (h RuleHandler) AddRule(c *gin.Context) {
 	Success(c, ruleID)
 }
 
-func (h RuleHandler) DeletePacetRule(c *gin.Context) {
+func (h RuleHandler) DeletePacketRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
 		Error(c, ErrorCodeInvalid, err)

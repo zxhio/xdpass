@@ -86,27 +86,27 @@ var ruleCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// L3
 		if F.SrcIPv4Prefix.Compare(netaddr.IPv4Prefix{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixSrc(F.SrcIPv4Prefix))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixSrc{IPv4Prefix: F.SrcIPv4Prefix})
 		} else if F.SrcIPv4Range.Compare(netaddr.IPv4Range{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeSrc(F.SrcIPv4Range))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeSrc{IPv4Range: F.SrcIPv4Range})
 		}
 
 		if F.DstIPv4Prefix.Compare(netaddr.IPv4Prefix{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixDst(F.DstIPv4Prefix))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4PrefixDst{IPv4Prefix: F.DstIPv4Prefix})
 		} else if F.DstIPv4Range.Compare(netaddr.IPv4Range{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeDst(F.DstIPv4Range))
+			R.Matchers = append(R.Matchers, rule.MatchIPv4RangeDst{IPv4Range: F.DstIPv4Range})
 		}
 
 		if F.SrcPortRange.Compare(netaddr.PortRange{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchPortRangeSrc(F.SrcPortRange))
+			R.Matchers = append(R.Matchers, rule.MatchPortRangeSrc{PortRange: F.SrcPortRange})
 		} else if F.SrcMultiPort.Compare(netaddr.MultiPort{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchMultiPortSrc(F.SrcMultiPort))
+			R.Matchers = append(R.Matchers, rule.MatchMultiPortSrc{MultiPort: F.SrcMultiPort})
 		}
 
 		if F.DstPortRange.Compare(netaddr.PortRange{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchPortRangeDst(F.DstPortRange))
+			R.Matchers = append(R.Matchers, rule.MatchPortRangeDst{PortRange: F.DstPortRange})
 		} else if F.DstMultiPort.Compare(netaddr.MultiPort{}) != 0 {
-			R.Matchers = append(R.Matchers, rule.MatchMultiPortDst(F.DstMultiPort))
+			R.Matchers = append(R.Matchers, rule.MatchMultiPortDst{MultiPort: F.DstMultiPort})
 		}
 
 		// Mirror
@@ -269,8 +269,8 @@ func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 func Export(parent *cobra.Command) {
 	// operation commands
 	// each command MUST include these operations.
-	setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
-	setOpCommands(ruleCmd)
+	// setOpCommandsWithoutID(arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
+	setOpCommands(ruleCmd, arpCmd, tcpCmd, udpCmd, icmpCmd, httpCmd)
 
 	parent.AddGroup(&group)
 
