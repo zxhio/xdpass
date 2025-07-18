@@ -94,6 +94,8 @@ func (s *AttachmentService) DeleteAttachment(name string) error {
 	if idx == -1 {
 		return fmt.Errorf("no such attachment: %s", name)
 	}
+	s.deleteAttachmentIP(s.attachments[idx])
+
 	s.attachments[idx].Close()
 	s.attachments = slices.Delete(s.attachments, idx, idx+1)
 
@@ -201,6 +203,24 @@ func (s *AttachmentService) DeleteIP(ip *model.IP) error {
 	default:
 		return fmt.Errorf("unknown action: %s", ip.Action)
 	}
+}
+
+func (s *AttachmentService) deleteAttachmentIP(a *Attachment) error {
+	del := func(ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) {
+		sls, ok := ips[a.Name]
+		if !ok {
+			return
+		}
+
+		for _, ip := range sls {
+			trie.Delete(xdpprog.NewIPLpmKey(ip))
+		}
+		delete(ips, a.Name)
+	}
+
+	del(s.passIPs, a.PassLpmTrie)
+	del(s.redirectIPs, a.RedirectLpmTrie)
+	return nil
 }
 
 func (s *AttachmentService) deleteIP(ip *model.IP, ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) error {
