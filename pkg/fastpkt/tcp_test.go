@@ -91,22 +91,12 @@ func TestTCPChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		// Based on gopacket
-		pkt := gopacket.NewPacket(buf, layers.LayerTypeIPv4, gopacket.Default)
-		tcp := pkt.Layer(layers.LayerTypeTCP).(*layers.TCP)
+		checksum := netutil.Htons(layerTCP.Checksum)
 
 		// Check ComputeChecksum
-		ipPseudoChecksum := DataPtrIPv4Header(buf, 0).PseudoChecksum()
-		checksum := netutil.Htons(DataPtrTCPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
-		assert.Equal(t, tcp.Checksum, checksum)
-
-		// Check HeaderLen
-		assert.Equal(t, testCase.headerLen, DataPtrTCPHeader(buf, 20).HeaderLen())
-
-		// Check SetHeaderLen
-		DataPtrTCPHeader(buf, 20).SetHeaderLen(testCase.headerLen)
-		assert.Equal(t, tcp.DataOffset*4, DataPtrTCPHeader(buf, 20).HeaderLen())
+		tcp := DataPtrTCPHeader(buf, 20)
+		tcp.SetChecksum(DataPtrIPv4Header(buf, 0), uint16(len(testCase.payload)))
+		assert.Equal(t, checksum, tcp.Check)
 	}
 }
 

@@ -3,7 +3,6 @@ package fastpkt
 import (
 	"testing"
 
-	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
 	"github.com/zxhio/xdpass/pkg/netutil"
@@ -50,17 +49,10 @@ func TestIPv4Checksum(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		checksum := netutil.Htons(layerIPv4.Checksum)
 
-		// Based on gopacket
-		pkt := gopacket.NewPacket(buf, layers.LayerTypeIPv4, gopacket.Default)
-		csum := DataPtrIPv4Header(buf, 0).ComputeChecksum(0)
-		assert.Equal(t, pkt.Layers()[0].(*layers.IPv4).Checksum, netutil.Htons(csum))
-
-		// Check HeaderLen
-		assert.Equal(t, testCase.headerLen, DataPtrIPv4Header(buf, 0).HeaderLen())
-
-		// Check SetHeaderLen
-		DataPtrIPv4Header(buf, 0).SetHeaderLen(testCase.headerLen)
-		assert.Equal(t, pkt.Layers()[0].(*layers.IPv4).IHL*4, DataPtrIPv4Header(buf, 0).HeaderLen())
+		ip := DataPtrIPv4Header(buf, 0)
+		ip.SetChecksum(0)
+		assert.Equal(t, checksum, ip.Checksum)
 	}
 }

@@ -64,16 +64,12 @@ func (tcp *TCPHeader) SetHeaderLen(headerLen uint8) {
 	tcp.DataOff = ((headerLen / 4) << 4) | (tcp.DataOff & 0x0f)
 }
 
-func (tcp *TCPHeader) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
-	tcpAndPayloadLen := uint16(tcp.HeaderLen()) + payloadLen
-	data := unsafe.Slice((*byte)(unsafe.Pointer(tcp)), tcpAndPayloadLen)
-
-	ipPseudoChecksum += unix.IPPROTO_TCP
-	ipPseudoChecksum += uint32(tcpAndPayloadLen) & 0xffff
-	ipPseudoChecksum += uint32(tcpAndPayloadLen) >> 16
+func (tcp *TCPHeader) SetChecksum(ipv4 *IPv4Header, payloadLen uint16) {
+	ipPayloadLen := uint16(tcp.HeaderLen()) + uint16(payloadLen)
+	ipPseudoChecksum := ipv4.PseudoChecksum(unix.IPPROTO_TCP, ipPayloadLen)
+	data := unsafe.Slice((*byte)(unsafe.Pointer(tcp)), ipPayloadLen)
 	tcp.Check = 0
 	tcp.Check = netutil.Htons(tcpipChecksum(data, ipPseudoChecksum))
-	return tcp.Check
 }
 
 func tcpipChecksum(data []byte, csum uint32) uint16 {

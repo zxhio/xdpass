@@ -50,14 +50,13 @@ func (ip *IPv4Header) SetHeaderLen(headerLen uint8) {
 }
 
 // ComputeChecksum must be called after the header is filled
-func (ip *IPv4Header) ComputeChecksum(l3PayloadLen uint16) uint16 {
+func (ip *IPv4Header) SetChecksum(l3PayloadLen uint16) {
 	off := ip.HeaderLen()
 	data := unsafe.Slice((*byte)(unsafe.Pointer(ip)), off)
 
 	ip.Len = netutil.Htons(uint16(off) + l3PayloadLen)
 	ip.Checksum = 0
 	ip.Checksum = netutil.Htons(checksum(data[:off]))
-	return ip.Checksum
 }
 
 func checksum(bytes []byte) uint16 {
@@ -84,14 +83,19 @@ func checksum(bytes []byte) uint16 {
 }
 
 // PseudoChecksum is the checksum of the pseudo header
-func (ip *IPv4Header) PseudoChecksum() uint32 {
+func (ip *IPv4Header) PseudoChecksum(ipProtocol uint16, ipPayloadLen uint16) uint32 {
 	saddr := (*[4]byte)(unsafe.Pointer(&ip.SrcIP))
 	daddr := (*[4]byte)(unsafe.Pointer(&ip.DstIP))
 
-	csum := uint32((saddr[0] + saddr[2])) << 8
-	csum += uint32(saddr[1] + saddr[3])
-	csum += uint32((daddr[0] + daddr[2])) << 8
-	csum += uint32(daddr[1] + daddr[3])
+	csum := (uint32(saddr[0]) + uint32(saddr[2])) << 8
+	csum += uint32(saddr[1]) + uint32(saddr[3])
+	csum += (uint32(daddr[0]) + uint32(daddr[2])) << 8
+	csum += uint32(daddr[1]) + uint32(daddr[3])
+
+	csum += uint32(ipProtocol)
+	csum += uint32(ipPayloadLen) & 0xffff
+	csum += uint32(ipPayloadLen) >> 16
+
 	return csum
 }
 

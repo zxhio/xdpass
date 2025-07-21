@@ -34,11 +34,10 @@ func TestUDPChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("serialize: %v", err)
 		}
+		checksum := netutil.Htons(layerUDP.Checksum)
 
-		ipPseudoChecksum := DataPtrIPv4Header(buf, 0).PseudoChecksum()
-		checksum := netutil.Htons(DataPtrUDPHeader(buf, 20).ComputeChecksum(ipPseudoChecksum, uint16(len(testCase.payload))))
-
-		pkt := gopacket.NewPacket(buf, layers.LayerTypeIPv4, gopacket.Default)
-		assert.Equal(t, pkt.Layers()[1].(*layers.UDP).Checksum, checksum)
+		udp := DataPtrUDPHeader(buf, 20)
+		udp.SetChecksum(DataPtrIPv4Header(buf, 0), uint16(len(testCase.payload)))
+		assert.Equal(t, checksum, udp.Check)
 	}
 }

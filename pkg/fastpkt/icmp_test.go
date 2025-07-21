@@ -25,9 +25,10 @@ func TestICMPChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("serialize: %v", err)
 		}
+		checksum := netutil.Htons(layerICMPv4.Checksum)
 
-		pkt := gopacket.NewPacket(buf, layers.LayerTypeICMPv4, gopacket.Default)
-		csum := DataPtrICMPHeader(buf, 0).ComputeChecksum(uint16(len(testCase.payload)))
-		assert.Equal(t, pkt.Layers()[0].(*layers.ICMPv4).Checksum, netutil.Htons(csum))
+		icmp := DataPtrICMPHeader(buf, 0)
+		icmp.SetChecksum(uint16(len(testCase.payload)))
+		assert.Equal(t, checksum, icmp.Checksum)
 	}
 }

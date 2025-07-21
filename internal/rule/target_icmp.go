@@ -56,7 +56,7 @@ func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	txICMP.Code = 0
 	txICMP.ID = rxICMP.ID
 	txICMP.Seq = rxICMP.Seq
-	txICMP.ComputeChecksum(txPayloadLen)
+	txICMP.SetChecksum(txPayloadLen)
 
 	// L3
 	txIPv4 := buf.AllocIPv4Header()
@@ -68,7 +68,7 @@ func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	txIPv4.Protocol = rxIPv4.Protocol
 	txIPv4.SrcIP = rxIPv4.DstIP
 	txIPv4.DstIP = rxIPv4.SrcIP
-	txIPv4.ComputeChecksum(uint16(fastpkt.SizeofICMP) + txPayloadLen)
+	txIPv4.SetChecksum(uint16(fastpkt.SizeofICMP) + txPayloadLen)
 
 	// L2 VLAN
 	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {

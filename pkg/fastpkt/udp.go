@@ -23,15 +23,10 @@ type UDPHeader struct {
 	Check   uint16
 }
 
-func (udp *UDPHeader) ComputeChecksum(ipPseudoChecksum uint32, payloadLen uint16) uint16 {
-	udpAndPayloadLen := udp.Length + payloadLen
-	data := unsafe.Slice((*byte)(unsafe.Pointer(udp)), udpAndPayloadLen)
-
-	ipPseudoChecksum += unix.IPPROTO_UDP
-	ipPseudoChecksum += uint32(udpAndPayloadLen) & 0xffff
-	ipPseudoChecksum += uint32(udpAndPayloadLen) >> 16
-
+func (udp *UDPHeader) SetChecksum(ipv4 *IPv4Header, payloadLen uint16) {
+	ipPayloadLen := uint16(SizeofUDP) + payloadLen
+	ipPseudoChecksum := ipv4.PseudoChecksum(unix.IPPROTO_UDP, ipPayloadLen)
+	data := unsafe.Slice((*byte)(unsafe.Pointer(udp)), ipPayloadLen)
 	udp.Check = 0
 	udp.Check = netutil.Htons(tcpipChecksum(data, ipPseudoChecksum))
-	return udp.Check
 }

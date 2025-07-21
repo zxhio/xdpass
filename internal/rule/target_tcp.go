@@ -93,8 +93,8 @@ func makeTCPDataWithFlags(pkt *fastpkt.Packet, flags fastpkt.TCPFlags) {
 	txTCP.SetHeaderLen(uint8(fastpkt.SizeofTCP))
 	txTCP.Flags.Clear(fastpkt.TCPFlagsMask)
 	txTCP.Flags.Set(flags)
-	txTCP.Window = rxTCP.Window
-	txTCP.Check = rxTCP.Check
+	txTCP.Window = 0
+	txTCP.Check = 0
 
 	makeL23DataUnderTCP(pkt, &buf, txTCP, 0)
 
@@ -117,8 +117,8 @@ func makeL23DataUnderTCP(pkt *fastpkt.Packet, buf *fastpkt.Buffer, txTCP *fastpk
 	txIPv4.Protocol = rxIPv4.Protocol
 	txIPv4.SrcIP = rxIPv4.DstIP
 	txIPv4.DstIP = rxIPv4.SrcIP
-	txIPv4.ComputeChecksum(uint16(fastpkt.SizeofTCP) + uint16(l7Len))
-	txTCP.ComputeChecksum(txIPv4.PseudoChecksum(), uint16(l7Len))
+	txIPv4.SetChecksum(uint16(txTCP.HeaderLen()) + uint16(l7Len))
+	txTCP.SetChecksum(txIPv4, uint16(l7Len))
 
 	// L2 VLAN
 	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
