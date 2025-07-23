@@ -41,9 +41,9 @@ func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 		buf     = fastpkt.NewBuildBuffer(pkt.TxData)
 	)
 
-	// if rxICMP.Type != ICMPv4TypeEchoRequest {
-	// 	return true, nil
-	// }
+	if rxICMP.Type != ICMPv4TypeEchoRequest {
+		return nil
+	}
 
 	// Payload
 	txPayloadLen := netutil.Ntohs(rxIPv4.Len) - uint16(rxIPv4.HeaderLen()) - uint16(fastpkt.SizeofICMP)

@@ -51,9 +51,9 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	)
 
 	// // TODO: support IPv6
-	// if netaddr.Ntohs(rxARP.Operation) != ARPOperationRequest || rxARP.ProtAddrLen != 4 {
-	// 	return nil
-	// }
+	if netutil.Ntohs(rxARP.Operation) != ARPOperationRequest || rxARP.ProtAddrLen != 4 {
+		return nil
+	}
 
 	// L3
 	txPayload := buf.AllocPayload(int(rxARP.HwAddrLen*2 + rxARP.ProtAddrLen*2))
