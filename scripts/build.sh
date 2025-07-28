@@ -28,4 +28,5 @@ go build -ldflags "-X github.com/zxhio/xdpass/pkg/builder.Version=$VERSION \
 go build -ldflags "-X github.com/zxhio/xdpass/pkg/builder.Version=$VERSION \
     -X github.com/zxhio/xdpass/pkg/builder.Commit=$COMMIT \
     -X github.com/zxhio/xdpass/pkg/builder.Date=$DATE" \
+    -pgo=$ROOT_DIR/scripts/xdpassd.cpu.pprof \
     -o $BUILD_DIR/xdpassd $ROOT_DIR/cmd/xdpassd/main.go
