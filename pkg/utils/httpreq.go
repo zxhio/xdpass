@@ -1,9 +1,7 @@
 package utils
 
 import (
-	"bytes"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -109,18 +107,7 @@ func NewHTTPRequest(uri string, opts ...reqOpt) (*http.Response, error) {
 		return nil, fmt.Errorf("empty api address")
 	}
 
-	resp, err := newHTTPReq(uri, &o)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		b := bytes.NewBuffer(nil)
-		io.Copy(b, resp.Body)
-		return nil, errors.New(b.String())
-	}
-
-	return resp, nil
+	return newHTTPReq(uri, &o)
 }
 
 func newHTTPReq(reqURI string, opts *reqOpts) (*http.Response, error) {

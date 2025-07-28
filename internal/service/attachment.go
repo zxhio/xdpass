@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"github.com/zxhio/xdpass/internal/errcode"
 	"github.com/zxhio/xdpass/internal/model"
 	"github.com/zxhio/xdpass/internal/xdpprog"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
@@ -69,12 +70,12 @@ func (s *AttachmentService) AddAttachment(a *model.Attachment, forceZeroCopy, fo
 
 	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.Name == a.Name })
 	if idx != -1 {
-		return fmt.Errorf("exist attachment: %s", a.Name)
+		return errcode.New(errcode.CodeExist, "attachment: %s", a.Name)
 	}
 
 	attachment, err := NewAttachment(a, s.handler, opts...)
 	if err != nil {
-		return err
+		return errcode.NewError(errcode.CodeInternal, err)
 	}
 	s.attachments = append(s.attachments, attachment)
 
@@ -92,7 +93,7 @@ func (s *AttachmentService) DeleteAttachment(name string) error {
 
 	idx := slices.IndexFunc(s.attachments, func(att *Attachment) bool { return att.Name == name })
 	if idx == -1 {
-		return fmt.Errorf("no such attachment: %s", name)
+		return errcode.New(errcode.CodeNotExist, "attachment: %s", name)
 	}
 	s.deleteAttachmentIP(s.attachments[idx])
 
@@ -109,7 +110,7 @@ func (s *AttachmentService) QueryAttachment(name string) (*model.Attachment, err
 
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == name })
 	if idx == -1 {
-		return nil, fmt.Errorf("no such attachment: %s", name)
+		return nil, errcode.New(errcode.CodeNotExist, "attachment: %s", name)
 	}
 	return s.attachments[idx].Attachment, nil
 }
@@ -133,7 +134,7 @@ func (s *AttachmentService) QueryAttachmentStats(name string) ([]model.Attachmen
 
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == name })
 	if idx == -1 {
-		return nil, fmt.Errorf("no such attachment: %s", name)
+		return nil, errcode.New(errcode.CodeNotExist, "attachment: %s", name)
 	}
 	return s.attachments[idx].GetAllQueueStats(), nil
 }
@@ -156,7 +157,7 @@ func (s *AttachmentService) addIP(ip *model.IP) error {
 
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
 	if idx == -1 {
-		return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
+		return errcode.New(errcode.CodeNotExist, "attachment: %s", ip.AttachmentName)
 	}
 	att := s.attachments[idx]
 
@@ -166,17 +167,17 @@ func (s *AttachmentService) addIP(ip *model.IP) error {
 	case model.XDPActionRedirect:
 		return s.checkIPAndAdd(ip, s.redirectIPs, att.Objects.RedirectLpmTrie)
 	default:
-		return fmt.Errorf("unknown action: %s", ip.Action)
+		return errcode.New(errcode.CodeInvalid, "action: %s", ip.Action)
 	}
 }
 
 func (s *AttachmentService) checkIPAndAdd(ip *model.IP, ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) error {
 	if slices.Contains(ips[ip.AttachmentName], ip.IP) {
-		return fmt.Errorf("ip aleady exist")
+		return errcode.New(errcode.CodeExist, "ip: %s", ip.IP)
 	}
 	err := trie.Update(xdpprog.NewIPLpmKey(ip.IP), uint8(0), 0)
 	if err != nil {
-		return err
+		return errcode.NewError(errcode.CodeInternal, err)
 	}
 	ips[ip.AttachmentName] = append(ips[ip.AttachmentName], ip.IP)
 	logrus.WithFields(logrus.Fields{"name": ip.AttachmentName, "action": ip.Action, "ip": ip.IP}).Info("Added ip to attachment")
@@ -192,7 +193,7 @@ func (s *AttachmentService) DeleteIP(ip *model.IP) error {
 
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == ip.AttachmentName })
 	if idx == -1 {
-		return fmt.Errorf("no such attachment: %s", ip.AttachmentName)
+		return errcode.New(errcode.CodeNotExist, "attachment: %s", ip.AttachmentName)
 	}
 
 	switch ip.Action {
@@ -201,7 +202,7 @@ func (s *AttachmentService) DeleteIP(ip *model.IP) error {
 	case model.XDPActionRedirect:
 		return s.deleteIP(ip, s.redirectIPs, s.attachments[idx].RedirectLpmTrie)
 	default:
-		return fmt.Errorf("unknown action: %s", ip.Action)
+		return errcode.New(errcode.CodeInvalid, "action: %s", ip.Action)
 	}
 }
 
@@ -226,7 +227,7 @@ func (s *AttachmentService) deleteAttachmentIP(a *Attachment) error {
 func (s *AttachmentService) deleteIP(ip *model.IP, ips map[string][]netaddr.IPv4Prefix, trie *ebpf.Map) error {
 	err := trie.Delete(xdpprog.NewIPLpmKey(ip.IP))
 	if err != nil {
-		return err
+		return errcode.NewError(errcode.CodeInternal, err)
 	}
 	idx := slices.Index(ips[ip.AttachmentName], ip.IP)
 	if idx != -1 {
@@ -242,7 +243,7 @@ func (s *AttachmentService) QueryIP(attachmentName string, action model.XDPActio
 
 	idx := slices.IndexFunc(s.attachments, func(a *Attachment) bool { return a.Name == attachmentName })
 	if idx == -1 {
-		return nil, 0, fmt.Errorf("no such attachment: %s", attachmentName)
+		return nil, 0, errcode.New(errcode.CodeNotExist, "attachment: %s", attachmentName)
 	}
 
 	switch action {
@@ -251,7 +252,7 @@ func (s *AttachmentService) QueryIP(attachmentName string, action model.XDPActio
 	case model.XDPActionRedirect:
 		return s.queryIP(s.redirectIPs[attachmentName], attachmentName, action, page, limit)
 	default:
-		return nil, 0, fmt.Errorf("unknown action: %s", action)
+		return nil, 0, errcode.New(errcode.CodeInvalid, "action: %s", action)
 	}
 }
 

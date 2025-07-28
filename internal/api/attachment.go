@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
+	"github.com/zxhio/xdpass/internal/errcode"
 	"github.com/zxhio/xdpass/internal/model"
 	"github.com/zxhio/xdpass/internal/service"
 	"github.com/zxhio/xdpass/pkg/netutil"
@@ -43,7 +43,7 @@ type AttachmentHandler struct {
 func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 	var req AddAttachmentReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 		req.NoNeedWakeup,
 	)
 	if err != nil {
-		Error(c, ErrorCodeInternal, err)
+		Error(c, err)
 	} else {
 		Success(c, AddAttachmentResp{})
 	}
@@ -69,7 +69,7 @@ func (h *AttachmentHandler) AddAttachment(c *gin.Context) {
 func (h *AttachmentHandler) DeleteAttachment(c *gin.Context) {
 	err := h.service.DeleteAttachment(c.Param("name"))
 	if err != nil {
-		Error(c, ErrorCodeInternal, err)
+		Error(c, err)
 	} else {
 		Success(c, AddAttachmentResp{})
 	}
@@ -82,7 +82,7 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 	if name != "" {
 		attachment, err := h.service.QueryAttachment(name)
 		if err != nil {
-			Error(c, ErrorCodeInternal, err)
+			Error(c, err)
 			return
 		}
 		resp.Data = append(resp.Data, AttachmentInfo{
@@ -97,7 +97,7 @@ func (h *AttachmentHandler) QueryAttachment(c *gin.Context) {
 		p := NewPageFromRequest(c.Request)
 		attachments, total, err := h.service.QueryAttachments(p.Page, p.Limit)
 		if err != nil {
-			Error(c, ErrorCodeInternal, err)
+			Error(c, err)
 			return
 		}
 		resp.Total = total
@@ -130,7 +130,7 @@ func (h *AttachmentHandler) QueryAttchmentStats(c *gin.Context) {
 
 	stats, err := h.service.QueryAttachmentStats(name)
 	if err != nil {
-		Error(c, ErrorCodeInternal, err)
+		Error(c, err)
 		return
 	}
 

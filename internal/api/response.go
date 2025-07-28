@@ -8,53 +8,30 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zxhio/xdpass/internal/errcode"
 )
-
-type ErrorCode int
-
-const (
-	ErrorCodeOk       ErrorCode = 200
-	ErrorCodeInternal ErrorCode = 1001
-	ErrorCodeInvalid  ErrorCode = 1002
-)
-
-var err2msg = map[ErrorCode]string{
-	ErrorCodeOk:       "success",
-	ErrorCodeInternal: "internal error",
-	ErrorCodeInvalid:  "invalid argument",
-}
-
-func (c ErrorCode) String() string {
-	msg, ok := err2msg[c]
-	if ok {
-		return msg
-	}
-	return fmt.Sprintf("unknown error(%d)", c)
-}
 
 type Response struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
-	Data    any       `json:"data"`
+	Code    errcode.Code `json:"code"`
+	Message string       `json:"message"`
+	Data    any          `json:"data"`
 }
 
-func Error(c *gin.Context, code ErrorCode, err error) {
-	var msg string
-	if err != nil {
-		msg = fmt.Sprintf("%s: %s", code.String(), err)
-	} else {
-		msg = code.String()
+func Error(c *gin.Context, err error) {
+	ec, ok := err.(errcode.ErrorCode)
+	if !ok {
+		ec = errcode.NewError(errcode.CodeInternal, err)
 	}
 	c.JSON(500, Response{
-		Code:    code,
-		Message: msg,
+		Code:    ec.Code(),
+		Message: ec.Message(),
 	})
 }
 
 func Success(c *gin.Context, v any) {
 	c.JSON(http.StatusOK, Response{
-		Code:    ErrorCodeOk,
-		Message: ErrorCodeOk.String(),
+		Code:    errcode.CodeSuccess,
+		Message: errcode.CodeSuccess.String(),
 		Data:    v,
 	})
 }
@@ -68,7 +45,7 @@ func GetBodyData[T any](data []byte) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp.Code != ErrorCodeOk {
+	if resp.Code != errcode.CodeSuccess {
 		return nil, fmt.Errorf(resp.Message)
 	}
 

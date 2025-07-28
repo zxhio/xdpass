@@ -4,7 +4,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/zxhio/xdpass/internal/errcode"
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
 	"github.com/zxhio/xdpass/pkg/utils"
@@ -33,7 +33,7 @@ func (s *RuleService) QueryRule(ruleID int) (*rule.Rule, error) {
 
 	idx := slices.IndexFunc(s.rules, ruleIDMatcher(ruleID))
 	if idx == -1 {
-		return nil, errors.Errorf("no such rule id: %d", ruleID)
+		return nil, errcode.New(errcode.CodeNotExist, "rule id: %d", ruleID)
 	}
 	return s.rules[idx], nil
 }
@@ -61,7 +61,7 @@ func (s *RuleService) QueryRules(matchers []rule.Matcher, target rule.Target, pa
 func (s *RuleService) AddRule(r *rule.Rule) (int, error) {
 	err := r.Target.Open()
 	if err != nil {
-		return 0, err
+		return 0, errcode.NewError(errcode.CodeInternal, err)
 	}
 
 	s.mu.Lock()
@@ -85,7 +85,7 @@ func (s *RuleService) DeleteRule(id int) error {
 
 	idx := slices.IndexFunc(s.rules, ruleIDMatcher(id))
 	if idx == -1 {
-		return errors.Errorf("no such rule id: %d", id)
+		return errcode.New(errcode.CodeNotExist, "rule id: %d", id)
 	}
 	s.rules[idx].Target.Close()
 

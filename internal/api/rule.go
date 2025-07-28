@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
+	"github.com/zxhio/xdpass/internal/errcode"
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/internal/service"
 )
@@ -20,16 +20,16 @@ type RuleHandler struct {
 func (h *RuleHandler) QueryRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
 	rule, err := h.service.QueryRule(ruleID)
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
-		return
+		Error(c, err)
+	} else {
+		Success(c, rule)
 	}
-	Success(c, rule)
 }
 
 func (h RuleHandler) QueryRules(c *gin.Context) {
@@ -37,13 +37,13 @@ func (h RuleHandler) QueryRules(c *gin.Context) {
 
 	data, err := io.ReadAll(c.Request.Body)
 	if err != nil && err != io.EOF {
-		Error(c, ErrorCodeInvalid, err)
+		Error(c, errcode.NewError(errcode.CodeInternal, err))
 		return
 	}
 	if len(data) != 0 {
 		err = json.Unmarshal(data, &r)
 		if err != nil {
-			Error(c, ErrorCodeInvalid, err)
+			Error(c, errcode.NewError(errcode.CodeInvalid, err))
 			return
 		}
 	}
@@ -51,7 +51,7 @@ func (h RuleHandler) QueryRules(c *gin.Context) {
 	queryPage := NewPageFromRequest(c.Request)
 	rules, total, err := h.service.QueryRules(r.Matchers, r.Target, queryPage.Page, queryPage.Limit)
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
+		Error(c, err)
 		return
 	}
 	resp := QueryRulesResp{
@@ -68,29 +68,29 @@ func (h RuleHandler) QueryRules(c *gin.Context) {
 func (h RuleHandler) AddRule(c *gin.Context) {
 	var rule rule.Rule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
 	ruleID, err := h.service.AddRule(&rule)
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
-		return
+		Error(c, err)
+	} else {
+		Success(c, ruleID)
 	}
-	Success(c, ruleID)
 }
 
 func (h RuleHandler) DeletePacketRule(c *gin.Context) {
 	ruleID, err := strconv.Atoi(c.Param("rule_id"))
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
 	err = h.service.DeleteRule(ruleID)
 	if err != nil {
-		Error(c, ErrorCodeInvalid, err)
-		return
+		Error(c, err)
+	} else {
+		Success(c, ruleID)
 	}
-	Success(c, ruleID)
 }

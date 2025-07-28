@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
+	"github.com/zxhio/xdpass/internal/errcode"
 	"github.com/zxhio/xdpass/internal/model"
 	"github.com/zxhio/xdpass/internal/service"
 	"github.com/zxhio/xdpass/pkg/netaddr"
@@ -47,7 +47,7 @@ func (h *IPHandler) QueryIP(c *gin.Context) {
 
 	ips, total, err := h.service.QueryIP(attachmentID, action, p.Page, p.Limit)
 	if err != nil {
-		Error(c, ErrorCodeInternal, errors.Wrap(err, "Query IP"))
+		Error(c, err)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *IPHandler) QueryIP(c *gin.Context) {
 func (h *IPHandler) AddIP(c *gin.Context) {
 	var req AddIPReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *IPHandler) AddIP(c *gin.Context) {
 	}
 
 	if err := h.service.AddIP(ips); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "Add IP"))
+		Error(c, err)
 		return
 	}
 	Success(c, AddIPResp{})
@@ -107,7 +107,7 @@ func (h *IPHandler) AddIP(c *gin.Context) {
 func (h *IPHandler) DeleteIP(c *gin.Context) {
 	var req DeleteIPReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "json.Unmarshal"))
+		Error(c, errcode.NewError(errcode.CodeInvalid, err))
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *IPHandler) DeleteIP(c *gin.Context) {
 	}
 
 	if err := h.service.DeleteIP(&ip); err != nil {
-		Error(c, ErrorCodeInvalid, errors.Wrap(err, "Delete IP"))
+		Error(c, err)
 		return
 	}
 	Success(c, DeleteIPResp{})
