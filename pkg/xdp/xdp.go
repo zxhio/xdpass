@@ -193,30 +193,69 @@ func (x *XDPSocket) Stats() netutil.Statistics {
 	return x.stats
 }
 
-// Peek at RX non-blockingly and copy data to vec
-// Return iovec read count
-func (x *XDPSocket) Readv(iovs [][]byte) uint32 {
-	x.stuffFillQ()
+func (x *XDPSocket) HandlePackets(handler func([]byte) []byte) {
+	var (
+		rxIdx uint32
+		fqIdx uint32
+	)
 
-	var idx uint32
-	n := x.rx.Peek(uint32(len(iovs)), &idx)
-	if n == 0 {
-		return 0
+	rcvd := x.rx.Peek(64, &rxIdx)
+	if rcvd == 0 {
+		return
 	}
 
-	x.stats.RxIOs++
-	for i := range n {
-		desc := x.rx.GetDesc(idx + i)
-		copy(iovs[i][:desc.Len], x.umem.GetData(desc))
-		iovs[i] = iovs[i][:desc.Len]
-		x.umem.FreeFrame(desc.Addr)
+	frames := x.umem.Fill.GetFreeNum(x.umem.GetFrameFreeNum())
+	if frames > 0 {
+		ret := x.umem.Fill.Reserve(frames, &fqIdx)
+		for ret != frames {
+			x.umem.Fill.Reserve(rcvd, &fqIdx)
+		}
 
-		x.stats.RxPackets++
+		for i := range frames {
+			*x.umem.Fill.GetAddr(fqIdx + i) = x.umem.AllocFrame()
+		}
+		x.umem.Fill.Submit(frames)
+	}
+
+	for i := range rcvd {
+		desc := x.rx.GetDesc(rxIdx + i)
+		if !x.handlePacket(desc, handler) {
+			x.umem.FreeFrame(desc.Addr)
+		}
 		x.stats.RxBytes += uint64(desc.Len)
 	}
-	x.rx.Release(n)
 
-	return n
+	x.rx.Release(rcvd)
+	x.stats.RxPackets += uint64(rcvd)
+	x.stats.RxIOs++
+
+	x.complete()
+}
+
+func (x *XDPSocket) handlePacket(desc *unix.XDPDesc, fn func([]byte) []byte) bool {
+	data := x.umem.GetData(desc)
+	txData := fn(data)
+	if len(txData) == 0 {
+		return false
+	}
+
+	var idx uint32
+	if x.tx.Reserve(1, &idx) == 0 {
+		return false
+	}
+
+	copy(data[:len(txData)], txData)
+
+	txDesc := x.tx.GetDesc(idx)
+	txDesc.Addr = desc.Addr
+	txDesc.Len = uint32(len(txData))
+	x.tx.Submit(1)
+	x.standing++
+
+	x.stats.TxBytes += uint64(len(txData))
+	x.stats.TxPackets++
+
+	return true
 }
 
 // Reserve non-blockingly and copy data to TX
@@ -245,21 +284,6 @@ func (x *XDPSocket) Writev(iovs [][]byte) uint32 {
 	x.complete()
 
 	return batch
-}
-
-func (x *XDPSocket) stuffFillQ() {
-	frames := x.umem.Fill.GetFreeNum(x.umem.GetFrameFreeNum())
-	if frames == 0 {
-		return
-	}
-
-	var idx uint32
-	x.umem.Fill.Reserve(frames, &idx)
-
-	for i := uint32(0); i < frames; i++ {
-		*x.umem.Fill.GetAddr(idx) = x.umem.AllocFrame()
-	}
-	x.umem.Fill.Submit(frames)
 }
 
 func (x *XDPSocket) complete() {

@@ -98,14 +98,23 @@ func NewXDPUmem(sockfd int, opts ...XDPOpt) (*XDPUmem, error) {
 		frames = append(frames, uint64(i*o.FrameSize))
 	}
 
-	return &XDPUmem{
+	umem := &XDPUmem{
 		mem:          area,
 		fd:           sockfd,
 		frameAddrs:   frames,
 		frameFreeNum: o.FrameNum,
 		Fill:         fill,
 		Comp:         comp,
-	}, nil
+	}
+
+	var idx uint32
+	umem.Fill.Reserve(o.FillSize, &idx)
+	for i := range o.FillSize {
+		*umem.Fill.GetAddr(idx + i) = umem.AllocFrame()
+	}
+	fill.Submit(o.FillSize)
+
+	return umem, nil
 }
 
 func (x *XDPUmem) Close() error {

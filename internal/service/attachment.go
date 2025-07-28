@@ -452,30 +452,24 @@ func (a *Attachment) Run(ctx context.Context) error {
 			}
 			l.WithField("sockets", utils.SliceString(fds)).Info("Run xdp rx loop")
 
-			// TODO: use option vec size
-			numRxTxData := 64
-			rxDataVec := make([][]byte, numRxTxData)
-			txDataVec := make([][]byte, numRxTxData)
-			tmpTxDataVec := make([][]byte, numRxTxData)
-			pkts := make([]*fastpkt.Packet, numRxTxData)
-			for i := 0; i < numRxTxData; i++ {
-				rxDataVec[i] = make([]byte, xdp.UmemDefaultFrameSize)
-				txDataVec[i] = make([]byte, xdp.UmemDefaultFrameSize)
-				pkts[i] = &fastpkt.Packet{RxData: rxDataVec[i], TxData: txDataVec[i]}
-			}
-
+			pkt := fastpkt.Packet{}
+			tmpTxData := make([]byte, xdp.UmemDefaultFrameSize)
 			for !done {
 				err := a.waitPoll(g.fds)
 				if err != nil {
 					continue
 				}
 				for _, xsk := range g.xsks {
-					for i := 0; i < numRxTxData; i++ {
-						pkts[i].Clear()
-						pkts[i].RxData = rxDataVec[i]
-						pkts[i].TxData = txDataVec[i][:0]
-					}
-					a.handleXSK(xsk, rxDataVec, tmpTxDataVec, pkts)
+					pkt.Clear()
+					xsk.HandlePackets(func(b []byte) []byte {
+						pkt.TxData = tmpTxData[:0]
+						err := pkt.DecodeFromData(b)
+						if err != nil {
+							return nil
+						}
+						a.handler.OnPacket(&pkt)
+						return pkt.TxData
+					})
 				}
 			}
 		}(xg)
@@ -483,32 +477,6 @@ func (a *Attachment) Run(ctx context.Context) error {
 	wg.Wait()
 
 	return nil
-}
-
-func (a *Attachment) handleXSK(xsk *xdp.XDPSocket, rxDataVec, tmpTxDataVec [][]byte, pkts []*fastpkt.Packet) {
-	n := xsk.Readv(rxDataVec)
-	if n == 0 {
-		return
-	}
-
-	txIdx := 0
-	for i := range n {
-		err := pkts[i].DecodeFromData(rxDataVec[i])
-		if err != nil {
-			continue
-		}
-
-		a.handler.OnPacket(pkts[i])
-
-		if len(pkts[i].TxData) > 0 {
-			tmpTxDataVec[txIdx] = pkts[i].TxData
-			txIdx++
-		}
-	}
-	if txIdx > 0 {
-		for xsk.Writev(tmpTxDataVec[:txIdx]) == 0 {
-		}
-	}
 }
 
 func (a *Attachment) waitPoll(fds []unix.PollFd) error {
