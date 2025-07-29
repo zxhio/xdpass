@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
@@ -12,28 +15,32 @@ import (
 	"github.com/zxhio/xdpass/pkg/humanize"
 	"github.com/zxhio/xdpass/pkg/netutil"
 	"github.com/zxhio/xdpass/pkg/utils"
+	"github.com/zxhio/xdpass/pkg/xdp"
 	"golang.org/x/sys/unix"
 	"golang.org/x/time/rate"
 )
 
 type benchmarkOpts struct {
 	total     int
-	batch     int
+	batch     uint32
 	rateLimit int
 	statsDur  time.Duration
 	cores     []int
+	queues    []uint32
+	xdpOpts   []xdp.XDPOpt
 }
 
 func defaultBenchmarkOpts() benchmarkOpts {
 	return benchmarkOpts{
 		total:     -1,
 		rateLimit: -1,
+		cores:     []int{-1},
 	}
 }
 
 type BenchmarkOpt func(*benchmarkOpts)
 
-func WithBenchmarkN(n, batch int) BenchmarkOpt {
+func WithBenchmarkN(n int, batch uint32) BenchmarkOpt {
 	return func(bo *benchmarkOpts) {
 		bo.total = n
 		bo.batch = batch
@@ -52,6 +59,24 @@ func WithBenchmarkCPUCores(cores []int) BenchmarkOpt {
 	return func(bo *benchmarkOpts) { bo.cores = cores }
 }
 
+func WithBenchmarkQueues(queues []uint) BenchmarkOpt {
+	return func(bo *benchmarkOpts) {
+		for _, q := range queues {
+			bo.queues = append(bo.queues, uint32(q))
+		}
+	}
+}
+
+func WithBenchmarkXDPBindMode(copy, zeroCopy bool) BenchmarkOpt {
+	return func(bo *benchmarkOpts) {
+		if copy {
+			bo.xdpOpts = append(bo.xdpOpts, xdp.WithCopy())
+		} else if zeroCopy {
+			bo.xdpOpts = append(bo.xdpOpts, xdp.WithZeroCopy())
+		}
+	}
+}
+
 func Benchmark(ctx context.Context, ifaceName string, data []byte, opts ...BenchmarkOpt) error {
 	done := false
 	go func() {
@@ -65,11 +90,50 @@ func Benchmark(ctx context.Context, ifaceName string, data []byte, opts ...Bench
 	}
 	utils.VerbosePrintln("Benchmark total:%d, rate limit:%d, status dur:%v", o.total, o.rateLimit, o.statsDur)
 
-	tx, err := NewTx(ifaceName)
+	txData := TxData{
+		Batch:   uint32(o.batch),
+		Queues:  o.queues,
+		Data:    data,
+		XDPOpts: append(o.xdpOpts, xdp.WithFrameSize(2048)),
+	}
+	txList, err := NewTxList(ifaceName, &txData)
 	if err != nil {
 		return err
 	}
-	txList := []Tx{tx}
+
+	var groups []*benchmarkGroup
+	if len(o.cores) == 0 {
+		o.cores = []int{-1}
+	}
+	for i := range min(len(o.cores), len(txList)) {
+		groups = append(groups, &benchmarkGroup{core: o.cores[i], TxData: txData})
+	}
+
+	// Assign the average txList to txGroups
+	for k, tx := range txList {
+		groups[k%len(groups)].txList = append(groups[k%len(groups)].txList, tx)
+	}
+
+	if o.total == -1 {
+		for _, g := range groups {
+			g.total = -1
+		}
+	} else {
+		// Simple method to assign the pkts to txGroups
+		for k := range o.total {
+			groups[k%len(groups)].total++
+		}
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(groups))
+
+	for _, g := range groups {
+		go func() {
+			defer wg.Done()
+			g.run(&done, o.rateLimit)
+		}()
+	}
 
 	if o.statsDur != 0 {
 		prev := make(map[int]netutil.Statistics)
@@ -80,17 +144,51 @@ func Benchmark(ctx context.Context, ifaceName string, data []byte, opts ...Bench
 		}()
 		go dumpStats(statsCtx, txList, o.statsDur, prev)
 	}
+	wg.Wait()
 
-	limiter := newRateLimiter(o.rateLimit)
-	remain := o.total
-	for idx := 0; (o.total == -1 || remain > 0) && !done; idx++ {
-		if o.rateLimit != -1 && !limiter.allow() {
+	return nil
+}
+
+type benchmarkGroup struct {
+	total  int
+	core   int
+	txList []Tx
+	TxData
+}
+
+func (g *benchmarkGroup) formatTxData() string {
+	s := []string{}
+	for _, tx := range g.txList {
+		s = append(s, fmt.Sprintf("tx(queue:%d fd:%d)", tx.QueueID(), tx.Fd()))
+	}
+	return strings.Join(s, ",")
+}
+
+func (g *benchmarkGroup) run(done *bool, rateLimit int) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if g.core != -1 {
+		utils.SetAffinityCPU(g.core)
+		utils.VerbosePrintln("Run benchmark %s on core %d", g.formatTxData(), g.core)
+	} else {
+		utils.VerbosePrintln("Run benchmark %s", g.formatTxData())
+	}
+
+	limiter := newRateLimiter(rateLimit)
+	remain := g.total
+	for idx := 0; (g.total == -1 || remain > 0) && !*done; idx++ {
+		if rateLimit != -1 && !limiter.allow() {
 			continue
 		}
-		tx.Transmit(data)
-		remain--
+		g.Batch = min(g.Batch, uint32(remain))
+		g.txList[idx%len(g.txList)].Transmit(&g.TxData)
+		remain -= int(g.Batch)
 	}
-	return tx.Close()
+
+	for _, tx := range g.txList {
+		tx.Close()
+	}
 }
 
 type rateLimiter struct {

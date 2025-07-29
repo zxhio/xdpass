@@ -47,12 +47,15 @@ var icmpCmd = cobra.Command{
 }
 
 var (
-	ifaceName string
-	total     int
-	batch     int
-	rateLimit int
-	statsDur  time.Duration
-	cores     []int
+	ifaceName    string
+	total        int
+	batch        uint32
+	rateLimit    int
+	statsDur     time.Duration
+	cores        []int
+	queues       []uint
+	bindCopy     bool
+	bindZeroCopy bool
 
 	ether bench.LayerEthernet
 	ipv4  bench.LayerIPv4
@@ -64,11 +67,14 @@ var (
 
 func init() {
 	benchCmd.PersistentFlags().IntVarP(&total, "total", "n", -1, "Transmit packet total, -1 unlimited")
-	benchCmd.PersistentFlags().IntVarP(&batch, "batch", "b", 64, "Transmit packet batch size")
+	benchCmd.PersistentFlags().Uint32VarP(&batch, "batch", "b", 64, "Transmit packet batch size")
 	benchCmd.PersistentFlags().IntVarP(&rateLimit, "rate-limit", "r", -1, "Packet send rate limit (s), -1 unlimited")
 	benchCmd.PersistentFlags().StringVarP(&ifaceName, "interface", "i", "", "Interface name")
 	benchCmd.PersistentFlags().DurationVarP(&statsDur, "stats-dur", "D", 0, "Dump stats duration")
 	benchCmd.PersistentFlags().IntSliceVarP(&cores, "cores", "c", []int{}, "Affinity cpu cores")
+	benchCmd.PersistentFlags().UintSliceVarP(&queues, "queues", "q", []uint{}, "Interface queues")
+	benchCmd.PersistentFlags().BoolVar(&bindCopy, "xdp-copy", false, "Force copy mode")
+	benchCmd.PersistentFlags().BoolVar(&bindZeroCopy, "xdp-zero-copy", false, "Force zero copy mode")
 
 	// L2
 	benchCmd.PersistentFlags().Var(&ether.SrcMAC, "smac", "Source mac address")
@@ -137,6 +143,8 @@ func runTxBenchmark(opts ...bench.LayerOpt) {
 		bench.WithBenchmarkRateLimit(rateLimit),
 		bench.WithBenchmarkStatsDur(statsDur),
 		bench.WithBenchmarkCPUCores(cores),
+		bench.WithBenchmarkQueues(queues),
+		bench.WithBenchmarkXDPBindMode(bindCopy, bindZeroCopy),
 	)
 	utils.CheckErrorAndExit(err, "Run tx benchmark failed")
 }

@@ -444,7 +444,7 @@ func (a *Attachment) Run(ctx context.Context) error {
 
 			l := a.log.WithField("tid", unix.Gettid())
 			if g.core != -1 {
-				setAffinityCPU(g.core)
+				utils.SetAffinityCPU(g.core)
 				l = l.WithField("core", g.core)
 			}
 			var fds []int
@@ -505,11 +505,4 @@ func (x *Attachment) GetAllQueueStats() []model.AttachmentStats {
 		})
 	}
 	return stats
-}
-
-func setAffinityCPU(cpu int) error {
-	var s unix.CPUSet
-	s.Zero()
-	s.Set(cpu)
-	return unix.SchedSetaffinity(0, &s)
 }
