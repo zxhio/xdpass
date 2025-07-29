@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/bench"
 	"github.com/zxhio/xdpass/cmd/xdpass/rule"
 	"github.com/zxhio/xdpass/cmd/xdpass/xdp"
 	"github.com/zxhio/xdpass/pkg/builder"
@@ -40,6 +41,7 @@ func main() {
 	cobra.EnableTraverseRunHooks = true
 	rule.Export(rootCmd)
 	xdp.Export(rootCmd)
+	bench.Export(rootCmd)
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.Flags().BoolVarP(&version, "version", "V", false, "Print version")
 	rootCmd.Execute()
