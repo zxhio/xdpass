@@ -259,23 +259,30 @@ func getLinkAndSIP(iface string, dstIP net.IP) (netlink.Link, net.IP, error) {
 		return nil, nil, errors.New("list link")
 	}
 
-	getLinkIPFnList := []func(netlink.Link, net.IP) (net.IP, error){
-		getLinkSIPBySameSubnet,
-		getLinkSIPByDefaultRoute,
+	// same subnet
+	for _, link := range links {
+		sip, err := getLinkSIPBySameSubnet(link, dstIP)
+		if err != nil {
+			return nil, nil, err
+		}
+		if sip == nil {
+			continue
+		}
+		return link, sip, nil
 	}
 
+	// find by route
 	for _, link := range links {
-		for _, fn := range getLinkIPFnList {
-			sip, err := fn(link, dstIP)
-			if err != nil {
-				return nil, nil, err
-			}
-			if sip == nil {
-				continue
-			}
-			return link, sip, nil
+		sip, err := getLinkSIPByDefaultRoute(link, dstIP)
+		if err != nil {
+			return nil, nil, err
 		}
+		if sip == nil {
+			continue
+		}
+		return link, sip, nil
 	}
+
 	return nil, nil, fmt.Errorf("no such link")
 }
 
