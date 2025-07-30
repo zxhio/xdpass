@@ -269,10 +269,16 @@ func (x *XDPSocket) Writev(iovs [][]byte) uint32 {
 		return 0
 	}
 
-	for i := uint32(0); i < batch; i++ {
+	for i := range batch {
+		addr := x.umem.AllocFrame()
+		if addr == INVALID_UMEM_FRAME {
+			batch = i
+			break
+		}
+
 		desc := x.tx.GetDesc(idx + i)
 		desc.Len = uint32(len(iovs[i]))
-		desc.Addr = x.umem.AllocFrame()
+		desc.Addr = addr
 		copy(x.umem.GetData(desc), iovs[i])
 
 		x.stats.TxPackets++
