@@ -165,7 +165,7 @@ func (x *xdpTx) Transmit(td *TxData) {
 
 	remain := td.Batch
 	for remain > 0 {
-		n := x.Writev(x.dataVec)
+		n := x.Writev(x.dataVec[:min(td.Batch, remain)])
 		remain -= n
 	}
 }

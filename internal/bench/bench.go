@@ -88,7 +88,7 @@ func Benchmark(ctx context.Context, ifaceName string, data []byte, opts ...Bench
 	for _, opt := range opts {
 		opt(&o)
 	}
-	utils.VerbosePrintln("Benchmark total:%d, rate limit:%d, status dur:%v", o.total, o.rateLimit, o.statsDur)
+	utils.VerbosePrintln("Benchmark total:%d, rate limit:%d, status display duration:%v", o.total, o.rateLimit, o.statsDur)
 
 	txData := TxData{
 		Batch:   uint32(o.batch),
@@ -178,10 +178,13 @@ func (g *benchmarkGroup) run(done *bool, rateLimit int) {
 	limiter := newRateLimiter(rateLimit)
 	remain := g.total
 	for idx := 0; (g.total == -1 || remain > 0) && !*done; idx++ {
-		if rateLimit != -1 && !limiter.allow() {
+		if !limiter.allow() {
 			continue
 		}
 		g.Batch = min(g.Batch, uint32(remain))
+		if g.Batch > 0 && rateLimit > 0 {
+			g.Batch = 1
+		}
 		g.txList[idx%len(g.txList)].Transmit(&g.TxData)
 		remain -= int(g.Batch)
 	}
