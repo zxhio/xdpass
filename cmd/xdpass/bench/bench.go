@@ -66,6 +66,7 @@ var (
 )
 
 func init() {
+	disableSort(&benchCmd)
 	benchCmd.PersistentFlags().IntVarP(&total, "total", "n", -1, "Transmit packet total, -1 unlimited")
 	benchCmd.PersistentFlags().Uint32VarP(&batch, "batch", "b", 64, "Transmit packet batch size")
 	benchCmd.PersistentFlags().IntVarP(&rateLimit, "rate-limit", "r", -1, "Packet send rate limit (s), -1 unlimited")
@@ -88,6 +89,7 @@ func init() {
 	benchCmd.MarkPersistentFlagRequired("destination")
 
 	// TCP
+	disableSort(&tcpCmd)
 	setCommandFlagsPort(&tcpCmd, &tcp.LayerPorts)
 	tcpCmd.Flags().BoolVarP(&tcp.SYN, "syn", "S", false, "TCP flag SYN")
 	tcpCmd.Flags().BoolVar(&tcp.ACK, "ack", false, "TCP flag ACK")
@@ -97,17 +99,17 @@ func init() {
 	tcpCmd.Flags().Uint32Var(&tcp.Seq, "seq", 0, "TCP sequence")
 	tcpCmd.Flags().StringVar(&tcp.Payload, "payload", "", "TCP payload")
 	tcpCmd.Flags().StringVar(&tcp.PayloadPath, "payload-path", "", "TCP payload path")
-	tcpCmd.Flags().SortFlags = false
 	benchCmd.AddCommand(&tcpCmd)
 
 	// UDP
+	disableSort(&udpCmd)
 	setCommandFlagsPort(&udpCmd, &udp.LayerPorts)
 	udpCmd.Flags().StringVar(&udp.Payload, "payload", "", "UDP payload")
 	udpCmd.Flags().StringVar(&udp.PayloadPath, "payload-path", "", "UDP payload path")
-	udpCmd.Flags().SortFlags = false
 	benchCmd.AddCommand(&udpCmd)
 
 	// ICMP
+	disableSort(&icmpCmd)
 	icmpCmd.Flags().Uint16Var(&icmp.ID, "id", 0, "ICMPv4 echo request id")
 	icmpCmd.Flags().Uint16Var(&icmp.Seq, "seq", 0, "ICMPv4 echo request sequence")
 	benchCmd.AddCommand(&icmpCmd)
@@ -147,6 +149,15 @@ func runTxBenchmark(opts ...bench.LayerOpt) {
 		bench.WithBenchmarkXDPBindMode(bindCopy, bindZeroCopy),
 	)
 	utils.CheckErrorAndExit(err, "Run tx benchmark failed")
+}
+
+func disableSort(cmds ...*cobra.Command) {
+	for _, cmd := range cmds {
+		// both
+		cmd.InheritedFlags().SortFlags = false
+		cmd.PersistentFlags().SortFlags = false
+		cmd.Flags().SortFlags = false
+	}
 }
 
 func Export(parent *cobra.Command) {

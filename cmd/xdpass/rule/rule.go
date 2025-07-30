@@ -211,6 +211,7 @@ var httpCmd = &cobra.Command{
 
 func init() {
 	// rule
+	disableSort(ruleCmd)
 	ruleCmd.PersistentFlags().Var(&F.SrcMAC, "smac", "Source mac address")
 	ruleCmd.PersistentFlags().Var(&F.DstMAC, "dmac", "Destionation mac address")
 	ruleCmd.PersistentFlags().VarP(&F.SrcIPv4Prefix, "source", "s", "Source ip address")
@@ -225,6 +226,8 @@ func init() {
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "[Target] MAC ARP-Reply spoofing")
 
 	// rule tcp
+	disableSort(tcpCmd)
+	setCommandFlagsPorts(tcpCmd)
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagSYN, "flag-syn", "S", false, "TCP flag SYN")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.FlagACK, "flag-ack", false, "TCP flag ACK")
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagPSH, "flag-psh", "P", false, "TCP flag PSH")
@@ -236,16 +239,17 @@ func init() {
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofFINACK, "spoof-fin-ack", false, "[Target] TCP FIN/ACK reply spoofing")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.SpoofACK, "spoof-ack", false, "[Target] TCP ACK reply spoofing")
 	tcpCmd.AddGroup(&group)
-	setCommandFlagsPorts(tcpCmd)
 
 	// rule udp
 	setCommandFlagsPorts(udpCmd)
 
 	// rule icmp
-	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "[Target] ICMP Echo-Reply spoofing")
+	disableSort(icmpCmd)
 	setCommandFlagsPorts(icmpCmd)
+	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "[Target] ICMP Echo-Reply spoofing")
 
 	// rule http
+	disableSort(httpCmd)
 	httpCmd.PersistentFlags().StringVar(&F.Method, "method", "", "HTTP request method")
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
@@ -263,6 +267,15 @@ func setCommandFlagsPorts(cmd *cobra.Command) {
 func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		cmd.AddCommand(subCmd)
+	}
+}
+
+func disableSort(cmds ...*cobra.Command) {
+	for _, cmd := range cmds {
+		// both
+		cmd.InheritedFlags().SortFlags = false
+		cmd.PersistentFlags().SortFlags = false
+		cmd.Flags().SortFlags = false
 	}
 }
 
