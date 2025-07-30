@@ -20,10 +20,10 @@ xdpass rule add -d 172.16.23.1 --mirror-tap tap0
 xdpass arp add --spoof-arp-reply "$hwaddr"
 xdpass icmp add --spoof-echo-reply
 xdpass rule http add --spoof-not-found
-xdpass rule tcp add --flag-syn -d 172.16.23.0/24 --dports 1:1024 --spoof-syn-ack
-xdpass rule tcp add --flag-fin -d 172.16.23.0/24 --dports 1:1024 --spoof-fin-ack
-xdpass rule tcp add --flag-syn --flag-ack -d 172.16.23.0/24 --dports 1025 --spoof-rst-ack
-xdpass rule tcp add --flag-psh --flag-ack -d 172.16.23.0/24 --dports 1025 --spoof-ack
-xdpass rule tcp add --flag-syn --flag-ack -d 172.16.23.0/24 --dports 1026:65525 --spoof-rst-ack
+xdpass rule tcp add --syn -d 172.16.23.0/24 --dports 1:1024 --spoof-syn-ack
+xdpass rule tcp add --fin -d 172.16.23.0/24 --dports 1:1024 --spoof-fin-ack
+xdpass rule tcp add --syn --ack -d 172.16.23.0/24 --dports 1025 --spoof-rst-ack
+xdpass rule tcp add --psh --ack -d 172.16.23.0/24 --dports 1025 --spoof-ack
+xdpass rule tcp add --syn --ack -d 172.16.23.0/24 --dports 1026:65525 --spoof-rst-ack
 
 xdpass rule ls --all

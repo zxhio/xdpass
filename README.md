@@ -164,12 +164,12 @@ $ xdpass rule arp add -d 172.16.23.0/24 --spoof-arp-reply $(cat /sys/class/net/b
 
 TCP 3-way handshake spoofing (syn-ack)
 ```shell
-$ xdpass rule tcp add -d 172.16.23.0/24 --dports 1:1024 --flag-syn --spoof-syn-ack
+$ xdpass rule tcp add -d 172.16.23.0/24 --dports 1:1024 --syn --spoof-syn-ack
 ```
 
 TCP 4-way handshake spoofing (fin-ack)
 ```shell
-$ xdpass rule tcp add -d 172.16.23.0/24 --dports 1:1024 --flag-fin --spoof-fin-ack
+$ xdpass rule tcp add -d 172.16.23.0/24 --dports 1:1024 --fin --spoof-fin-ack
 ```
 
 HTTP 404 response spoofing
@@ -236,6 +236,5 @@ $ xdpass rule add -d 172.16.23.0/24 --mirror-stdout
 ```
 
 ## TODO
-- [ ] XDP kernel prog ipset add destination IP set
 - [ ] XDP kernel prog add port matching
 - [ ] User mode rule support specify interface name
