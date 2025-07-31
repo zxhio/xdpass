@@ -15,6 +15,7 @@ import (
 	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/internal/service"
 	"github.com/zxhio/xdpass/pkg/builder"
+	"github.com/zxhio/xdpass/pkg/profile"
 )
 
 const logoAscii = `
@@ -25,11 +26,13 @@ const logoAscii = `
 var (
 	version bool
 	verbose bool
+	pprof   bool
 )
 
 func main() {
 	pflag.BoolVarP(&version, "version", "V", false, "Print version")
 	pflag.BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	pflag.BoolVar(&pprof, "profile", false, "Enable profile")
 	pflag.Parse()
 
 	if version {
@@ -57,12 +60,25 @@ func main() {
 	logrus.WithField("pid", os.Getpid()).Info("///xdpassd start")
 	defer logrus.WithField("pid", os.Getpid()).Info("///xdpassd quit")
 
+	if pprof {
+		addr := os.Getenv("XDPASS_PPROF_ADDR")
+		if addr == "" {
+			addr = ":9922"
+		}
+		lis, err := net.Listen("tcp", addr)
+		if err != nil {
+			logrus.WithError(err).Fatal("Fatal to listen profile addr")
+		}
+		logrus.WithField("addr", lis.Addr()).Info("Listen for profile")
+		go profile.Serve(lis)
+	}
+
 	lis, err := net.Listen("tcp", ":9921")
 	if err != nil {
 		logrus.WithError(err).Fatal("Fatal to listen")
 	}
 	defer lis.Close()
-	logrus.WithField("addr", lis.Addr()).Info("Listen on")
+	logrus.WithField("addr", lis.Addr()).Info("Listen for API")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGUSR1)
