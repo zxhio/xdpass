@@ -125,8 +125,8 @@ func runTxBenchmark(opts ...bench.LayerOpt) {
 	utils.CheckErrorAndExit(err, "Make packet tx data failed")
 
 	pkt := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
-	utils.VerbosePrintln(pkt.String())
-	utils.VerbosePrintln("Packet hexdump %d bytes:\n%v", len(data), hex.Dump(data))
+	fmt.Println(pkt.String())
+	fmt.Printf("PACKET hexdump %d bytes\n%v\n", len(data), hex.Dump(data))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

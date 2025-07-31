@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"github.com/zxhio/xdpass/pkg/netaddr"
+	"github.com/zxhio/xdpass/pkg/utils"
 )
 
 type LayerEthernet struct {
@@ -164,12 +165,13 @@ func MakePacketData(iface *string, ether *LayerEthernet, ipv4 *LayerIPv4, opts .
 		opt(&o)
 	}
 
+	utils.VerbosePrintln("Set packet layers")
 	link, sip, err := getLinkAndSIP(*iface, ipv4.DstIPv4)
 	if err != nil {
 		return nil, err
 	}
 	if *iface != link.Attrs().Name {
-		fmt.Printf("[Interface]: %s → %s\n", *iface, link.Attrs().Name)
+		utils.VerbosePrintln("- Interface         %s", link.Attrs().Name)
 		*iface = link.Attrs().Name
 	}
 
@@ -178,19 +180,20 @@ func MakePacketData(iface *string, ether *LayerEthernet, ipv4 *LayerIPv4, opts .
 		return nil, err
 	}
 	if ether.SrcMAC.Compare(netaddr.HwAddr{}) == 0 {
-		fmt.Printf("[MAC] Source: %s → %s\n", ether.SrcMAC, smac)
+		utils.VerbosePrintln("- MAC Source        %s", smac)
 		ether.SrcMAC = netaddr.HwAddr(smac)
 	}
 	if ether.DstMAC.Compare(netaddr.HwAddr{}) == 0 {
-		fmt.Printf("[MAC] Destionation: %s → %s\n", ether.DstMAC, dmac)
+		utils.VerbosePrintln("- MAC Destionation  %s", dmac)
 		ether.DstMAC = netaddr.HwAddr(dmac)
 	}
 
 	if ipv4.SrcIPv4 == nil {
-		fmt.Printf("[IPv4] Source: %s → %s\n", ipv4.SrcIPv4, sip)
+		utils.VerbosePrintln("- IPv4 Source       %s", sip)
 		ipv4.SrcIPv4 = sip
 	}
-	fmt.Printf("[IPv4] Destionation: %s\n", ipv4.DstIPv4)
+	utils.VerbosePrintln("- IPv4 Destionation %s", ipv4.DstIPv4)
+	utils.VerbosePrintln("")
 
 	var packetLayers []gopacket.SerializableLayer
 	if o.vlan != nil && o.vlan.ID != 0 {
