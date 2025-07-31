@@ -85,7 +85,7 @@ func init() {
 	// L3
 	benchCmd.PersistentFlags().IPVarP(&ipv4.SrcIPv4, "source", "s", nil, "Source ip address")
 	benchCmd.PersistentFlags().IPVarP(&ipv4.DstIPv4, "destination", "d", nil, "Destionation ip address")
-	benchCmd.PersistentFlags().Uint8Var(&ipv4.TTL, "ttl", 97, "Time to live")
+	benchCmd.PersistentFlags().Uint8Var(&ipv4.TTL, "ttl", 31, "Time to live")
 	benchCmd.MarkPersistentFlagRequired("destination")
 
 	// TCP
@@ -110,14 +110,14 @@ func init() {
 
 	// ICMP
 	disableSort(&icmpCmd)
-	icmpCmd.Flags().Uint16Var(&icmp.ID, "id", 0, "ICMPv4 echo request id")
-	icmpCmd.Flags().Uint16Var(&icmp.Seq, "seq", 0, "ICMPv4 echo request sequence")
+	icmpCmd.Flags().Uint16Var(&icmp.ID, "id", 1, "ICMPv4 echo request id")
+	icmpCmd.Flags().Uint16Var(&icmp.Seq, "seq", 1, "ICMPv4 echo request sequence")
 	benchCmd.AddCommand(&icmpCmd)
 }
 
 func setCommandFlagsPort(cmd *cobra.Command, p *bench.LayerPorts) {
-	cmd.Flags().Uint16Var(&p.SPort, "sport", 0, "Source port")
-	cmd.Flags().Uint16Var(&p.DPort, "dport", 0, "Destionation port")
+	cmd.Flags().Uint16Var(&p.SPort, "sport", 1, "Source port")
+	cmd.Flags().Uint16Var(&p.DPort, "dport", 1, "Destionation port")
 }
 
 func runTxBenchmark(opts ...bench.LayerOpt) {

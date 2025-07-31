@@ -49,9 +49,9 @@ type LayerTCP struct {
 func (tcp *LayerTCP) MakeLayer(layersIPv4 *layers.IPv4) gopacket.SerializableLayer {
 	layersIPv4.Protocol = layers.IPProtocolTCP
 	layersTCP := &layers.TCP{
-		SrcPort: layers.TCPPort(valueOr(tcp.SPort, 54321)),
-		DstPort: layers.TCPPort(valueOr(tcp.DPort, 12345)),
-		Seq:     valueOr(tcp.Seq, 12345),
+		SrcPort: layers.TCPPort(tcp.SPort),
+		DstPort: layers.TCPPort(tcp.DPort),
+		Seq:     tcp.Seq,
 		SYN:     tcp.SYN,
 		ACK:     tcp.ACK,
 		PSH:     tcp.PSH,
@@ -82,8 +82,8 @@ type LayerUDP struct {
 func (udp *LayerUDP) MakeLayer(layersIPv4 *layers.IPv4) gopacket.SerializableLayer {
 	layersIPv4.Protocol = layers.IPProtocolUDP
 	layersUDP := &layers.UDP{
-		SrcPort: layers.UDPPort(valueOr(udp.SPort, 54321)),
-		DstPort: layers.UDPPort(valueOr(udp.DPort, 12345)),
+		SrcPort: layers.UDPPort(udp.SPort),
+		DstPort: layers.UDPPort(udp.DPort),
 	}
 	layersUDP.SetNetworkLayerForChecksum(layersIPv4)
 	return layersUDP
@@ -109,8 +109,8 @@ func (icmp4 *LayerICMP) MakeLayer(layersIPv4 *layers.IPv4) gopacket.Serializable
 	layersIPv4.Protocol = layers.IPProtocolICMPv4
 	return &layers.ICMPv4{
 		TypeCode: layers.CreateICMPv4TypeCode(layers.ICMPv4TypeEchoRequest, 0),
-		Id:       valueOr(icmp4.ID, 12345),
-		Seq:      valueOr(icmp4.Seq, 12345),
+		Id:       icmp4.ID,
+		Seq:      icmp4.Seq,
 	}
 }
 
@@ -232,18 +232,6 @@ func MakePacketData(iface *string, ether *LayerEthernet, ipv4 *LayerIPv4, opts .
 		return nil, errors.Wrap(err, "gopacket.SerializeLayers")
 	}
 	return b.Bytes(), nil
-}
-
-func valueOr[T comparable](v T, def T) T {
-	var vv T
-	return valueExpect(v == vv, def, v)
-}
-
-func valueExpect[T any](expect bool, expectV, notExpectV T) T {
-	if expect {
-		return expectV
-	}
-	return notExpectV
 }
 
 func getLinkAndSIP(iface string, dstIP net.IP) (netlink.Link, net.IP, error) {
