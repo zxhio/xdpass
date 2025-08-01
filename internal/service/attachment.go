@@ -731,17 +731,18 @@ func setQueueIRQsToCore(linkName string, irqs []queueIRQ, cqs []cpuQueue) error 
 			return fmt.Errorf("no such core for queue %d irq %d", irq.queueID, irq.irqID)
 		}
 
-		core := fmt.Sprintf("%x", 1<<cqs[idx].coreID)
-		err := os.WriteFile(path.Join("/proc/irq", strconv.Itoa(irq.irqID), "smp_affinity"), []byte(core), 0644)
+		coreOff := fmt.Sprintf("%x", 1<<cqs[idx].coreID)
+		err := os.WriteFile(path.Join("/proc/irq", strconv.Itoa(irq.irqID), "smp_affinity"), []byte(coreOff), 0644)
 		if err != nil {
 			return fmt.Errorf("set queue %d irq %d affinity: %v", irq.queueID, irq.irqID, err)
 		}
 		logrus.WithFields(logrus.Fields{
-			"name":       linkName,
-			"core":       cqs[idx].coreID,
-			"queue":      irq.queueID,
-			"queue_type": irq.queueType,
-			"irq":        irq.irqID,
+			"name":        linkName,
+			"core_id":     cqs[idx].coreID,
+			"core_offset": coreOff,
+			"queue":       irq.queueID,
+			"queue_type":  irq.queueType,
+			"irq":         irq.irqID,
 		}).Info("Set link queue affinity")
 	}
 	return nil
