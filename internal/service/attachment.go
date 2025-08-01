@@ -578,7 +578,7 @@ func getCpuQueuesWithCombined(link netlink.Link, cores, queues []int) ([]cpuQueu
 			return nil, err
 		}
 	} else {
-		combined = n
+		combined = min(n, combined)
 
 		output, err := utils.RunCommand("ethtool", "-L", link.Attrs().Name, "combined", strconv.Itoa(combined))
 		if err != nil {
