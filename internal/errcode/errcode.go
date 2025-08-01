@@ -5,7 +5,7 @@ import "fmt"
 type Code int
 
 const (
-	CodeSuccess  Code = 0
+	CodeSuccess  Code = 200
 	CodeInternal Code = iota + 1001
 	CodeInvalid
 	CodeNotExist
@@ -14,7 +14,7 @@ const (
 
 var code2str = map[Code]string{
 	CodeSuccess:  "success",
-	CodeInternal: "internal",
+	CodeInternal: "internal error",
 	CodeInvalid:  "invalid argument",
 	CodeNotExist: "not exist",
 	CodeExist:    "already exists",
@@ -33,8 +33,13 @@ type ErrorCode struct {
 	message string
 }
 
-func (e ErrorCode) Code() Code      { return e.code }
-func (e ErrorCode) Message() string { return fmt.Sprintf("%s %s", e.code, e.message) }
+func (e ErrorCode) Code() Code { return e.code }
+func (e ErrorCode) Message() string {
+	if e.code == CodeSuccess {
+		return e.Code().String()
+	}
+	return fmt.Sprintf("%s: %s", e.code, e.message)
+}
 
 func (e ErrorCode) Error() string {
 	if e.code == CodeSuccess {
