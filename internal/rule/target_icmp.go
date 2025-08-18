@@ -80,8 +80,8 @@ func (TargetICMPEchoReplySpoof) Execute(pkt *fastpkt.Packet) error {
 
 	// L2 Ethernet
 	txEther := buf.AllocEthHeader()
-	txEther.HwSource = rxEther.HwDest
-	txEther.HwDest = rxEther.HwSource
+	copy(txEther.HwSource[:], rxEther.HwDest[:])
+	copy(txEther.HwDest[:], rxEther.HwSource[:])
 	txEther.HwProto = rxEther.HwProto
 
 	pkt.TxData = buf.Bytes()

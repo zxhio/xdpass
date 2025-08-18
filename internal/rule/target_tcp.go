@@ -130,7 +130,7 @@ func makeL23DataUnderTCP(pkt *fastpkt.Packet, buf *fastpkt.Buffer, txTCP *fastpk
 
 	// L2 Ethernet
 	txEther := buf.AllocEthHeader()
-	txEther.HwSource = rxEther.HwDest
-	txEther.HwDest = rxEther.HwSource
+	copy(txEther.HwSource[:], rxEther.HwDest[:])
+	copy(txEther.HwDest[:], rxEther.HwSource[:])
 	txEther.HwProto = rxEther.HwProto
 }

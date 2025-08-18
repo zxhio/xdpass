@@ -85,8 +85,8 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 
 	// L2 Ethernet
 	txEther := buf.AllocEthHeader()
-	txEther.HwSource = tgt.HwAddr
-	txEther.HwDest = rxEther.HwSource
+	copy(txEther.HwSource[:], tgt.HwAddr[:])
+	copy(txEther.HwDest[:], rxEther.HwSource[:])
 	txEther.HwProto = rxEther.HwProto
 
 	pkt.TxData = buf.Bytes()
