@@ -92,8 +92,8 @@ typedef __u8 BOOL;
 #define FALSE 0
 
 static BOOL validate_packet(struct ip_lpm_trie *, const struct packet *pkt);
-static BOOL validate_sip(struct ip_lpm_trie *, const struct packet *pkt);
-static BOOL validate_dip(struct ip_lpm_trie *, const struct packet *pkt);
+static BOOL validate_ip(struct ip_lpm_trie *, __be16 proto, __be32 addr,
+                        struct in6_addr addr6);
 
 struct ip_lpm_trie redirect_lpm_trie SEC(".maps");
 struct ip_lpm_trie pass_lpm_trie SEC(".maps");
@@ -128,43 +128,26 @@ static BOOL validate_packet(struct ip_lpm_trie *trie, const struct packet *pkt)
     switch (pkt->l2_proto) {
     case ETH_P_802_3:
     case ETH_P_8021Q:
-        return validate_sip(trie, pkt) || validate_dip(trie, pkt);
+        return validate_ip(trie, pkt->l3_proto, pkt->saddr, pkt->saddr6) ||
+               validate_ip(trie, pkt->l3_proto, pkt->daddr, pkt->daddr6);
     default:
         return FALSE;
     }
 }
 
-static BOOL validate_sip(struct ip_lpm_trie *trie, const struct packet *pkt)
+static BOOL validate_ip(struct ip_lpm_trie *trie, __be16 proto, __be32 addr,
+                        struct in6_addr addr6)
 {
     struct ip_lpm_key key = {};
-    switch (pkt->l3_proto) {
+    switch (proto) {
     case ETH_P_ARP:
     case ETH_P_IP:
         key.prefix_len = 32;
-        __builtin_memcpy(key.data, &(pkt->saddr), sizeof(pkt->saddr));
+        __builtin_memcpy(key.data, &addr, sizeof(addr));
         break;
     case ETH_P_IPV6:
         key.prefix_len = 128;
-        __builtin_memcpy(key.data, &(pkt->saddr6), sizeof(pkt->saddr6));
-        break;
-    default:
-        return FALSE;
-    }
-    return bpf_map_lookup_elem(trie, &key) ? TRUE : FALSE;
-}
-
-static BOOL validate_dip(struct ip_lpm_trie *trie, const struct packet *pkt)
-{
-    struct ip_lpm_key key = {};
-    switch (pkt->l3_proto) {
-    case ETH_P_ARP:
-    case ETH_P_IP:
-        key.prefix_len = 32;
-        __builtin_memcpy(key.data, &(pkt->daddr), sizeof(pkt->daddr));
-        break;
-    case ETH_P_IPV6:
-        key.prefix_len = 128;
-        __builtin_memcpy(key.data, &(pkt->daddr6), sizeof(pkt->daddr6));
+        __builtin_memcpy(key.data, &addr6, sizeof(addr6));
         break;
     default:
         return FALSE;
