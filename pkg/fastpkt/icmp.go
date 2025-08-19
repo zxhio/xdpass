@@ -25,7 +25,7 @@ import (
 //     };
 // };
 
-type ICMPHeader struct {
+type ICMP struct {
 	Type     uint8
 	Code     uint8
 	Checksum uint16
@@ -35,7 +35,7 @@ type ICMPHeader struct {
 	Seq uint16
 }
 
-func (icmp *ICMPHeader) SetChecksum(payloadLen uint16) {
+func (icmp *ICMP) SetChecksum(payloadLen uint16) {
 	data := unsafe.Slice((*byte)(unsafe.Pointer(icmp)), SizeofICMP+int(payloadLen))
 	icmp.Checksum = 0
 	icmp.Checksum = netutil.Htons(tcpipChecksum(data, 0))

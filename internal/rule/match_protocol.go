@@ -29,7 +29,7 @@ func (m MatchTCPFlags) Match(pkt *fastpkt.Packet) bool {
 	if pkt.L4Proto != unix.IPPROTO_TCP {
 		return false
 	}
-	tcp := fastpkt.DataPtrTCPHeader(pkt.RxData, int(pkt.L2Len+pkt.L3Len))
+	tcp := fastpkt.TCPPtr(pkt, pkt.RxData)
 	return tcp.Flags.Has(fastpkt.TCPFlags(m))
 }
 

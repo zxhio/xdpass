@@ -44,10 +44,10 @@ func (TargetARPReplySpoof) Open() error { return nil }
 
 func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	var (
-		rxEther   = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
+		rxEther   = fastpkt.EthernetPtr(pkt, pkt.RxData)
+		rxARP     = fastpkt.ARPPtr(pkt, pkt.RxData)
 		rxPayload = pkt.RxData[pkt.L2Len+uint8(fastpkt.SizeofARP):]
-		rxARP     = fastpkt.DataPtrARPHeader(pkt.RxData, int(pkt.L2Len))
-		buf       = fastpkt.NewBuildBuffer(pkt.TxData)
+		builder   = fastpkt.NewPacketBuilder(pkt.TxData)
 	)
 
 	// // TODO: support IPv6
@@ -56,7 +56,7 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	}
 
 	// L3
-	txPayload := buf.AllocPayload(int(rxARP.HwAddrLen*2 + rxARP.ProtAddrLen*2))
+	txPayload := builder.Alloc(int(rxARP.HwAddrLen*2 + rxARP.ProtAddrLen*2))
 
 	// ARP reply
 	// Source hardware address
@@ -68,7 +68,7 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 	// Dest protocol address
 	copy(txPayload[rxARP.HwAddrLen*2+rxARP.ProtAddrLen:rxARP.HwAddrLen*2+rxARP.ProtAddrLen*2], rxPayload[rxARP.HwAddrLen:rxARP.HwAddrLen+rxARP.ProtAddrLen])
 
-	txARP := buf.AllocARPHeader()
+	txARP := builder.AllocARP()
 	txARP.HwAddrType = rxARP.HwAddrType
 	txARP.ProtAddrType = rxARP.ProtAddrType
 	txARP.HwAddrLen = rxARP.HwAddrLen
@@ -77,19 +77,19 @@ func (tgt TargetARPReplySpoof) Execute(pkt *fastpkt.Packet) error {
 
 	// L2 VLAN
 	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
-		rxVLAN := fastpkt.DataPtrVLANHeader(pkt.RxData, fastpkt.SizeofEthernet)
-		txVLAN := buf.AllocVLANHeader()
+		rxVLAN := fastpkt.VLANPtr(pkt, pkt.RxData)
+		txVLAN := builder.AllocVLAN()
 		txVLAN.ID = rxVLAN.ID
 		txVLAN.EncapsulatedProto = rxVLAN.EncapsulatedProto
 	}
 
 	// L2 Ethernet
-	txEther := buf.AllocEthHeader()
+	txEther := builder.AllocEthernet()
 	copy(txEther.HwSource[:], tgt.HwAddr[:])
 	copy(txEther.HwDest[:], rxEther.HwSource[:])
 	txEther.HwProto = rxEther.HwProto
 
-	pkt.TxData = buf.Bytes()
+	pkt.TxData = builder.Bytes()
 
 	return nil
 }

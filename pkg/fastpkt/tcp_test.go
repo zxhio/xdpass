@@ -40,7 +40,7 @@ func TestTCPFlags(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tcp := DataPtrTCPHeader(buf, 20)
+		tcp := DataPtr[TCP](buf, 20)
 		assert.True(t, tcp.Flags.Has(testCase.want))
 		assert.Equal(t, testCase.want, tcp.Flags)
 	}
@@ -94,8 +94,8 @@ func TestTCPChecksum(t *testing.T) {
 		checksum := netutil.Htons(layerTCP.Checksum)
 
 		// Check ComputeChecksum
-		tcp := DataPtrTCPHeader(buf, 20)
-		tcp.SetChecksum(DataPtrIPv4Header(buf, 0), uint16(len(testCase.payload)))
+		tcp := DataPtr[TCP](buf, 20)
+		tcp.SetChecksum(DataPtr[IPv4](buf, 0), uint16(len(testCase.payload)))
 		assert.Equal(t, checksum, tcp.Check)
 	}
 }

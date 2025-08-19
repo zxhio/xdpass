@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	SizeofEthernet = int(unsafe.Sizeof(EthHeader{}))  // sizeof(struct ethhdr)
-	SizeofVLAN     = int(unsafe.Sizeof(VLANHeader{})) // sizeof(struct vlan_hdr)
-	SizeofIPv4     = int(unsafe.Sizeof(IPv4Header{})) // sizeof(struct iphdr)
-	SizeofIPv6     = int(unsafe.Sizeof(IPv6Header{})) // sizeof(struct ipv6hdr)
-	SizeofTCP      = int(unsafe.Sizeof(TCPHeader{}))  // sizeof(struct tcphdr)
-	SizeofUDP      = int(unsafe.Sizeof(UDPHeader{}))  // sizeof(struct udphdr)
-	SizeofICMP     = int(unsafe.Sizeof(ICMPHeader{})) // sizeof(struct icmphdr)
-	SizeofARP      = int(unsafe.Sizeof(ARPHeader{}))  // sizeof(struct arphdr)
+	SizeofEthernet = int(unsafe.Sizeof(Ethernet{})) // sizeof(struct ethhdr)
+	SizeofVLAN     = int(unsafe.Sizeof(VLAN{}))     // sizeof(struct vlan_hdr)
+	SizeofIPv4     = int(unsafe.Sizeof(IPv4{}))     // sizeof(struct iphdr)
+	SizeofIPv6     = int(unsafe.Sizeof(IPv6{}))     // sizeof(struct ipv6hdr)
+	SizeofTCP      = int(unsafe.Sizeof(TCP{}))      // sizeof(struct tcphdr)
+	SizeofUDP      = int(unsafe.Sizeof(UDP{}))      // sizeof(struct udphdr)
+	SizeofICMP     = int(unsafe.Sizeof(ICMP{}))     // sizeof(struct icmphdr)
+	SizeofARP      = int(unsafe.Sizeof(ARP{}))      // sizeof(struct arphdr)
 )
 
 var (
@@ -71,7 +71,7 @@ func (pkt *Packet) DecodeFromData(data []byte) error {
 	pkt.RxData = data
 	pkt.L2Len = uint8(SizeofEthernet)
 
-	eth := (*EthHeader)(unsafe.Pointer(&data[0]))
+	eth := (*Ethernet)(unsafe.Pointer(&data[0]))
 	off := SizeofEthernet
 
 	switch netutil.Ntohs(eth.HwProto) {
@@ -95,7 +95,7 @@ func (pkt *Packet) DecodePacketVLAN(data []byte) error {
 
 	pkt.L2Len += uint8(SizeofVLAN)
 
-	vlan := (*VLANHeader)(unsafe.Pointer(&data[0]))
+	vlan := (*VLAN)(unsafe.Pointer(&data[0]))
 	off := SizeofVLAN
 
 	switch netutil.Ntohs(vlan.EncapsulatedProto) {
@@ -115,7 +115,7 @@ func (pkt *Packet) DecodePacketARP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	arp := (*ARPHeader)(unsafe.Pointer(&data[0]))
+	arp := (*ARP)(unsafe.Pointer(&data[0]))
 	if len(data) < SizeofARP+int(arp.HwAddrLen)*2+int(arp.ProtAddrLen)*2 {
 		return ErrPacketTooShort
 	}
@@ -138,7 +138,7 @@ func (pkt *Packet) DecodePacketIPv4(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	ip := (*IPv4Header)(unsafe.Pointer(&data[0]))
+	ip := (*IPv4)(unsafe.Pointer(&data[0]))
 	off := ip.HeaderLen()
 	pkt.L3Proto = unix.ETH_P_IP
 	pkt.SrcIP = netaddr.IPv4Addr(netutil.Ntohl(ip.SrcIP))
@@ -167,7 +167,7 @@ func (pkt *Packet) DecodePacketTCP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	tcp := (*TCPHeader)(unsafe.Pointer(&data[0]))
+	tcp := (*TCP)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_TCP
 	pkt.SrcPort = netutil.Ntohs(tcp.SrcPort)
 	pkt.DstPort = netutil.Ntohs(tcp.DstPort)
@@ -209,7 +209,7 @@ func (pkt *Packet) DecodePacketUDP(data []byte) error {
 		return ErrPacketTooShort
 	}
 
-	udp := (*UDPHeader)(unsafe.Pointer(&data[0]))
+	udp := (*UDP)(unsafe.Pointer(&data[0]))
 	pkt.L4Proto = unix.IPPROTO_UDP
 	pkt.SrcPort = netutil.Ntohs(udp.SrcPort)
 	pkt.DstPort = netutil.Ntohs(udp.DstPort)

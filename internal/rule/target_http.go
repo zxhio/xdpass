@@ -44,16 +44,16 @@ const notFoundText = "HTTP/1.1 404 Not Found\r\n" +
 
 func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	var (
-		rxTCP = fastpkt.DataPtrTCPHeader(pkt.RxData, int(pkt.L2Len+pkt.L3Len))
-		buf   = fastpkt.NewBuildBuffer(pkt.TxData)
+		rxTCP   = fastpkt.TCPPtr(pkt, pkt.RxData)
+		builder = fastpkt.NewPacketBuilder(pkt.TxData)
 	)
 
 	// L7
-	payload := buf.AllocPayload(len(notFoundText))
+	payload := builder.Alloc(len(notFoundText))
 	copy(payload, string(notFoundText))
 
 	// L4
-	txTCP := buf.AllocTCPHeader()
+	txTCP := builder.AllocTCP()
 	txTCP.SrcPort = rxTCP.DstPort
 	txTCP.DstPort = rxTCP.SrcPort
 	txTCP.Seq = rxTCP.AckSeq
@@ -64,9 +64,9 @@ func (TargetHTTPRespSpoofNotFound) Execute(pkt *fastpkt.Packet) error {
 	txTCP.Window = rxTCP.Window
 	txTCP.Check = rxTCP.Check
 
-	makeL23DataUnderTCP(pkt, &buf, txTCP, len(payload))
+	makeL23DataUnderTCP(pkt, builder, txTCP, len(payload))
 
-	pkt.TxData = buf.Bytes()
+	pkt.TxData = builder.Bytes()
 	return nil
 }
 

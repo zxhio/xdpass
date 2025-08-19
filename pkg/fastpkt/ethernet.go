@@ -8,7 +8,7 @@ package fastpkt
 //	    __be16 h_proto;
 //	};
 
-type EthHeader struct {
+type Ethernet struct {
 	HwDest   [6]byte
 	HwSource [6]byte
 	HwProto  uint16
@@ -21,7 +21,7 @@ type EthHeader struct {
 //	    __be16 h_vlan_encapsulated_proto;
 //	};
 
-type VLANHeader struct {
+type VLAN struct {
 	ID                uint16
 	EncapsulatedProto uint16
 }
@@ -36,7 +36,7 @@ type VLANHeader struct {
 //     __be16 ar_op;         /* ARP opcode (command)		*/
 // };
 
-type ARPHeader struct {
+type ARP struct {
 	HwAddrType   uint16
 	ProtAddrType uint16
 	HwAddrLen    uint8

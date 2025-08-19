@@ -27,7 +27,7 @@ func TestICMPChecksum(t *testing.T) {
 		}
 		checksum := netutil.Htons(layerICMPv4.Checksum)
 
-		icmp := DataPtrICMPHeader(buf, 0)
+		icmp := DataPtr[ICMP](buf, 0)
 		icmp.SetChecksum(uint16(len(testCase.payload)))
 		assert.Equal(t, checksum, icmp.Checksum)
 	}

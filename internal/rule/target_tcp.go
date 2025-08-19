@@ -80,12 +80,12 @@ func (TargetTCPSpoofACK) Close() error { return nil }
 
 func makeTCPDataWithFlags(pkt *fastpkt.Packet, flags fastpkt.TCPFlags) {
 	var (
-		rxTCP = fastpkt.DataPtrTCPHeader(pkt.RxData, int(pkt.L2Len+pkt.L3Len))
-		buf   = fastpkt.NewBuildBuffer(pkt.TxData)
+		rxTCP   = fastpkt.TCPPtr(pkt, pkt.RxData)
+		builder = fastpkt.NewPacketBuilder(pkt.TxData)
 	)
 
 	// L4
-	txTCP := buf.AllocTCPHeader()
+	txTCP := builder.AllocTCP()
 	txTCP.SrcPort = rxTCP.DstPort
 	txTCP.DstPort = rxTCP.SrcPort
 	txTCP.Seq = rxTCP.AckSeq
@@ -96,19 +96,19 @@ func makeTCPDataWithFlags(pkt *fastpkt.Packet, flags fastpkt.TCPFlags) {
 	txTCP.Window = 0
 	txTCP.Check = 0
 
-	makeL23DataUnderTCP(pkt, &buf, txTCP, 0)
+	makeL23DataUnderTCP(pkt, builder, txTCP, 0)
 
-	pkt.TxData = buf.Bytes()
+	pkt.TxData = builder.Bytes()
 }
 
-func makeL23DataUnderTCP(pkt *fastpkt.Packet, buf *fastpkt.Buffer, txTCP *fastpkt.TCPHeader, l7Len int) {
+func makeL23DataUnderTCP(pkt *fastpkt.Packet, builder *fastpkt.PacketBuilder, txTCP *fastpkt.TCP, l7Len int) {
 	var (
-		rxEther = fastpkt.DataPtrEthHeader(pkt.RxData, 0)
-		rxIPv4  = fastpkt.DataPtrIPv4Header(pkt.RxData, int(pkt.L2Len))
+		rxEther = fastpkt.EthernetPtr(pkt, pkt.RxData)
+		rxIPv4  = fastpkt.IPv4Ptr(pkt, pkt.RxData)
 	)
 
 	// L3
-	txIPv4 := buf.AllocIPv4Header()
+	txIPv4 := builder.AllocIPv4()
 	txIPv4.SetHeaderLen(uint8(fastpkt.SizeofIPv4))
 	txIPv4.TOS = 0
 	txIPv4.ID = rxIPv4.ID
@@ -122,14 +122,14 @@ func makeL23DataUnderTCP(pkt *fastpkt.Packet, buf *fastpkt.Buffer, txTCP *fastpk
 
 	// L2 VLAN
 	if netutil.Ntohs(rxEther.HwProto) == unix.ETH_P_8021Q {
-		rxVLAN := fastpkt.DataPtrVLANHeader(pkt.RxData, fastpkt.SizeofEthernet)
-		txVLAN := buf.AllocVLANHeader()
+		rxVLAN := fastpkt.VLANPtr(pkt, pkt.RxData)
+		txVLAN := builder.AllocVLAN()
 		txVLAN.ID = rxVLAN.ID
 		txVLAN.EncapsulatedProto = rxVLAN.EncapsulatedProto
 	}
 
 	// L2 Ethernet
-	txEther := buf.AllocEthHeader()
+	txEther := builder.AllocEthernet()
 	copy(txEther.HwSource[:], rxEther.HwDest[:])
 	copy(txEther.HwDest[:], rxEther.HwSource[:])
 	txEther.HwProto = rxEther.HwProto

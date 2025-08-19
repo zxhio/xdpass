@@ -36,8 +36,8 @@ func TestUDPChecksum(t *testing.T) {
 		}
 		checksum := netutil.Htons(layerUDP.Checksum)
 
-		udp := DataPtrUDPHeader(buf, 20)
-		udp.SetChecksum(DataPtrIPv4Header(buf, 0), uint16(len(testCase.payload)))
+		udp := DataPtr[UDP](buf, 20)
+		udp.SetChecksum(DataPtr[IPv4](buf, 0), uint16(len(testCase.payload)))
 		assert.Equal(t, checksum, udp.Check)
 	}
 }

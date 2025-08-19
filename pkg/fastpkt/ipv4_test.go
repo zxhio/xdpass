@@ -51,7 +51,7 @@ func TestIPv4Checksum(t *testing.T) {
 		}
 		checksum := netutil.Htons(layerIPv4.Checksum)
 
-		ip := DataPtrIPv4Header(buf, 0)
+		ip := DataPtr[IPv4](buf, 0)
 		ip.SetChecksum(0)
 		assert.Equal(t, checksum, ip.Checksum)
 	}
