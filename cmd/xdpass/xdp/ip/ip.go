@@ -246,7 +246,9 @@ func list(all bool, page, limit int, iface, action string) ([]api.AttachmentIP, 
 	return attachements, total, nil
 }
 
-func Export(parent *cobra.Command) {
-	parent.AddCommand(ipCmd)
+func Export(parents ...*cobra.Command) {
+	for _, parent := range parents {
+		parent.AddCommand(ipCmd)
+	}
 	setOpCommands(ipCmd)
 }

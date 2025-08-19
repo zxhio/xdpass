@@ -3,15 +3,19 @@
 interface=br1
 hwaddr=$(cat /sys/class/net/$interface/address)
 
-set -x
+set -xe
 
 # xdp attachment
 xdpass xdp attach $interface
+xdpass xdp attachment ls --all
+xdpass xdp ls --all
+xdpass ls --all
 
 # xdp ip
 xdpass xdp ip add 172.16.23.3 -i $interface --pass
 xdpass xdp ip add 172.16.23.0/24 -i $interface --redirect
 xdpass xdp ip ls --all
+xdpass ip ls --all
 
 # mirror rule
 xdpass rule add -d 172.16.23.1 --mirror-tap tap0

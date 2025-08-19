@@ -245,9 +245,11 @@ func init() {
 	statsCmd.Flags().BoolVarP(&stShowAll, "all", "a", false, "Show all")
 }
 
-func Export(parent *cobra.Command) {
-	parent.AddGroup(group)
-	parent.AddCommand(attachmentCmd, attachCmd, detachCmd, listCmd, statsCmd)
+func Export(parents ...*cobra.Command) {
+	for _, parent := range parents {
+		parent.AddGroup(group)
+		parent.AddCommand(attachmentCmd, attachCmd, detachCmd, listCmd, statsCmd)
+	}
 	attachmentCmd.AddCommand(attachCmd, detachCmd, listCmd, statsCmd)
 }
 

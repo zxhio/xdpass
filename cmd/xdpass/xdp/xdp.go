@@ -12,7 +12,7 @@ var xdpCmd = &cobra.Command{
 }
 
 func Export(parent *cobra.Command) {
-	attachment.Export(xdpCmd)
-	ip.Export(xdpCmd)
+	attachment.Export(parent, xdpCmd)
+	ip.Export(parent, xdpCmd)
 	parent.AddCommand(xdpCmd)
 }
