@@ -296,12 +296,6 @@ type Attachment struct {
 func NewAttachment(a *model.Attachment, h PacketHandler, opts ...xdp.XDPOpt) (*Attachment, error) {
 	l := logrus.WithField("name", a.Name)
 
-	o := xdp.XDPDefaultOpts()
-	for _, opt := range opts {
-		opt(&o)
-	}
-	a.BindFlags = uint16(o.BindFlags)
-
 	var m xdp.XDPAttachMode
 	err := m.Set(a.Mode)
 	if err != nil {
