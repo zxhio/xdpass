@@ -13,6 +13,7 @@ import (
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/util"
 	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/pkg/utils"
@@ -108,6 +109,7 @@ func setOpCommands(cmds ...*cobra.Command) {
 		for i := range opCmds {
 			sub := opCmds[i]
 			sub.GroupID = "operation"
+			util.DisableSortFlags(&sub)
 			cmd.AddCommand(&sub)
 		}
 	}
