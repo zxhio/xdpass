@@ -128,7 +128,7 @@ func (LayerFormatterARP) Format(layer gopacket.Layer, opts ...FormatOpt) (string
 			net.IP(arp.DstProtAddress), net.IP(arp.SourceProtAddress), len(arp.Payload)+len(arp.Contents))
 	case layers.ARPReply:
 		s = fmt.Sprintf("Reply %s is-at %s, length %d",
-			net.IP(arp.DstProtAddress), net.HardwareAddr(arp.DstHwAddress), len(arp.Payload)+len(arp.Contents))
+			net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress), len(arp.Payload)+len(arp.Contents))
 	default:
 		s = fmt.Sprintf("unknown arp operation %d", arp.Operation)
 	}
