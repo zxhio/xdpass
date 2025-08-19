@@ -2,6 +2,7 @@ package rule
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/util"
 	"github.com/zxhio/xdpass/internal/rule"
 	"github.com/zxhio/xdpass/pkg/fastpkt"
 	"github.com/zxhio/xdpass/pkg/netaddr"
@@ -211,7 +212,7 @@ var httpCmd = &cobra.Command{
 
 func init() {
 	// rule
-	disableSort(ruleCmd)
+	util.DisableSortFlags(ruleCmd)
 	ruleCmd.PersistentFlags().Var(&F.SrcMAC, "smac", "Source mac address")
 	ruleCmd.PersistentFlags().Var(&F.DstMAC, "dmac", "Destionation mac address")
 	ruleCmd.PersistentFlags().VarP(&F.SrcIPv4Prefix, "source", "s", "Source ip address")
@@ -226,7 +227,7 @@ func init() {
 	arpCmd.PersistentFlags().Var(&F.SpoofARPReplyAddr, "spoof-arp-reply", "[Target] MAC ARP-Reply spoofing")
 
 	// rule tcp
-	disableSort(tcpCmd)
+	util.DisableSortFlags(tcpCmd)
 	setCommandFlagsPorts(tcpCmd)
 	tcpCmd.PersistentFlags().BoolVarP(&F.TCP.FlagSYN, "syn", "S", false, "TCP flag SYN")
 	tcpCmd.PersistentFlags().BoolVar(&F.TCP.FlagACK, "ack", false, "TCP flag ACK")
@@ -244,12 +245,12 @@ func init() {
 	setCommandFlagsPorts(udpCmd)
 
 	// rule icmp
-	disableSort(icmpCmd)
+	util.DisableSortFlags(icmpCmd)
 	setCommandFlagsPorts(icmpCmd)
 	icmpCmd.PersistentFlags().BoolVar(&F.ICMP.SpoofEchoReply, "spoof-echo-reply", false, "[Target] ICMP Echo-Reply spoofing")
 
 	// rule http
-	disableSort(httpCmd)
+	util.DisableSortFlags(httpCmd)
 	httpCmd.PersistentFlags().StringVar(&F.Method, "method", "", "HTTP request method")
 	httpCmd.PersistentFlags().StringVar(&F.URI, "uri", "", "HTTP request uri")
 	httpCmd.PersistentFlags().StringVar(&F.Version, "version", "", "HTTP request version, (e.g. 1.1)")
@@ -267,15 +268,6 @@ func setCommandFlagsPorts(cmd *cobra.Command) {
 func addSubCommands(subCmd *cobra.Command, cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		cmd.AddCommand(subCmd)
-	}
-}
-
-func disableSort(cmds ...*cobra.Command) {
-	for _, cmd := range cmds {
-		// both
-		cmd.InheritedFlags().SortFlags = false
-		cmd.PersistentFlags().SortFlags = false
-		cmd.Flags().SortFlags = false
 	}
 }
 

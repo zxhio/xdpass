@@ -11,6 +11,7 @@ import (
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/util"
 	"github.com/zxhio/xdpass/cmd/xdpass/xdp/attachment"
 	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/internal/model"
@@ -162,15 +163,18 @@ var delCmd = cobra.Command{
 
 func init() {
 	// list cmd
+	util.DisableSortFlags(&listCmd)
 	listCmd.Flags().IntVar(&opt.Page, "page", 1, "Page number to list")
 	listCmd.Flags().IntVar(&opt.Limit, "limit", 100, "Limit size per page")
 	listCmd.Flags().BoolVarP(&opt.All, "all", "a", false, "List all ip")
 	setFlagsAttachment(&listCmd, false)
 
 	// add cmd
+	util.DisableSortFlags(&addCmd)
 	setFlagsAttachment(&addCmd, true)
 
 	// delete cmd
+	util.DisableSortFlags(&delCmd)
 	setFlagsAttachment(&delCmd, true)
 }
 

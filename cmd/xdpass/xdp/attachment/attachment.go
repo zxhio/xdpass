@@ -12,6 +12,7 @@ import (
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
+	"github.com/zxhio/xdpass/cmd/xdpass/util"
 	"github.com/zxhio/xdpass/internal/api"
 	"github.com/zxhio/xdpass/pkg/netutil"
 	"github.com/zxhio/xdpass/pkg/utils"
@@ -212,6 +213,7 @@ func init() {
 	attachmentCmd.AddGroup(group)
 
 	// attach
+	util.DisableSortFlags(attachCmd)
 	attachCmd.Flags().BoolVarP(&attachGeneric, "generic", "g", false, "XDP generic(SKB) attach mode")
 	attachCmd.Flags().BoolVarP(&attachNative, "native", "n", false, "XDP native attach mode")
 	attachCmd.Flags().BoolVarP(&attachDriver, "offload", "o", false, "XDP offload(hardware) attach mode")
@@ -225,11 +227,13 @@ func init() {
 	// detach
 
 	// list
+	util.DisableSortFlags(listCmd)
 	listCmd.Flags().IntVar(&listPage, "page", 1, "Page number to list")
 	listCmd.Flags().IntVar(&listLimit, "limit", 100, "Limit size per page")
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "List all ip")
 
 	// stats
+	util.DisableSortFlags(statsCmd)
 	statsCmd.Flags().StringSliceVarP(&stIfaces, "interfaces", "i", []string{}, "Special attachment interface")
 	statsCmd.Flags().DurationVarP(&stDur, "duration", "d", 0, "Statistics duration")
 	statsCmd.Flags().BoolVarP(&stShowPackets, "packets", "p", false, "Show packets")
