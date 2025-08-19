@@ -21,18 +21,21 @@ import (
 const logoAscii = `
     |               |
  \ \| |\ //| // // \|
-      |`
+      |
+`
 
 var (
-	version bool
-	verbose bool
-	pprof   bool
+	version    bool
+	verbose    bool
+	pprof      bool
+	listenAddr string
 )
 
 func main() {
 	pflag.BoolVarP(&version, "version", "V", false, "Print version")
 	pflag.BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	pflag.BoolVar(&pprof, "profile", false, "Enable profile")
+	pflag.StringVarP(&listenAddr, "listen-addr", "l", ":9921", "Listen address")
 	pflag.Parse()
 
 	if version {
@@ -73,7 +76,7 @@ func main() {
 		go profile.Serve(lis)
 	}
 
-	lis, err := net.Listen("tcp", ":9921")
+	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		logrus.WithError(err).Fatal("Fatal to listen")
 	}
