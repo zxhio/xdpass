@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -156,8 +157,22 @@ func handlePutRuleset(svc RulesetService) http.HandlerFunc {
 			return
 		}
 
+		if r.URL.Query().Get("dry_run") == "true" {
+			resp, err := svc.DryRunRuleset(r.Context(), req.Rules)
+			if err != nil {
+				writeValidationFailed(w, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
 		resp, err := svc.ReplaceRuleset(r.Context(), req.Rules)
 		if err != nil {
+			if isRuntimeFailed(err) {
+				writeRuntimeFailed(w, err.Error())
+				return
+			}
 			writeValidationFailed(w, err.Error())
 			return
 		}
@@ -251,4 +266,9 @@ func parseIfIndex(s string) (uint32, error) {
 		return 0, strconv.ErrSyntax
 	}
 	return uint32(v), nil
+}
+
+func isRuntimeFailed(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "write maps") || strings.Contains(msg, "clear maps")
 }

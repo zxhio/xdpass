@@ -86,6 +86,10 @@ func (m *mockStore) ReplaceRuleset(_ context.Context, rules []RuleResponse) (Rul
 	return RulesetResponse{Rules: m.rules}, nil
 }
 
+func (m *mockStore) DryRunRuleset(_ context.Context, rules []RuleResponse) (RulesetResponse, error) {
+	return RulesetResponse{Rules: rules}, nil
+}
+
 func (m *mockStore) DeleteRuleset(_ context.Context) error {
 	m.rules = nil
 	return nil

@@ -21,6 +21,7 @@ type AttachmentService interface {
 type RulesetService interface {
 	GetRuleset(ctx context.Context) (RulesetResponse, error)
 	ReplaceRuleset(ctx context.Context, rules []RuleResponse) (RulesetResponse, error)
+	DryRunRuleset(ctx context.Context, rules []RuleResponse) (RulesetResponse, error)
 	DeleteRuleset(ctx context.Context) error
 }
 

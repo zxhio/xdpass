@@ -9,13 +9,14 @@ import (
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
+	"xdpass/internal/ruleset"
 )
 
 // Store holds all in-memory runtime state.
 type Store struct {
 	mu               sync.RWMutex
 	attachments      *attachment.Runtime
-	rules            []api.RuleResponse
+	rulesetRuntime   *ruleset.Runtime
 	egressConfigured bool
 	egressIfIndex    uint32
 	egressIfName     string
@@ -25,7 +26,8 @@ type Store struct {
 // New creates a new in-memory store.
 func New(attachments *attachment.Runtime) *Store {
 	return &Store{
-		attachments:   attachments,
+		attachments:    attachments,
+		rulesetRuntime: ruleset.NewRuntime(),
 		egressVLANMode: "preserve",
 	}
 }
@@ -37,11 +39,12 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 	defer s.mu.RUnlock()
 
 	list := s.attachments.List()
+	rules := s.rulesetRuntime.GetRuleset()
 	return api.StatusResponse{
 		Status:                   "degraded",
 		Attachments:              len(list),
-		RulesetLoaded:            len(s.rules) > 0,
-		Rules:                    len(s.rules),
+		RulesetLoaded:            len(rules) > 0,
+		Rules:                    len(rules),
 		ResponseEgressConfigured: s.egressConfigured,
 	}, nil
 }
@@ -97,29 +100,57 @@ func (s *Store) DeleteAttachment(_ context.Context, ifIndex uint32) error {
 // --- Ruleset ---
 
 func (s *Store) GetRuleset(_ context.Context) (api.RulesetResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rules := make([]api.RuleResponse, len(s.rules))
-	copy(rules, s.rules)
-	return api.RulesetResponse{Rules: rules}, nil
+	rules := s.rulesetRuntime.GetRuleset()
+	return api.RulesetResponse{Rules: rulesToAPI(rules)}, nil
 }
 
-func (s *Store) ReplaceRuleset(_ context.Context, rules []api.RuleResponse) (api.RulesetResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Store) ReplaceRuleset(_ context.Context, apiRules []api.RuleResponse) (api.RulesetResponse, error) {
+	internalRules := apiToRules(apiRules)
+	ingressVerdict := s.getIngressVerdict()
 
-	s.rules = make([]api.RuleResponse, len(rules))
-	copy(s.rules, rules)
-	return api.RulesetResponse{Rules: s.rules}, nil
+	getMaps := func() []attachment.MapAccessor {
+		return s.attachmentMapAccessors()
+	}
+
+	if err := s.rulesetRuntime.ReplaceRuleset(internalRules, ingressVerdict, getMaps); err != nil {
+		return api.RulesetResponse{}, err
+	}
+
+	return api.RulesetResponse{Rules: apiRules}, nil
+}
+
+func (s *Store) DryRunRuleset(_ context.Context, apiRules []api.RuleResponse) (api.RulesetResponse, error) {
+	internalRules := apiToRules(apiRules)
+	ingressVerdict := s.getIngressVerdict()
+
+	if _, err := ruleset.Compile(internalRules, ingressVerdict); err != nil {
+		return api.RulesetResponse{}, err
+	}
+
+	return api.RulesetResponse{Rules: apiRules}, nil
 }
 
 func (s *Store) DeleteRuleset(_ context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	getMaps := func() []attachment.MapAccessor {
+		return s.attachmentMapAccessors()
+	}
+	return s.rulesetRuntime.DeleteRuleset(getMaps)
+}
 
-	s.rules = nil
-	return nil
+// getIngressVerdict returns the miss_verdict of the first enabled attachment.
+func (s *Store) getIngressVerdict() string {
+	list := s.attachments.List()
+	for _, att := range list {
+		if att.Enabled {
+			return att.MissVerdict
+		}
+	}
+	return "pass"
+}
+
+// attachmentMapAccessors returns MapAccessors for all enabled attachments.
+func (s *Store) attachmentMapAccessors() []attachment.MapAccessor {
+	return s.attachments.EnabledMapAccessors()
 }
 
 // --- Stats ---
@@ -195,6 +226,96 @@ func IsValidation(err error) bool {
 }
 
 // --- Conversion helpers ---
+
+func apiToRules(apiRules []api.RuleResponse) []ruleset.Rule {
+	rules := make([]ruleset.Rule, len(apiRules))
+	for i, r := range apiRules {
+		rules[i] = ruleset.Rule{
+			RuleID:   r.RuleID,
+			Priority: r.Priority,
+			Response: ruleset.Response{
+				Action: r.Response.Action,
+				Params: r.Response.Params,
+			},
+		}
+		if r.Match != nil {
+			rules[i].Match = apiToMatch(r.Match)
+		}
+	}
+	return rules
+}
+
+func apiToMatch(m *api.MatchResponse) ruleset.Match {
+	match := ruleset.Match{
+		Protocol:     m.Protocol,
+		VLANS:        m.VLANS,
+		SrcCIDRs:     m.SrcCIDRs,
+		DstCIDRs:     m.DstCIDRs,
+		SrcPorts:     m.SrcPorts,
+		DstPorts:     m.DstPorts,
+		ICMPType:     m.ICMPType,
+		ARPOP:        m.ARPOP,
+		HasL4Payload: m.HasL4Payload,
+	}
+	if m.TCPFlags != nil {
+		match.TCPFlags = &ruleset.TCPFlags{
+			SYN: m.TCPFlags.SYN,
+			ACK: m.TCPFlags.ACK,
+			RST: m.TCPFlags.RST,
+			FIN: m.TCPFlags.FIN,
+			PSH: m.TCPFlags.PSH,
+		}
+	}
+	return match
+}
+
+func rulesToAPI(rules []ruleset.Rule) []api.RuleResponse {
+	apiRules := make([]api.RuleResponse, len(rules))
+	for i, r := range rules {
+		apiRules[i] = api.RuleResponse{
+			RuleID:   r.RuleID,
+			Priority: r.Priority,
+			Response: api.ResponseResponse{
+				Action: r.Response.Action,
+				Params: r.Response.Params,
+			},
+		}
+		if hasMatch(r.Match) {
+			apiRules[i].Match = matchToAPI(r.Match)
+		}
+	}
+	return apiRules
+}
+
+func hasMatch(m ruleset.Match) bool {
+	return m.Protocol != "" || len(m.VLANS) > 0 || len(m.SrcCIDRs) > 0 ||
+		len(m.DstCIDRs) > 0 || len(m.SrcPorts) > 0 || len(m.DstPorts) > 0 ||
+		m.TCPFlags != nil || m.ICMPType != "" || m.ARPOP != "" || m.HasL4Payload != nil
+}
+
+func matchToAPI(m ruleset.Match) *api.MatchResponse {
+	resp := &api.MatchResponse{
+		Protocol:     m.Protocol,
+		VLANS:        m.VLANS,
+		SrcCIDRs:     m.SrcCIDRs,
+		DstCIDRs:     m.DstCIDRs,
+		SrcPorts:     m.SrcPorts,
+		DstPorts:     m.DstPorts,
+		ICMPType:     m.ICMPType,
+		ARPOP:        m.ARPOP,
+		HasL4Payload: m.HasL4Payload,
+	}
+	if m.TCPFlags != nil {
+		resp.TCPFlags = &api.TCPFlags{
+			SYN: m.TCPFlags.SYN,
+			ACK: m.TCPFlags.ACK,
+			RST: m.TCPFlags.RST,
+			FIN: m.TCPFlags.FIN,
+			PSH: m.TCPFlags.PSH,
+		}
+	}
+	return resp
+}
 
 func apiToRequest(req api.AttachmentRequest) *attachment.Request {
 	r := &attachment.Request{

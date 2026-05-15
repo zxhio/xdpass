@@ -257,3 +257,58 @@ func (r *Runtime) Close() {
 		r.cleanup(ifIndex)
 	}
 }
+
+// Maps returns the BPF map accessor for an attachment.
+// Returns nil if the attachment has no BPF resources.
+func (r *Runtime) Maps(ifIndex uint32) MapAccessor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	res, ok := r.resources[ifIndex]
+	if !ok || res.coll == nil {
+		return nil
+	}
+	return &collMapAccessor{maps: res.coll.Maps}
+}
+
+// EnabledMapAccessors returns MapAccessors for all enabled attachments.
+func (r *Runtime) EnabledMapAccessors() []MapAccessor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var result []MapAccessor
+	for ifIndex, att := range r.attachments {
+		if !att.Enabled {
+			continue
+		}
+		res, ok := r.resources[ifIndex]
+		if !ok || res.coll == nil {
+			continue
+		}
+		result = append(result, &collMapAccessor{maps: res.coll.Maps})
+	}
+	return result
+}
+
+// MapAccessor provides access to BPF maps for ruleset operations.
+type MapAccessor interface {
+	RuleIndexMap() *ebpf.Map
+	GlobalCfgMap() *ebpf.Map
+	SrcPortIndexMap() *ebpf.Map
+	DstPortIndexMap() *ebpf.Map
+	VlanIndexMap() *ebpf.Map
+	SrcPrefixLpmMap() *ebpf.Map
+	DstPrefixLpmMap() *ebpf.Map
+}
+
+type collMapAccessor struct {
+	maps map[string]*ebpf.Map
+}
+
+func (c *collMapAccessor) RuleIndexMap() *ebpf.Map      { return c.maps["rule_index_map"] }
+func (c *collMapAccessor) GlobalCfgMap() *ebpf.Map      { return c.maps["global_cfg_map"] }
+func (c *collMapAccessor) SrcPortIndexMap() *ebpf.Map   { return c.maps["src_port_index_map"] }
+func (c *collMapAccessor) DstPortIndexMap() *ebpf.Map   { return c.maps["dst_port_index_map"] }
+func (c *collMapAccessor) VlanIndexMap() *ebpf.Map      { return c.maps["vlan_index_map"] }
+func (c *collMapAccessor) SrcPrefixLpmMap() *ebpf.Map   { return c.maps["src_prefix_lpm_map"] }
+func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map   { return c.maps["dst_prefix_lpm_map"] }

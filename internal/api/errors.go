@@ -54,3 +54,7 @@ func writeNotImplemented(w http.ResponseWriter, detail string) {
 func writeInternalError(w http.ResponseWriter, detail string) {
 	writeError(w, http.StatusInternalServerError, CodeInternalError, detail)
 }
+
+func writeRuntimeFailed(w http.ResponseWriter, detail string) {
+	writeError(w, http.StatusInternalServerError, CodeRuntimeFailed, detail)
+}
