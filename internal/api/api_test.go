@@ -323,6 +323,44 @@ func TestEgressCRUD(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w3.Code)
 }
 
+func TestEgressPutIfIndexZero(t *testing.T) {
+	router := newTestRouter()
+	w := doRequest(router, "PUT", "/api/v1/response/egress", putEgressRequest{IfIndex: 0})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp ProblemDetails
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, CodeValidationFailed, resp.Code)
+}
+
+func TestEgressPutInvalidVLANMode(t *testing.T) {
+	// Use a mock that validates vlanMode.
+	s := &mockEgressValidator{}
+	router := NewRouter(RouterDeps{
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Events: s,
+	})
+	w := doRequest(router, "PUT", "/api/v1/response/egress", putEgressRequest{IfIndex: 3, VLANMode: "invalid"})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestEgressDeleteIdempotent(t *testing.T) {
+	router := newTestRouter()
+	// DELETE when not configured should still return 204.
+	w := doRequest(router, "DELETE", "/api/v1/response/egress", nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// mockEgressValidator returns validation errors for invalid vlan_mode.
+type mockEgressValidator struct {
+	mockStore
+}
+
+func (m *mockEgressValidator) ReplaceEgress(_ context.Context, ifIndex uint32, _, vlanMode string) (EgressResponse, error) {
+	if vlanMode != "" && vlanMode != "preserve" && vlanMode != "access" {
+		return EgressResponse{}, &ServiceValidationError{Detail: "invalid vlan_mode: " + vlanMode}
+	}
+	return EgressResponse{Configured: true, IfIndex: ifIndex, VLANMode: vlanMode}, nil
+}
+
 func TestAllRoutesRegistered(t *testing.T) {
 	router := newTestRouter()
 	routes := []struct {

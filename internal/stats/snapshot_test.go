@@ -20,13 +20,26 @@ func TestZeroResponse(t *testing.T) {
 }
 
 func TestSnapshotNilMaps(t *testing.T) {
-	resp := Snapshot(nil)
+	resp := Snapshot(nil, nil)
 	assert.Equal(t, uint64(0), resp.Ingress.Packets)
 }
 
 func TestSnapshotEmptyMaps(t *testing.T) {
-	resp := Snapshot([]*ebpf.Map{})
+	resp := Snapshot([]*ebpf.Map{}, nil)
 	assert.Equal(t, uint64(0), resp.Ingress.Packets)
+}
+
+func TestSnapshotWithUserspaceStats(t *testing.T) {
+	us := &UserspaceResponseStats{
+		XSKRXPackets: 10,
+		Packets:      8,
+		ErrorPackets: 2,
+	}
+	resp := Snapshot(nil, us)
+	assert.Equal(t, uint64(10), resp.UserspaceResponse.XSKRXPackets)
+	assert.Equal(t, uint64(8), resp.UserspaceResponse.Packets)
+	assert.Equal(t, uint64(2), resp.UserspaceResponse.ErrorPackets)
+	assert.Equal(t, uint64(2), resp.Errors.XSKPackets)
 }
 
 func TestEncodeCounter(t *testing.T) {

@@ -118,6 +118,19 @@ func TestDeriveResultKernelFailure(t *testing.T) {
 	assert.Equal(t, "failed", deriveResult(2, 2)) // tcp_reset, VERDICT_XSK_REDIRECT
 }
 
+func TestDeriveResultUserspaceXSKRedirect(t *testing.T) {
+	// icmp_echo_reply (action=3) with VERDICT_XSK (verdict=2)
+	assert.Equal(t, "matched", deriveResult(3, 2))
+	// arp_reply (action=4) with VERDICT_XSK
+	assert.Equal(t, "matched", deriveResult(4, 2))
+}
+
+func TestDeriveResultUserspaceFailure(t *testing.T) {
+	// userspace action with non-XSK verdict is a failure
+	assert.Equal(t, "failed", deriveResult(3, 0)) // icmp_echo_reply, VERDICT_OBSERVE
+	assert.Equal(t, "failed", deriveResult(3, 1)) // icmp_echo_reply, VERDICT_TX
+}
+
 func TestIPv4ToString(t *testing.T) {
 	assert.Equal(t, "10.1.2.10", ipv4ToString(0x0A01020A))
 	assert.Equal(t, "192.168.1.1", ipv4ToString(0xC0A80101))

@@ -133,9 +133,12 @@ func deriveResult(action uint16, verdict uint8) string {
 		}
 		return "failed"
 	case "userspace":
-		// Userspace result is not available from BPF event.
-		// Will be updated when userspace response runtime is implemented.
-		return ""
+		// BPF verdict=xsk_redirect means the packet entered XSK.
+		// The actual sent/failed result comes from the userspace response runtime.
+		if verdict == 2 { // VERDICT_XSK
+			return "matched"
+		}
+		return "failed"
 	}
 	return ""
 }

@@ -58,3 +58,10 @@ func writeInternalError(w http.ResponseWriter, detail string) {
 func writeRuntimeFailed(w http.ResponseWriter, detail string) {
 	writeError(w, http.StatusInternalServerError, CodeRuntimeFailed, detail)
 }
+
+// ServiceValidationError is returned by service methods for input validation failures.
+type ServiceValidationError struct {
+	Detail string
+}
+
+func (e *ServiceValidationError) Error() string { return e.Detail }

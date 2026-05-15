@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -11,7 +12,9 @@ import (
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
+	"xdpass/internal/dataplane/bpfgen"
 	"xdpass/internal/events"
+	"xdpass/internal/response"
 	"xdpass/internal/ruleset"
 	"xdpass/internal/stats"
 )
@@ -22,6 +25,7 @@ type Store struct {
 	attachments      *attachment.Runtime
 	rulesetRuntime   *ruleset.Runtime
 	eventStream      *events.Stream
+	responseStats    *response.Stats
 	egressConfigured bool
 	egressIfIndex    uint32
 	egressIfName     string
@@ -29,11 +33,12 @@ type Store struct {
 }
 
 // New creates a new in-memory store.
-func New(attachments *attachment.Runtime, eventStream *events.Stream) *Store {
+func New(attachments *attachment.Runtime, eventStream *events.Stream, responseStats *response.Stats) *Store {
 	return &Store{
 		attachments:    attachments,
 		rulesetRuntime: ruleset.NewRuntime(),
 		eventStream:    eventStream,
+		responseStats:  responseStats,
 		egressVLANMode: "preserve",
 	}
 }
@@ -167,7 +172,18 @@ func (s *Store) GetStats(_ context.Context) (api.StatsResponse, error) {
 	for _, ea := range enabled {
 		readers = append(readers, &mapStatsReader{m: ea.Maps.StatsMap()})
 	}
-	resp := stats.SnapshotFromReaders(readers)
+	var usStats *stats.UserspaceResponseStats
+	if s.responseStats != nil {
+		snap := s.responseStats.Snapshot()
+		usStats = &stats.UserspaceResponseStats{
+			XSKRXPackets:      snap.XSKRXPackets,
+			Packets:           snap.Packets,
+			XSKTXPackets:      snap.XSKTXPackets,
+			AFPacketTXPackets: snap.AFPacketTXPackets,
+			ErrorPackets:      snap.ErrorPackets,
+		}
+	}
+	resp := stats.SnapshotFromReaders(readers, usStats)
 	return statsToAPI(resp), nil
 }
 
@@ -242,6 +258,15 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 	if vlanMode == "" {
 		vlanMode = "preserve"
 	}
+	if vlanMode != "preserve" && vlanMode != "access" {
+		return api.EgressResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("invalid vlan_mode: %s", vlanMode)}
+	}
+
+	// Write tx_config to all enabled attachments before updating memory.
+	cfg := egressToTxConfig(ifIndex, vlanMode)
+	if err := s.writeTxConfigToAll(cfg); err != nil {
+		return api.EgressResponse{}, fmt.Errorf("write tx config: %w", err)
+	}
 
 	s.egressConfigured = true
 	s.egressIfIndex = ifIndex
@@ -260,6 +285,12 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Write default tx_config (same-port) to all enabled attachments.
+	cfg := egressToTxConfig(0, "preserve")
+	if err := s.writeTxConfigToAll(cfg); err != nil {
+		return fmt.Errorf("write tx config: %w", err)
+	}
+
 	s.egressConfigured = false
 	s.egressIfIndex = 0
 	s.egressIfName = ""
@@ -267,19 +298,37 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	return nil
 }
 
+// egressToTxConfig converts egress config to BPF tx_config.
+func egressToTxConfig(ifIndex uint32, vlanMode string) bpfgen.XdpassTxConfig {
+	cfg := bpfgen.XdpassTxConfig{
+		TcpResetFailureVerdict: 1, // MVP: drop on failure
+	}
+	if ifIndex > 0 {
+		cfg.TcpResetMode = 1 // redirect
+		cfg.TcpResetEgressIfindex = ifIndex
+	}
+	if vlanMode == "access" {
+		cfg.TcpResetVlanMode = 1
+	}
+	return cfg
+}
+
+// writeTxConfigToAll writes tx_config to all enabled attachments.
+func (s *Store) writeTxConfigToAll(cfg bpfgen.XdpassTxConfig) error {
+	enabled := s.attachments.EnabledAttachments()
+	for _, ea := range enabled {
+		m := ea.Maps.TxConfigMap()
+		if m == nil {
+			continue
+		}
+		if err := m.Put(uint32(0), &cfg); err != nil {
+			return fmt.Errorf("ifindex %d: %w", ea.IfIndex, err)
+		}
+	}
+	return nil
+}
+
 // --- Error helpers ---
-
-// IsConflict checks if an error is a conflict error.
-func IsConflict(err error) bool {
-	var ce *attachment.ConflictError
-	return errors.As(err, &ce)
-}
-
-// IsNotFound checks if an error is a not-found error.
-func IsNotFound(err error) bool {
-	var nfe *attachment.NotFoundError
-	return errors.As(err, &nfe)
-}
 
 // IsValidation checks if an error is a validation error.
 func IsValidation(err error) bool {

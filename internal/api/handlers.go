@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -273,7 +274,13 @@ func handlePutEgress(svc EgressService) http.HandlerFunc {
 
 		resp, err := svc.ReplaceEgress(r.Context(), req.IfIndex, req.IfName, req.VLANMode)
 		if err != nil {
-			writeValidationFailed(w, err.Error())
+			var sve *ServiceValidationError
+			if errors.As(err, &sve) {
+				writeValidationFailed(w, err.Error())
+			} else {
+				logrus.WithError(err).Error("Fail to replace response egress")
+				writeRuntimeFailed(w, err.Error())
+			}
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)

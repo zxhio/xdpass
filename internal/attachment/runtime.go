@@ -322,6 +322,7 @@ type EnabledAttachment struct {
 type MapAccessor interface {
 	RuleIndexMap() *ebpf.Map
 	GlobalCfgMap() *ebpf.Map
+	TxConfigMap() *ebpf.Map
 	SrcPortIndexMap() *ebpf.Map
 	DstPortIndexMap() *ebpf.Map
 	VlanIndexMap() *ebpf.Map
@@ -329,6 +330,7 @@ type MapAccessor interface {
 	DstPrefixLpmMap() *ebpf.Map
 	EventRingbufMap() *ebpf.Map
 	StatsMap() *ebpf.Map
+	XsksMap() *ebpf.Map
 }
 
 type collMapAccessor struct {
@@ -337,6 +339,7 @@ type collMapAccessor struct {
 
 func (c *collMapAccessor) RuleIndexMap() *ebpf.Map      { return c.maps["rule_index_map"] }
 func (c *collMapAccessor) GlobalCfgMap() *ebpf.Map      { return c.maps["global_cfg_map"] }
+func (c *collMapAccessor) TxConfigMap() *ebpf.Map       { return c.maps["tx_config_map"] }
 func (c *collMapAccessor) SrcPortIndexMap() *ebpf.Map   { return c.maps["src_port_index_map"] }
 func (c *collMapAccessor) DstPortIndexMap() *ebpf.Map   { return c.maps["dst_port_index_map"] }
 func (c *collMapAccessor) VlanIndexMap() *ebpf.Map      { return c.maps["vlan_index_map"] }
@@ -344,3 +347,4 @@ func (c *collMapAccessor) SrcPrefixLpmMap() *ebpf.Map   { return c.maps["src_pre
 func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map   { return c.maps["dst_prefix_lpm_map"] }
 func (c *collMapAccessor) EventRingbufMap() *ebpf.Map   { return c.maps["event_ringbuf"] }
 func (c *collMapAccessor) StatsMap() *ebpf.Map          { return c.maps["stats_map"] }
+func (c *collMapAccessor) XsksMap() *ebpf.Map           { return c.maps["xsks_map"] }

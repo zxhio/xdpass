@@ -75,13 +75,18 @@ type ErrorsStats struct {
 }
 
 // Snapshot reads and aggregates stats from multiple BPF stats maps.
-func Snapshot(maps []*ebpf.Map) Response {
+func Snapshot(maps []*ebpf.Map, us *UserspaceResponseStats) Response {
 	var totals [statCount]uint64
 	for _, m := range maps {
 		if m == nil {
 			continue
 		}
 		aggregateMap(m, &totals)
+	}
+
+	usResp := UserspaceResponseStats{}
+	if us != nil {
+		usResp = *us
 	}
 
 	return Response{
@@ -106,10 +111,10 @@ func Snapshot(maps []*ebpf.Map) Response {
 			Packets:      totals[statXSKRedirectPackets],
 			ErrorPackets: totals[statXSKRedirectErrorPackets],
 		},
-		UserspaceResponse: UserspaceResponseStats{},
+		UserspaceResponse: usResp,
 		Errors: ErrorsStats{
 			XDPPackets: totals[statKernelResponseErrorPackets] + totals[statXSKRedirectErrorPackets],
-			XSKPackets: 0, // Will be populated when userspace response runtime is implemented.
+			XSKPackets: usResp.ErrorPackets,
 		},
 	}
 }
@@ -135,7 +140,7 @@ func ZeroResponse() Response {
 }
 
 // SnapshotFromReaders aggregates stats from attachment StatsReaders.
-func SnapshotFromReaders(readers []StatsReader) Response {
+func SnapshotFromReaders(readers []StatsReader, us *UserspaceResponseStats) Response {
 	var maps []*ebpf.Map
 	for _, r := range readers {
 		m := r.StatsMap()
@@ -143,7 +148,7 @@ func SnapshotFromReaders(readers []StatsReader) Response {
 			maps = append(maps, m)
 		}
 	}
-	return Snapshot(maps)
+	return Snapshot(maps, us)
 }
 
 // StatsReader provides access to an attachment's BPF stats map.
