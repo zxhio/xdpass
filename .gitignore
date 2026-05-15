@@ -1,4 +1,8 @@
+# BPF generated object (rebuilt each time)
 internal/dataplane/bpfgen/xdpass_bpfel.o
+
+# Build output
+build/
 
 # Claude Code local config
 .claude/
