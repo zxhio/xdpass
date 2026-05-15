@@ -19,6 +19,7 @@
 #define RULE_GROUPS 8
 #define RULES_PER_GROUP 64
 #define MAX_RULE_SLOTS 512
+#define CONDITION_BITS 19
 
 #define XDPASS_IPPROTO_ICMP 1
 #define XDPASS_IPPROTO_TCP 6
@@ -42,6 +43,7 @@ struct global_cfg {
 	struct mask_t dst_port_optional_rules;
 	struct mask_t src_prefix_optional_rules;
 	struct mask_t dst_prefix_optional_rules;
+	struct mask_t condition_optional_rules[CONDITION_BITS];
 	__u32 ingress_verdict;
 };
 

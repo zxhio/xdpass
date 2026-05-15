@@ -168,9 +168,9 @@ MVP 固定为：
 BPF 运行时匹配：
 
 - BPF 使用索引 maps 得到候选 slot bitmap
-- BPF 按 slot 从小到大扫描候选规则
-- 每条候选规则使用 `required_mask` 判断是否匹配
-- 命中第一条规则后停止扫描
+- 索引命中时保留字段 wildcard 规则，即使用 `indexed | optional`
+- BPF 使用 condition optional bitmap 过滤非索引条件
+- BPF 取候选 bitmap 中 slot 最小的规则
 - 多条规则同时满足条件时，slot 最小的规则获胜
 
 `required_mask` 是规则要求的条件类别 bitmask。
@@ -179,11 +179,9 @@ BPF 运行时匹配：
 - BPF 解析包后生成 `pkt_conds`
 - 具体值匹配先由索引 maps 完成，例如端口、VLAN、CIDR
 - `required_mask` 不保存端口号、CIDR、VLAN ID 等具体值
-- `required_mask` 只做最后的条件完整性检查
-
-```text
-(pkt_conds & required_mask) == required_mask
-```
+- BPF 不逐条读取规则执行 `(pkt_conds & required_mask) == required_mask`
+- `required_mask` 语义由 userspace 编译出的索引 bitmap、optional bitmap 和
+  `condition_optional_rules` 共同表达
 
 ---
 

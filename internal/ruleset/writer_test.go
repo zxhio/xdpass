@@ -72,7 +72,7 @@ func newGlobalCfgMap(t *testing.T) *ebpf.Map {
 	m, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.Array,
 		KeySize:    4,
-		ValueSize:  392, // sizeof(bpfGlobalCfg): 6*[8]uint64 + uint32 + pad
+		ValueSize:  1608, // sizeof(bpfGlobalCfg): 25*[8]uint64 + uint32 + pad
 		MaxEntries: 1,
 	})
 	require.NoError(t, err)

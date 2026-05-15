@@ -368,6 +368,8 @@ func TestCompileOptionalBitmaps(t *testing.T) {
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPortOptionalRules)
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPrefixOptionalRules)
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPrefixOptionalRules)
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[0])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionOptionalRules[1])
 }
 
 func TestCompileOptionalBitmapsPartial(t *testing.T) {
@@ -382,6 +384,9 @@ func TestCompileOptionalBitmapsPartial(t *testing.T) {
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortOptionalRules)
 	// DstPorts is set, so NOT optional
 	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.DstPortOptionalRules)
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[0])
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[8])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionOptionalRules[7])
 }
 
 func TestCompileMultipleRulesSamePort(t *testing.T) {

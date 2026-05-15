@@ -69,6 +69,7 @@ type GlobalCfgData struct {
 	DstPortOptionalRules   [8]uint64
 	SrcPrefixOptionalRules [8]uint64
 	DstPrefixOptionalRules [8]uint64
+	ConditionOptionalRules [19][8]uint64
 	IngressVerdict         uint32
 }
 

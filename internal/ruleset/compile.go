@@ -211,4 +211,10 @@ func compileOptionalBitmaps(rule Rule, _ uint32, bit [8]uint64, compiled *Compil
 	if len(rule.Match.DstCIDRs) == 0 {
 		maskOr(&compiled.GlobalCfg.DstPrefixOptionalRules, bit)
 	}
+	requiredMask := compileRequiredMask(rule.Match)
+	for cond := range compiled.GlobalCfg.ConditionOptionalRules {
+		if requiredMask&(1<<cond) == 0 {
+			maskOr(&compiled.GlobalCfg.ConditionOptionalRules[cond], bit)
+		}
+	}
 }

@@ -93,6 +93,7 @@ struct rule_meta {
 | `dst_port_optional_rules` | `mask_t` | 未配置目的端口条件的规则 |
 | `src_prefix_optional_rules` | `mask_t` | 未配置源前缀条件的规则 |
 | `dst_prefix_optional_rules` | `mask_t` | 未配置目的前缀条件的规则 |
+| `condition_optional_rules[19]` | `mask_t[]` | 未要求对应 condition bit 的规则 |
 | `ingress_verdict` | `uint32` | `attachment.miss_verdict` 的编译值，`0=pass`，`1=drop` |
 
 ---
@@ -104,6 +105,9 @@ struct rule_meta {
 - `dst_port_index_map` key 是 TCP/UDP 目的端口。
 - `src_prefix_lpm_map` 和 `dst_prefix_lpm_map` value 是累计候选 bitmap。
 - LPM lookup 使用 `/32` key 查找，userspace 必须生成和 BPF lookup 一致的 key 字节布局。
+- 索引命中时 BPF 使用 `indexed | optional`，确保字段 wildcard 规则仍可命中。
+- BPF 先通过倒排索引和字段 optional bitmap 缩小候选规则，再通过
+  `condition_optional_rules` 过滤非索引条件，最后取候选 bitmap 中 slot 最小的规则。
 
 sentinel：
 
