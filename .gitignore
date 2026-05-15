@@ -7,5 +7,6 @@ build/
 # Claude Code local config
 .claude/
 
-# Agent plans
+# Agent workspace (local only)
 .agent/plans/
+.agent/reviews/

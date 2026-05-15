@@ -17,3 +17,31 @@
 
 - skill 和 `specs/` 冲突时，以 `specs/` 为准。
 - 没有命中的 skill 时，按普通仓库任务处理。
+
+## Spec Sync
+
+- 行为、API、字段或语义变更时，更新对应的 spec 文件。
+- spec 路由见 `specs/MODULES.md`。
+- 不要把产品合同写在 `AGENTS.md` 里。
+
+## Coding References
+
+- Go 结构和抽象：`.codex/skills/go-abstraction/SKILL.md`
+- Go 风格和测试边界：`.codex/skills/go-coding-style/SKILL.md`
+- 日志：`.codex/skills/go-logging/SKILL.md`
+- HTTP API 设计：`.codex/skills/go-rest-api/SKILL.md`
+
+## Build & Test
+
+- 构建：`make build`
+- 测试：`make test`（包含 BPF 生成）
+- BPF 代码生成：`make generate`
+- 如果改动涉及 `internal/dataplane/`，优先用 `make test`。
+- 不要直接编辑 `internal/dataplane/bpfgen/xdpass_bpfel.go`，用 `make generate` 重新生成。
+
+## Agent Workspace
+
+- `.agent/plans/`：本地计划文件，不提交。
+- `.agent/reviews/`：本地 review 笔记，不提交。
+- `.agent/templates/`：计划和 review 模板，提交到仓库。
+- 不要把 AI 工作流规则放到 `docs/` 或 `specs/`。
