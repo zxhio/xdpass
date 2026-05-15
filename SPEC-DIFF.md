@@ -14,7 +14,7 @@
 | Stats 聚合 | done | BPF PERCPU_ARRAY 读取 + userspace stats 合并 |
 | Response egress API | done | GET/PUT/DELETE，tx_config_map 同步 |
 | XSK metadata 解码 | done | 8-byte xsk_meta (rule_id, action) |
-| Response builders | done | icmp_echo_reply, udp_echo_reply, arp_reply |
+| Response builders | done | icmp_echo_reply, udp_echo_reply, arp_reply, tcp_syn_ack, dns_refused, dns_sinkhole |
 | TX backends | done | XSK TX (同口, 真实 AF_XDP TX ring), AF_PACKET TX (异口) |
 | XSK socket lifecycle | done | AF_XDP socket 创建、UMEM、RX/TX ring、queue bind |
 | Response stats/events | done | sent/failed 派生结果 |
@@ -28,9 +28,9 @@
 | `icmp_echo_reply` | done | |
 | `udp_echo_reply` | done | |
 | `arp_reply` | done | |
-| `tcp_syn_ack` | **未实现** | `BuilderForAction` 返回 nil |
-| `dns_refused` | **未实现** | `BuilderForAction` 返回 nil |
-| `dns_sinkhole` | **未实现** | `BuilderForAction` 返回 nil |
+| `tcp_syn_ack` | done | SYN+ACK、seq/ack、TCP checksum |
+| `dns_refused` | done | QR=1、rcode=refused、无 answer |
+| `dns_sinkhole` | done | QR=1、A/AAAA answer、ttl |
 
 Spec 参考：`specs/agent/response.md` 第 275-315 行。
 

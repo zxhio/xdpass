@@ -106,15 +106,146 @@ func TestBuildARPReplyMissingParams(t *testing.T) {
 	assert.Contains(t, err.Error(), "missing required param")
 }
 
-func TestUnimplementedAction(t *testing.T) {
+func TestBuildTCPSynAck(t *testing.T) {
+	pkt := buildTestTCPSYN(t)
+
 	builder := BuilderForAction(ActionTCPSynAck)
-	assert.Nil(t, builder)
+	require.NotNil(t, builder)
 
-	builder = BuilderForAction(ActionDNSRefused)
-	assert.Nil(t, builder)
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
 
-	builder = BuilderForAction(ActionDNSSinkhole)
-	assert.Nil(t, builder)
+	// Verify MAC swap.
+	assert.Equal(t, pkt[6:12], reply[0:6])
+	assert.Equal(t, pkt[0:6], reply[6:12])
+
+	// Verify IPv4 addr swap.
+	assert.Equal(t, pkt[30:34], reply[26:30])
+	assert.Equal(t, pkt[26:30], reply[30:34])
+
+	// Verify TCP port swap.
+	tcpOff := 34
+	assert.Equal(t, pkt[tcpOff+2:tcpOff+4], reply[tcpOff:tcpOff+2])
+	assert.Equal(t, pkt[tcpOff:tcpOff+2], reply[tcpOff+2:tcpOff+4])
+
+	// Verify SYN+ACK flags.
+	assert.Equal(t, byte(0x12), reply[tcpOff+13])
+
+	// Verify ACK = original SEQ + 1.
+	assert.Equal(t, byte(0), reply[tcpOff+8])
+	assert.Equal(t, byte(0), reply[tcpOff+9])
+	assert.Equal(t, byte(0), reply[tcpOff+10])
+	assert.Equal(t, byte(1), reply[tcpOff+11]) // SEQ was 0, ACK=1
+
+	// Verify SEQ = 0 (default).
+	assert.Equal(t, byte(0), reply[tcpOff+4])
+	assert.Equal(t, byte(0), reply[tcpOff+5])
+	assert.Equal(t, byte(0), reply[tcpOff+6])
+	assert.Equal(t, byte(0), reply[tcpOff+7])
+}
+
+func TestBuildTCPSynAckWithSeqParam(t *testing.T) {
+	pkt := buildTestTCPSYN(t)
+
+	builder := BuilderForAction(ActionTCPSynAck)
+	require.NotNil(t, builder)
+
+	params := map[string]any{"tcp_seq": float64(12345)}
+	reply, err := builder(pkt, params)
+	require.NoError(t, err)
+
+	tcpOff := 34
+	seq := binary.BigEndian.Uint32(reply[tcpOff+4 : tcpOff+8])
+	assert.Equal(t, uint32(12345), seq)
+}
+
+func TestBuildTCPSynAckNotSYN(t *testing.T) {
+	pkt := buildTestTCPSYN(t)
+	pkt[34+13] = 0x10 // ACK only, no SYN
+
+	builder := BuilderForAction(ActionTCPSynAck)
+	_, err := builder(pkt, nil)
+	assert.ErrorIs(t, err, ErrInvalidPacket)
+}
+
+func TestBuildDNSRefused(t *testing.T) {
+	pkt := buildTestDNSRequest(t)
+
+	builder := BuilderForAction(ActionDNSRefused)
+	require.NotNil(t, builder)
+
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
+
+	// Verify MAC swap.
+	assert.Equal(t, pkt[6:12], reply[0:6])
+	assert.Equal(t, pkt[0:6], reply[6:12])
+
+	// Verify IPv4 addr swap.
+	assert.Equal(t, pkt[30:34], reply[26:30])
+	assert.Equal(t, pkt[26:30], reply[30:34])
+
+	// Verify UDP port swap (response sport=53).
+	udpOff := 34
+	assert.Equal(t, byte(0), reply[udpOff])
+	assert.Equal(t, byte(53), reply[udpOff+1]) // sport = 53
+
+	// Verify DNS flags: QR=1, RD=1, RCODE=5.
+	dnsOff := udpOff + 8
+	assert.Equal(t, byte(0x81), reply[dnsOff+2]) // QR=1, RD=1
+	assert.Equal(t, byte(0x85), reply[dnsOff+3]) // RCODE=5 (refused)
+
+	// Verify ANCOUNT=0.
+	assert.Equal(t, byte(0), reply[dnsOff+6])
+	assert.Equal(t, byte(0), reply[dnsOff+7])
+}
+
+func TestBuildDNSSinkhole(t *testing.T) {
+	pkt := buildTestDNSRequest(t)
+
+	builder := BuilderForAction(ActionDNSSinkhole)
+	require.NotNil(t, builder)
+
+	params := map[string]any{
+		"family":     "ipv4",
+		"answers_v4": []any{"10.0.0.1"},
+		"ttl":        float64(60),
+	}
+
+	reply, err := builder(pkt, params)
+	require.NoError(t, err)
+
+	// Verify DNS flags: QR=1, RD=1, RCODE=0.
+	dnsOff := 34 + 8
+	assert.Equal(t, byte(0x81), reply[dnsOff+2])
+	assert.Equal(t, byte(0x80), reply[dnsOff+3]) // RCODE=0
+
+	// Verify ANCOUNT=1.
+	assert.Equal(t, byte(0), reply[dnsOff+6])
+	assert.Equal(t, byte(1), reply[dnsOff+7])
+
+	// Verify answer contains 10.0.0.1.
+	// After question end: name pointer (2) + type (2) + class (2) + ttl (4) + rdlen (2) + rdata (4)
+	questionEnd := dnsFindQuestionEnd(pkt, 34+8)
+	answerOffset := questionEnd
+	assert.Equal(t, byte(0xc0), reply[answerOffset])   // name pointer
+	assert.Equal(t, byte(0x0c), reply[answerOffset+1]) // offset 12
+	assert.Equal(t, byte(0), reply[answerOffset+2])    // type A
+	assert.Equal(t, byte(1), reply[answerOffset+3])
+	assert.Equal(t, net.ParseIP("10.0.0.1").To4(), net.IP(reply[answerOffset+12:answerOffset+16]))
+}
+
+func TestBuildDNSSinkholeNoAnswers(t *testing.T) {
+	pkt := buildTestDNSRequest(t)
+
+	builder := BuilderForAction(ActionDNSSinkhole)
+	require.NotNil(t, builder)
+
+	params := map[string]any{
+		"family": "ipv4",
+	}
+	_, err := builder(pkt, params)
+	assert.Error(t, err)
 }
 
 func TestDecodeXSKMeta(t *testing.T) {
@@ -207,6 +338,74 @@ func buildTestARPRequest(t *testing.T) []byte {
 	copy(pkt[32:38], []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	// target proto (bytes 38-41)
 	copy(pkt[38:42], net.ParseIP("10.0.0.1").To4())
+
+	return pkt
+}
+
+func buildTestTCPSYN(t *testing.T) []byte {
+	t.Helper()
+	pkt := make([]byte, 14+20+20) // eth+ipv4+tcp
+
+	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
+	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
+	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
+
+	pkt[14] = 0x45
+	binary.BigEndian.PutUint16(pkt[16:18], 40) // total length
+	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
+	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
+	pkt[23] = 6 // protocol = TCP
+
+	// TCP header (offset 34).
+	tcpOff := 34
+	binary.BigEndian.PutUint16(pkt[tcpOff:tcpOff+2], 12345)   // sport
+	binary.BigEndian.PutUint16(pkt[tcpOff+2:tcpOff+4], 80)    // dport
+	binary.BigEndian.PutUint32(pkt[tcpOff+4:tcpOff+8], 0)     // seq = 0
+	binary.BigEndian.PutUint32(pkt[tcpOff+8:tcpOff+12], 0)    // ack = 0
+	pkt[tcpOff+12] = 0x50                                      // data offset = 5 (20 bytes)
+	pkt[tcpOff+13] = 0x02                                      // flags = SYN
+
+	return pkt
+}
+
+func buildTestDNSRequest(t *testing.T) []byte {
+	t.Helper()
+	// Ethernet (14) + IPv4 (20) + UDP (8) + DNS header (12) + question
+	// Question: \x03www\x04test\x03com\x00 + QTYPE(2) + QCLASS(2)
+	question := []byte{
+		3, 'w', 'w', 'w',
+		4, 't', 'e', 's', 't',
+		3, 'c', 'o', 'm',
+		0,       // end of name
+		0, 1,    // QTYPE = A
+		0, 1,    // QCLASS = IN
+	}
+	dnsLen := 12 + len(question)
+	pkt := make([]byte, 14+20+8+dnsLen)
+
+	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
+	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
+	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
+
+	pkt[14] = 0x45
+	binary.BigEndian.PutUint16(pkt[16:18], uint16(20+8+dnsLen))
+	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
+	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
+	pkt[23] = 17 // protocol = UDP
+
+	udpOff := 34
+	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345)       // sport
+	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)        // dport
+	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], uint16(8+dnsLen)) // udp length
+
+	// DNS header.
+	dnsOff := udpOff + 8
+	binary.BigEndian.PutUint16(pkt[dnsOff:dnsOff+2], 0x1234)  // transaction ID
+	binary.BigEndian.PutUint16(pkt[dnsOff+2:dnsOff+4], 0x0100) // flags: standard query, RD=1
+	binary.BigEndian.PutUint16(pkt[dnsOff+4:dnsOff+6], 1)      // QDCOUNT=1
+	// ANCOUNT, NSCOUNT, ARCOUNT are 0.
+
+	copy(pkt[dnsOff+12:], question)
 
 	return pkt
 }
