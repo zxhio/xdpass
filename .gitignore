@@ -10,3 +10,7 @@ build/
 # Agent workspace (local only)
 .agent/plans/
 .agent/reviews/
+
+# Python generated
+__pycache__/
+*.pyc
