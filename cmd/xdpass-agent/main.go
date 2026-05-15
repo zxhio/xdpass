@@ -87,9 +87,10 @@ func main() {
 	eventStream := events.NewStream(ctx)
 	defer eventStream.Stop()
 
-	responseStats := &response.Stats{}
+	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
+	defer responseRuntime.Stop()
 
-	s := store.New(attRuntime, eventStream, responseStats)
+	s := store.New(attRuntime, eventStream, responseRuntime)
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
 		Attachments: s,

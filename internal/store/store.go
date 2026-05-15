@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"sync"
 
 	"github.com/cilium/ebpf"
+	"github.com/sirupsen/logrus"
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
@@ -25,6 +27,7 @@ type Store struct {
 	attachments      *attachment.Runtime
 	rulesetRuntime   *ruleset.Runtime
 	eventStream      *events.Stream
+	responseRuntime  *response.Runtime
 	responseStats    *response.Stats
 	egressConfigured bool
 	egressIfIndex    uint32
@@ -33,13 +36,18 @@ type Store struct {
 }
 
 // New creates a new in-memory store.
-func New(attachments *attachment.Runtime, eventStream *events.Stream, responseStats *response.Stats) *Store {
+func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime) *Store {
+	var rs *response.Stats
+	if responseRuntime != nil {
+		rs = responseRuntime.Stats()
+	}
 	return &Store{
-		attachments:    attachments,
-		rulesetRuntime: ruleset.NewRuntime(),
-		eventStream:    eventStream,
-		responseStats:  responseStats,
-		egressVLANMode: "preserve",
+		attachments:     attachments,
+		rulesetRuntime:  ruleset.NewRuntime(),
+		eventStream:     eventStream,
+		responseRuntime: responseRuntime,
+		responseStats:   rs,
+		egressVLANMode:  "preserve",
 	}
 }
 
@@ -262,6 +270,17 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 		return api.EgressResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("invalid vlan_mode: %s", vlanMode)}
 	}
 
+	// Validate ifName matches ifIndex when both are provided.
+	if ifName != "" {
+		iface, err := net.InterfaceByName(ifName)
+		if err != nil {
+			return api.EgressResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("interface not found: %s", ifName)}
+		}
+		if uint32(iface.Index) != ifIndex {
+			return api.EgressResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("ifname %s does not match ifindex %d", ifName, ifIndex)}
+		}
+	}
+
 	// Write tx_config to all enabled attachments before updating memory.
 	cfg := egressToTxConfig(ifIndex, vlanMode)
 	if err := s.writeTxConfigToAll(cfg); err != nil {
@@ -272,6 +291,14 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 	s.egressIfIndex = ifIndex
 	s.egressIfName = ifName
 	s.egressVLANMode = vlanMode
+
+	if s.responseRuntime != nil {
+		s.responseRuntime.UpdateEgress(response.EgressConfig{
+			Configured:    true,
+			EgressIfIndex: ifIndex,
+			VLANMode:      vlanMode,
+		})
+	}
 
 	return api.EgressResponse{
 		Configured: true,
@@ -286,15 +313,23 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	defer s.mu.Unlock()
 
 	// Write default tx_config (same-port) to all enabled attachments.
+	// Log errors but don't fail — DELETE is idempotent.
 	cfg := egressToTxConfig(0, "preserve")
 	if err := s.writeTxConfigToAll(cfg); err != nil {
-		return fmt.Errorf("write tx config: %w", err)
+		logrus.WithError(err).Warn("Failed to reset tx config on some attachments")
 	}
 
 	s.egressConfigured = false
 	s.egressIfIndex = 0
 	s.egressIfName = ""
 	s.egressVLANMode = "preserve"
+
+	if s.responseRuntime != nil {
+		s.responseRuntime.UpdateEgress(response.EgressConfig{
+			VLANMode: "preserve",
+		})
+	}
+
 	return nil
 }
 
@@ -470,7 +505,13 @@ func statsToAPI(resp stats.Response) api.StatsResponse {
 			Packets:      resp.XSKRedirect.Packets,
 			ErrorPackets: resp.XSKRedirect.ErrorPackets,
 		},
-		UserspaceResponse: api.UserspaceResponseStats{},
+		UserspaceResponse: api.UserspaceResponseStats{
+			XSKRXPackets:      resp.UserspaceResponse.XSKRXPackets,
+			Packets:           resp.UserspaceResponse.Packets,
+			XSKTXPackets:      resp.UserspaceResponse.XSKTXPackets,
+			AFPacketTXPackets: resp.UserspaceResponse.AFPacketTXPackets,
+			ErrorPackets:      resp.UserspaceResponse.ErrorPackets,
+		},
 		Errors: api.ErrorsStats{
 			XDPPackets: resp.Errors.XDPPackets,
 			XSKPackets: resp.Errors.XSKPackets,
