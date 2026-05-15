@@ -66,3 +66,11 @@ HTTP API 默认监听 `127.0.0.1:9527`，详见 `specs/agent/` 目录。
 - `/api/v1/stats` - 统计信息
 - `/api/v1/events/stream` - SSE 事件流
 - `/api/v1/response/egress` - 响应出口配置
+
+## 已知约束
+
+- `attach_mode` MVP 仅支持 `generic`。
+- XSK（AF_XDP）需要 root 权限和真实网卡（driver mode XDP）。
+- kernel response 完整构包未实现，当前走 BPF failure path。
+- dispatch 模块暂缓设计，未实现。
+- 运行态无持久化，重启后需重新下发配置。
