@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockStore implements all service interfaces for testing.
@@ -21,10 +24,7 @@ func newMockStore() *mockStore {
 }
 
 func (m *mockStore) Status(_ context.Context) (StatusResponse, error) {
-	return StatusResponse{
-		Status:      "degraded",
-		Attachments: len(m.attachments),
-	}, nil
+	return StatusResponse{Status: "degraded", Attachments: len(m.attachments)}, nil
 }
 
 func (m *mockStore) ListAttachments(_ context.Context) ([]AttachmentResponse, error) {
@@ -38,7 +38,7 @@ func (m *mockStore) ListAttachments(_ context.Context) ([]AttachmentResponse, er
 func (m *mockStore) GetAttachment(_ context.Context, ifIndex uint32) (AttachmentResponse, error) {
 	a, ok := m.attachments[ifIndex]
 	if !ok {
-		return AttachmentResponse{}, http.ErrMissingFile
+		return AttachmentResponse{}, errors.New("not found")
 	}
 	return a, nil
 }
@@ -55,7 +55,7 @@ func (m *mockStore) CreateAttachment(_ context.Context, req AttachmentRequest) (
 func (m *mockStore) PatchAttachment(_ context.Context, ifIndex uint32, enabled bool) (AttachmentResponse, error) {
 	a, ok := m.attachments[ifIndex]
 	if !ok {
-		return AttachmentResponse{}, http.ErrMissingFile
+		return AttachmentResponse{}, errors.New("not found")
 	}
 	a.Enabled = enabled
 	m.attachments[ifIndex] = a
@@ -64,7 +64,7 @@ func (m *mockStore) PatchAttachment(_ context.Context, ifIndex uint32, enabled b
 
 func (m *mockStore) DeleteAttachment(_ context.Context, ifIndex uint32) error {
 	if _, ok := m.attachments[ifIndex]; !ok {
-		return http.ErrMissingFile
+		return errors.New("not found")
 	}
 	delete(m.attachments, ifIndex)
 	return nil
@@ -107,242 +107,170 @@ func newTestRouter() http.Handler {
 	})
 }
 
-func TestHealthEndpoint(t *testing.T) {
-	router := newTestRouter()
-	req := httptest.NewRequest("GET", "/api/v1/health", nil)
+func doRequest(handler http.Handler, method, path string, body any) *httptest.ResponseRecorder {
+	var buf *bytes.Buffer
+	if body != nil {
+		b, _ := json.Marshal(body)
+		buf = bytes.NewBuffer(b)
+	} else {
+		buf = bytes.NewBuffer(nil)
+	}
+	req := httptest.NewRequest(method, path, buf)
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	handler.ServeHTTP(w, req)
+	return w
+}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d", w.Code)
-	}
+func TestHealthEndpoint(t *testing.T) {
+	w := doRequest(newTestRouter(), "GET", "/api/v1/health", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
 	var resp healthResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Status != "ok" {
-		t.Fatalf("status = %q", resp.Status)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "ok", resp.Status)
 }
 
 func TestStatusEndpoint(t *testing.T) {
-	router := newTestRouter()
-	req := httptest.NewRequest("GET", "/api/v1/status", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	w := doRequest(newTestRouter(), "GET", "/api/v1/status", nil)
+	require.Equal(t, http.StatusOK, w.Code)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d", w.Code)
-	}
 	var resp StatusResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Status != "degraded" {
-		t.Fatalf("status = %q", resp.Status)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "degraded", resp.Status)
 }
 
 func TestErrorFormatIsProblemDetails(t *testing.T) {
-	router := newTestRouter()
+	w := doRequest(newTestRouter(), "GET", "/api/v1/attachments/999", nil)
+	require.Equal(t, http.StatusNotFound, w.Code)
 
-	// GET non-existent attachment
-	req := httptest.NewRequest("GET", "/api/v1/attachments/999", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d", w.Code)
-	}
 	var resp ProblemDetails
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Type != "about:blank" {
-		t.Fatalf("type = %q", resp.Type)
-	}
-	if resp.Code != "not_found" {
-		t.Fatalf("code = %q", resp.Code)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "about:blank", resp.Type)
+	assert.Equal(t, "not_found", resp.Code)
+	assert.Equal(t, http.StatusNotFound, resp.Status)
 }
 
 func TestCreateAttachment(t *testing.T) {
-	router := newTestRouter()
-	body := bytes.NewBufferString(`{"ifindex":3}`)
-	req := httptest.NewRequest("POST", "/api/v1/attachments", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	w := doRequest(newTestRouter(), "POST", "/api/v1/attachments", map[string]any{"ifindex": 3})
+	require.Equal(t, http.StatusCreated, w.Code)
 
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
 	var resp AttachmentResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.IfIndex != 3 {
-		t.Fatalf("ifindex = %d", resp.IfIndex)
-	}
-	if !resp.Enabled {
-		t.Fatal("expected enabled=true")
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, uint32(3), resp.IfIndex)
+	assert.True(t, resp.Enabled)
+	assert.Equal(t, "native", resp.AttachMode)
+	assert.Equal(t, "pass", resp.MissVerdict)
 }
 
 func TestCreateAttachmentConflict(t *testing.T) {
 	router := newTestRouter()
-	body := bytes.NewBufferString(`{"ifindex":3}`)
-	req := httptest.NewRequest("POST", "/api/v1/attachments", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("first create: status = %d", w.Code)
-	}
+	w := doRequest(router, "POST", "/api/v1/attachments", map[string]any{"ifindex": 3})
+	require.Equal(t, http.StatusCreated, w.Code)
 
-	body2 := bytes.NewBufferString(`{"ifindex":3}`)
-	req2 := httptest.NewRequest("POST", "/api/v1/attachments", body2)
-	req2.Header.Set("Content-Type", "application/json")
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusConflict {
-		t.Fatalf("second create: status = %d, body = %s", w2.Code, w2.Body.String())
-	}
+	w2 := doRequest(router, "POST", "/api/v1/attachments", map[string]any{"ifindex": 3})
+	assert.Equal(t, http.StatusConflict, w2.Code)
 }
 
 func TestCreateAttachmentValidation(t *testing.T) {
-	router := newTestRouter()
-	body := bytes.NewBufferString(`{"ifindex":0}`)
-	req := httptest.NewRequest("POST", "/api/v1/attachments", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d", w.Code)
-	}
+	w := doRequest(newTestRouter(), "POST", "/api/v1/attachments", map[string]any{"ifindex": 0})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestDeleteAttachment204(t *testing.T) {
 	router := newTestRouter()
+	w := doRequest(router, "POST", "/api/v1/attachments", map[string]any{"ifindex": 5})
+	require.Equal(t, http.StatusCreated, w.Code)
 
-	// Create first
-	body := bytes.NewBufferString(`{"ifindex":5}`)
-	req := httptest.NewRequest("POST", "/api/v1/attachments", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create: status = %d", w.Code)
-	}
+	w2 := doRequest(router, "DELETE", "/api/v1/attachments/5", nil)
+	assert.Equal(t, http.StatusNoContent, w2.Code)
+	assert.Empty(t, w2.Body.String())
+}
 
-	// Delete
-	req2 := httptest.NewRequest("DELETE", "/api/v1/attachments/5", nil)
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d", w2.Code)
-	}
-	if w2.Body.Len() != 0 {
-		t.Fatalf("delete: expected empty body, got %q", w2.Body.String())
-	}
+func TestPatchAttachment(t *testing.T) {
+	router := newTestRouter()
+	doRequest(router, "POST", "/api/v1/attachments", map[string]any{"ifindex": 7})
+
+	falseVal := false
+	w := doRequest(router, "PATCH", "/api/v1/attachments/7", map[string]any{"enabled": falseVal})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp AttachmentResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp.Enabled)
+}
+
+func TestPatchAttachmentNotFound(t *testing.T) {
+	w := doRequest(newTestRouter(), "PATCH", "/api/v1/attachments/999", map[string]any{"enabled": true})
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestRulesetCRUD(t *testing.T) {
 	router := newTestRouter()
 
-	// GET empty ruleset
-	req := httptest.NewRequest("GET", "/api/v1/ruleset", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("get: status = %d", w.Code)
-	}
+	// GET empty
+	w := doRequest(router, "GET", "/api/v1/ruleset", nil)
+	require.Equal(t, http.StatusOK, w.Code)
 	var getResp RulesetResponse
-	json.Unmarshal(w.Body.Bytes(), &getResp)
-	if len(getResp.Rules) != 0 {
-		t.Fatalf("expected empty rules, got %d", len(getResp.Rules))
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.Empty(t, getResp.Rules)
 
-	// PUT ruleset
-	putBody := bytes.NewBufferString(`{"rules":[{"rule_id":1,"response":{"action":"alert"}}]}`)
-	req2 := httptest.NewRequest("PUT", "/api/v1/ruleset", putBody)
-	req2.Header.Set("Content-Type", "application/json")
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("put: status = %d, body = %s", w2.Code, w2.Body.String())
-	}
+	// PUT
+	w2 := doRequest(router, "PUT", "/api/v1/ruleset", RulesetResponse{
+		Rules: []RuleResponse{{RuleID: 1, Response: ResponseResponse{Action: "alert"}}},
+	})
+	require.Equal(t, http.StatusOK, w2.Code)
 
-	// DELETE ruleset
-	req3 := httptest.NewRequest("DELETE", "/api/v1/ruleset", nil)
-	w3 := httptest.NewRecorder()
-	router.ServeHTTP(w3, req3)
-	if w3.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d", w3.Code)
-	}
+	// GET after PUT
+	w3 := doRequest(router, "GET", "/api/v1/ruleset", nil)
+	require.Equal(t, http.StatusOK, w3.Code)
+	var getResp2 RulesetResponse
+	require.NoError(t, json.Unmarshal(w3.Body.Bytes(), &getResp2))
+	require.Len(t, getResp2.Rules, 1)
+	assert.Equal(t, uint32(1), getResp2.Rules[0].RuleID)
+
+	// DELETE
+	w4 := doRequest(router, "DELETE", "/api/v1/ruleset", nil)
+	assert.Equal(t, http.StatusNoContent, w4.Code)
 }
 
 func TestEventsStreamNotImplemented(t *testing.T) {
-	router := newTestRouter()
-	req := httptest.NewRequest("GET", "/api/v1/events/stream", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d", w.Code)
-	}
+	w := doRequest(newTestRouter(), "GET", "/api/v1/events/stream", nil)
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
 }
 
 func TestStatsZeroed(t *testing.T) {
-	router := newTestRouter()
-	req := httptest.NewRequest("GET", "/api/v1/stats", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	w := doRequest(newTestRouter(), "GET", "/api/v1/stats", nil)
+	require.Equal(t, http.StatusOK, w.Code)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d", w.Code)
-	}
 	var resp StatsResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Ingress.Packets != 0 {
-		t.Fatalf("expected zero packets")
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, uint64(0), resp.Ingress.Packets)
+	assert.Equal(t, uint64(0), resp.Match.HitPackets)
 }
 
 func TestEgressCRUD(t *testing.T) {
 	router := newTestRouter()
 
 	// GET default
-	req := httptest.NewRequest("GET", "/api/v1/response/egress", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("get: status = %d", w.Code)
-	}
+	w := doRequest(router, "GET", "/api/v1/response/egress", nil)
+	require.Equal(t, http.StatusOK, w.Code)
 	var getResp EgressResponse
-	json.Unmarshal(w.Body.Bytes(), &getResp)
-	if getResp.VLANMode != "preserve" {
-		t.Fatalf("vlan_mode = %q", getResp.VLANMode)
-	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.Equal(t, "preserve", getResp.VLANMode)
+	assert.False(t, getResp.Configured)
 
 	// PUT
-	putBody := bytes.NewBufferString(`{"ifindex":3}`)
-	req2 := httptest.NewRequest("PUT", "/api/v1/response/egress", putBody)
-	req2.Header.Set("Content-Type", "application/json")
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("put: status = %d", w2.Code)
-	}
+	w2 := doRequest(router, "PUT", "/api/v1/response/egress", putEgressRequest{IfIndex: 3})
+	require.Equal(t, http.StatusOK, w2.Code)
+	var putResp EgressResponse
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &putResp))
+	assert.True(t, putResp.Configured)
+	assert.Equal(t, uint32(3), putResp.IfIndex)
 
 	// DELETE
-	req3 := httptest.NewRequest("DELETE", "/api/v1/response/egress", nil)
-	w3 := httptest.NewRecorder()
-	router.ServeHTTP(w3, req3)
-	if w3.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d", w3.Code)
-	}
+	w3 := doRequest(router, "DELETE", "/api/v1/response/egress", nil)
+	assert.Equal(t, http.StatusNoContent, w3.Code)
 }
 
 func TestAllRoutesRegistered(t *testing.T) {
@@ -369,25 +297,13 @@ func TestAllRoutesRegistered(t *testing.T) {
 	}
 
 	for _, r := range routes {
-		var body *bytes.Buffer
-		if r.method == "PUT" || r.method == "POST" {
-			body = bytes.NewBufferString(`{}`)
-		} else {
-			body = bytes.NewBuffer(nil)
-		}
-		req := httptest.NewRequest(r.method, r.path, body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		// A registered route should not return 405 Method Not Allowed
-		// or 404 from the default mux
-		if w.Code == http.StatusMethodNotAllowed || (w.Code == http.StatusNotFound && r.method == "GET") {
-			// For GET requests, 404 is OK if resource doesn't exist
-			// For POST/PUT with empty body, bad request is OK
-			if w.Code == http.StatusNotFound && r.method != "GET" {
-				t.Errorf("%s %s: got 404, route may not be registered", r.method, r.path)
+		t.Run(r.method+" "+r.path, func(t *testing.T) {
+			var body any
+			if r.method == "PUT" || r.method == "POST" {
+				body = map[string]any{}
 			}
-		}
+			w := doRequest(router, r.method, r.path, body)
+			assert.NotEqual(t, http.StatusMethodNotAllowed, w.Code, "route not registered")
+		})
 	}
 }
