@@ -70,6 +70,13 @@ func (m *mockStore) DeleteAttachment(_ context.Context, ifIndex uint32) error {
 	return nil
 }
 
+func (m *mockStore) DryRunAttachment(_ context.Context, req AttachmentRequest) (AttachmentResponse, error) {
+	if req.IfIndex == 0 {
+		return AttachmentResponse{}, errors.New("ifindex must be greater than 0")
+	}
+	return AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "native", MissVerdict: "pass"}, nil
+}
+
 func (m *mockStore) GetRuleset(_ context.Context) (RulesetResponse, error) {
 	return RulesetResponse{Rules: m.rules}, nil
 }
@@ -175,6 +182,16 @@ func TestCreateAttachmentConflict(t *testing.T) {
 func TestCreateAttachmentValidation(t *testing.T) {
 	w := doRequest(newTestRouter(), "POST", "/api/v1/attachments", map[string]any{"ifindex": 0})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCreateAttachmentDryRun(t *testing.T) {
+	router := newTestRouter()
+	w := doRequest(router, "POST", "/api/v1/attachments?dry_run=true", map[string]any{"ifindex": 3})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// Should not persist.
+	w2 := doRequest(router, "GET", "/api/v1/attachments/3", nil)
+	assert.Equal(t, http.StatusNotFound, w2.Code)
 }
 
 func TestDeleteAttachment204(t *testing.T) {

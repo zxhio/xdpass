@@ -12,6 +12,7 @@ type AttachmentService interface {
 	ListAttachments(ctx context.Context) ([]AttachmentResponse, error)
 	GetAttachment(ctx context.Context, ifIndex uint32) (AttachmentResponse, error)
 	CreateAttachment(ctx context.Context, req AttachmentRequest) (AttachmentResponse, error)
+	DryRunAttachment(ctx context.Context, req AttachmentRequest) (AttachmentResponse, error)
 	PatchAttachment(ctx context.Context, ifIndex uint32, enabled bool) (AttachmentResponse, error)
 	DeleteAttachment(ctx context.Context, ifIndex uint32) error
 }

@@ -1,19 +1,20 @@
-// Package store provides an in-memory runtime store for Phase 02.
+// Package store provides an in-memory runtime store.
 package store
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sort"
 	"sync"
 
 	"xdpass/internal/api"
+	"xdpass/internal/attachment"
 )
 
 // Store holds all in-memory runtime state.
 type Store struct {
 	mu               sync.RWMutex
-	attachments      map[uint32]api.AttachmentResponse
+	attachments      *attachment.Runtime
 	rules            []api.RuleResponse
 	egressConfigured bool
 	egressIfIndex    uint32
@@ -22,23 +23,23 @@ type Store struct {
 }
 
 // New creates a new in-memory store.
-func New() *Store {
+func New(attachments *attachment.Runtime) *Store {
 	return &Store{
-		attachments:    make(map[uint32]api.AttachmentResponse),
+		attachments:   attachments,
 		egressVLANMode: "preserve",
 	}
 }
 
 // --- Status ---
 
-// Status returns the current agent status.
 func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	list := s.attachments.List()
 	return api.StatusResponse{
 		Status:                   "degraded",
-		Attachments:              len(s.attachments),
+		Attachments:              len(list),
 		RulesetLoaded:            len(s.rules) > 0,
 		Rules:                    len(s.rules),
 		ResponseEgressConfigured: s.egressConfigured,
@@ -47,99 +48,54 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 
 // --- Attachments ---
 
-// ListAttachments returns all attachments.
 func (s *Store) ListAttachments(_ context.Context) ([]api.AttachmentResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	result := make([]api.AttachmentResponse, 0, len(s.attachments))
-	for _, a := range s.attachments {
-		result = append(result, a)
+	list := s.attachments.List()
+	result := make([]api.AttachmentResponse, 0, len(list))
+	for _, att := range list {
+		result = append(result, att.ToAPIResponse())
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].IfIndex < result[j].IfIndex })
 	return result, nil
 }
 
-// GetAttachment returns a single attachment by ifindex.
 func (s *Store) GetAttachment(_ context.Context, ifIndex uint32) (api.AttachmentResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	a, ok := s.attachments[ifIndex]
-	if !ok {
-		return api.AttachmentResponse{}, fmt.Errorf("attachment ifindex=%d not found", ifIndex)
+	att, err := s.attachments.Get(ifIndex)
+	if err != nil {
+		return api.AttachmentResponse{}, err
 	}
-	return a, nil
+	return att.ToAPIResponse(), nil
 }
 
-// CreateAttachment creates a new attachment.
 func (s *Store) CreateAttachment(_ context.Context, req api.AttachmentRequest) (api.AttachmentResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.attachments[req.IfIndex]; exists {
-		return api.AttachmentResponse{}, fmt.Errorf("attachment ifindex=%d already exists", req.IfIndex)
+	att, err := s.attachments.Create(apiToRequest(req))
+	if err != nil {
+		return api.AttachmentResponse{}, err
 	}
-
-	attachMode := req.AttachMode
-	if attachMode == "" {
-		attachMode = "native"
-	}
-	missVerdict := req.MissVerdict
-	if missVerdict == "" {
-		missVerdict = "pass"
-	}
-
-	resp := api.AttachmentResponse{
-		IfIndex:     req.IfIndex,
-		IfName:      req.IfName,
-		AttachMode:  attachMode,
-		Enabled:     true,
-		MissVerdict: missVerdict,
-		Channels:    api.ChannelsResponse{},
-		XSK:         api.XSKResponse{Enabled: false},
-		Runtime:     api.RuntimeResponse{},
-	}
-
-	if req.XSK != nil {
-		resp.XSK.Enabled = req.XSK.Enabled
-		resp.XSK.Queues = req.XSK.Queues
-	}
-
-	s.attachments[req.IfIndex] = resp
-	return resp, nil
+	return att.ToAPIResponse(), nil
 }
 
-// PatchAttachment updates an attachment's enabled state.
+func (s *Store) DryRunAttachment(_ context.Context, req api.AttachmentRequest) (api.AttachmentResponse, error) {
+	att, err := s.attachments.DryRun(apiToRequest(req))
+	if err != nil {
+		return api.AttachmentResponse{}, err
+	}
+	return att.ToAPIResponse(), nil
+}
+
 func (s *Store) PatchAttachment(_ context.Context, ifIndex uint32, enabled bool) (api.AttachmentResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	a, ok := s.attachments[ifIndex]
-	if !ok {
-		return api.AttachmentResponse{}, fmt.Errorf("attachment ifindex=%d not found", ifIndex)
+	att, err := s.attachments.PatchEnabled(ifIndex, enabled)
+	if err != nil {
+		return api.AttachmentResponse{}, err
 	}
-
-	a.Enabled = enabled
-	s.attachments[ifIndex] = a
-	return a, nil
+	return att.ToAPIResponse(), nil
 }
 
-// DeleteAttachment removes an attachment.
 func (s *Store) DeleteAttachment(_ context.Context, ifIndex uint32) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.attachments[ifIndex]; !ok {
-		return fmt.Errorf("attachment ifindex=%d not found", ifIndex)
-	}
-	delete(s.attachments, ifIndex)
-	return nil
+	return s.attachments.Delete(ifIndex)
 }
 
 // --- Ruleset ---
 
-// GetRuleset returns the current ruleset.
 func (s *Store) GetRuleset(_ context.Context) (api.RulesetResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -149,7 +105,6 @@ func (s *Store) GetRuleset(_ context.Context) (api.RulesetResponse, error) {
 	return api.RulesetResponse{Rules: rules}, nil
 }
 
-// ReplaceRuleset replaces the entire ruleset.
 func (s *Store) ReplaceRuleset(_ context.Context, rules []api.RuleResponse) (api.RulesetResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -159,7 +114,6 @@ func (s *Store) ReplaceRuleset(_ context.Context, rules []api.RuleResponse) (api
 	return api.RulesetResponse{Rules: s.rules}, nil
 }
 
-// DeleteRuleset clears the ruleset.
 func (s *Store) DeleteRuleset(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -170,14 +124,12 @@ func (s *Store) DeleteRuleset(_ context.Context) error {
 
 // --- Stats ---
 
-// GetStats returns zeroed stats (no real runtime).
 func (s *Store) GetStats(_ context.Context) (api.StatsResponse, error) {
 	return api.StatsResponse{}, nil
 }
 
 // --- Egress ---
 
-// GetEgress returns the response egress configuration.
 func (s *Store) GetEgress(_ context.Context) (api.EgressResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -190,7 +142,6 @@ func (s *Store) GetEgress(_ context.Context) (api.EgressResponse, error) {
 	}, nil
 }
 
-// ReplaceEgress replaces the response egress configuration.
 func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMode string) (api.EgressResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -212,7 +163,6 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 	}, nil
 }
 
-// DeleteEgress resets the response egress configuration.
 func (s *Store) DeleteEgress(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -223,3 +173,52 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	s.egressVLANMode = "preserve"
 	return nil
 }
+
+// --- Error helpers ---
+
+// IsConflict checks if an error is a conflict error.
+func IsConflict(err error) bool {
+	var ce *attachment.ConflictError
+	return errors.As(err, &ce)
+}
+
+// IsNotFound checks if an error is a not-found error.
+func IsNotFound(err error) bool {
+	var nfe *attachment.NotFoundError
+	return errors.As(err, &nfe)
+}
+
+// IsValidation checks if an error is a validation error.
+func IsValidation(err error) bool {
+	var ve *attachment.ValidationError
+	return errors.As(err, &ve)
+}
+
+// --- Conversion helpers ---
+
+func apiToRequest(req api.AttachmentRequest) *attachment.Request {
+	r := &attachment.Request{
+		IfIndex:     req.IfIndex,
+		IfName:      req.IfName,
+		AttachMode:  req.AttachMode,
+		MissVerdict: req.MissVerdict,
+	}
+	if req.Channels != nil {
+		r.Channels = &attachment.ChannelsConfig{RxQueueCount: req.Channels.RxQueueCount}
+	}
+	if req.XSK != nil {
+		queues := make([]uint32, len(req.XSK.Queues))
+		copy(queues, req.XSK.Queues)
+		r.XSK = &attachment.XSKConfig{Enabled: req.XSK.Enabled, Queues: queues}
+	}
+	return r
+}
+
+// Ensure Store implements the service interfaces.
+var (
+	_ api.AttachmentService = (*Store)(nil)
+	_ api.RulesetService    = (*Store)(nil)
+	_ api.StatsService      = (*Store)(nil)
+	_ api.EgressService     = (*Store)(nil)
+	_ api.StatusService     = (*Store)(nil)
+)

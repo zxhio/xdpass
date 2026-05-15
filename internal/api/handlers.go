@@ -72,6 +72,16 @@ func handleCreateAttachment(svc AttachmentService) http.HandlerFunc {
 			return
 		}
 
+		if r.URL.Query().Get("dry_run") == "true" {
+			resp, err := svc.DryRunAttachment(r.Context(), req)
+			if err != nil {
+				writeValidationFailed(w, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
 		resp, err := svc.CreateAttachment(r.Context(), req)
 		if err != nil {
 			writeConflict(w, err.Error())

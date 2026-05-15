@@ -10,10 +10,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 	"github.com/sirupsen/logrus"
 
 	"xdpass/internal/api"
+	"xdpass/internal/attachment"
 	"xdpass/internal/config"
+	"xdpass/internal/dataplane/bpfgen"
 	"xdpass/internal/store"
 )
 
@@ -35,7 +39,36 @@ func main() {
 		logrus.WithError(err).Fatal("Fail to parse server config")
 	}
 
-	s := store.New()
+	attRuntime := attachment.New(
+		func() (*ebpf.Collection, error) {
+			var objs bpfgen.XdpassObjects
+			if err := bpfgen.LoadXdpassObjects(&objs, nil); err != nil {
+				return nil, err
+			}
+			// Return a minimal Collection for the runtime to use.
+			return &ebpf.Collection{
+				Programs: map[string]*ebpf.Program{"xdpass_prog": objs.XdpassProg},
+				Maps:     map[string]*ebpf.Map{},
+			}, nil
+		},
+		func(prog *ebpf.Program, ifindex int, attachMode string) (link.Link, error) {
+			var flags link.XDPAttachFlags
+			switch attachMode {
+			case "generic":
+				flags = link.XDPGenericMode
+			case "driver":
+				flags = link.XDPDriverMode
+			}
+			return link.AttachXDP(link.XDPOptions{
+				Program:   prog,
+				Interface: ifindex,
+				Flags:     flags,
+			})
+		},
+	)
+	defer attRuntime.Close()
+
+	s := store.New(attRuntime)
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
 		Attachments: s,
