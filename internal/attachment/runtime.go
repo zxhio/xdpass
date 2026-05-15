@@ -290,6 +290,34 @@ func (r *Runtime) EnabledMapAccessors() []MapAccessor {
 	return result
 }
 
+// EnabledAttachments returns ifindex and MapAccessor pairs for all enabled attachments.
+func (r *Runtime) EnabledAttachments() []EnabledAttachment {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var result []EnabledAttachment
+	for ifIndex, att := range r.attachments {
+		if !att.Enabled {
+			continue
+		}
+		res, ok := r.resources[ifIndex]
+		if !ok || res.coll == nil {
+			continue
+		}
+		result = append(result, EnabledAttachment{
+			IfIndex: ifIndex,
+			Maps:    &collMapAccessor{maps: res.coll.Maps},
+		})
+	}
+	return result
+}
+
+// EnabledAttachment holds an enabled attachment's ifindex and map accessor.
+type EnabledAttachment struct {
+	IfIndex uint32
+	Maps    MapAccessor
+}
+
 // MapAccessor provides access to BPF maps for ruleset operations.
 type MapAccessor interface {
 	RuleIndexMap() *ebpf.Map
@@ -299,6 +327,8 @@ type MapAccessor interface {
 	VlanIndexMap() *ebpf.Map
 	SrcPrefixLpmMap() *ebpf.Map
 	DstPrefixLpmMap() *ebpf.Map
+	EventRingbufMap() *ebpf.Map
+	StatsMap() *ebpf.Map
 }
 
 type collMapAccessor struct {
@@ -312,3 +342,5 @@ func (c *collMapAccessor) DstPortIndexMap() *ebpf.Map   { return c.maps["dst_por
 func (c *collMapAccessor) VlanIndexMap() *ebpf.Map      { return c.maps["vlan_index_map"] }
 func (c *collMapAccessor) SrcPrefixLpmMap() *ebpf.Map   { return c.maps["src_prefix_lpm_map"] }
 func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map   { return c.maps["dst_prefix_lpm_map"] }
+func (c *collMapAccessor) EventRingbufMap() *ebpf.Map   { return c.maps["event_ringbuf"] }
+func (c *collMapAccessor) StatsMap() *ebpf.Map          { return c.maps["stats_map"] }
