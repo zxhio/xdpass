@@ -5,14 +5,47 @@ import (
 	"net/http"
 )
 
-func NewRouter() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/health", handleHealth)
-	return mux
+// RouterDeps holds the service dependencies for the HTTP router.
+type RouterDeps struct {
+	Status      StatusService
+	Attachments AttachmentService
+	Ruleset     RulesetService
+	Stats       StatsService
+	Egress      EgressService
 }
 
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, healthResponse{Status: "ok"})
+// NewRouter creates the HTTP handler with all API routes registered.
+func NewRouter(deps RouterDeps) http.Handler {
+	mux := http.NewServeMux()
+
+	// Health / Status
+	mux.HandleFunc("GET /api/v1/health", handleHealth)
+	mux.HandleFunc("GET /api/v1/status", handleStatus(deps.Status))
+
+	// Attachments
+	mux.HandleFunc("GET /api/v1/attachments", handleListAttachments(deps.Attachments))
+	mux.HandleFunc("POST /api/v1/attachments", handleCreateAttachment(deps.Attachments))
+	mux.HandleFunc("GET /api/v1/attachments/{ifindex}", handleGetAttachment(deps.Attachments))
+	mux.HandleFunc("PATCH /api/v1/attachments/{ifindex}", handlePatchAttachment(deps.Attachments))
+	mux.HandleFunc("DELETE /api/v1/attachments/{ifindex}", handleDeleteAttachment(deps.Attachments))
+
+	// Ruleset
+	mux.HandleFunc("GET /api/v1/ruleset", handleGetRuleset(deps.Ruleset))
+	mux.HandleFunc("PUT /api/v1/ruleset", handlePutRuleset(deps.Ruleset))
+	mux.HandleFunc("DELETE /api/v1/ruleset", handleDeleteRuleset(deps.Ruleset))
+
+	// Events
+	mux.HandleFunc("GET /api/v1/events/stream", handleEventsStream)
+
+	// Stats
+	mux.HandleFunc("GET /api/v1/stats", handleGetStats(deps.Stats))
+
+	// Response Egress
+	mux.HandleFunc("GET /api/v1/response/egress", handleGetEgress(deps.Egress))
+	mux.HandleFunc("PUT /api/v1/response/egress", handlePutEgress(deps.Egress))
+	mux.HandleFunc("DELETE /api/v1/response/egress", handleDeleteEgress(deps.Egress))
+
+	return mux
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

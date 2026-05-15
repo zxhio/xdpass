@@ -14,6 +14,7 @@ import (
 
 	"xdpass/internal/api"
 	"xdpass/internal/config"
+	"xdpass/internal/store"
 )
 
 func main() {
@@ -34,9 +35,18 @@ func main() {
 		logrus.WithError(err).Fatal("Fail to parse server config")
 	}
 
+	s := store.New()
+	handler := api.NewRouter(api.RouterDeps{
+		Status:      s,
+		Attachments: s,
+		Ruleset:     s,
+		Stats:       s,
+		Egress:      s,
+	})
+
 	server := &http.Server{
 		Addr:              opts.ListenAddr,
-		Handler:           api.NewRouter(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
