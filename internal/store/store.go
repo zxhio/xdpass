@@ -7,9 +7,13 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cilium/ebpf"
+
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
+	"xdpass/internal/events"
 	"xdpass/internal/ruleset"
+	"xdpass/internal/stats"
 )
 
 // Store holds all in-memory runtime state.
@@ -17,6 +21,7 @@ type Store struct {
 	mu               sync.RWMutex
 	attachments      *attachment.Runtime
 	rulesetRuntime   *ruleset.Runtime
+	eventStream      *events.Stream
 	egressConfigured bool
 	egressIfIndex    uint32
 	egressIfName     string
@@ -24,10 +29,11 @@ type Store struct {
 }
 
 // New creates a new in-memory store.
-func New(attachments *attachment.Runtime) *Store {
+func New(attachments *attachment.Runtime, eventStream *events.Stream) *Store {
 	return &Store{
 		attachments:    attachments,
 		rulesetRuntime: ruleset.NewRuntime(),
+		eventStream:    eventStream,
 		egressVLANMode: "preserve",
 	}
 }
@@ -156,7 +162,63 @@ func (s *Store) attachmentMapAccessors() []attachment.MapAccessor {
 // --- Stats ---
 
 func (s *Store) GetStats(_ context.Context) (api.StatsResponse, error) {
-	return api.StatsResponse{}, nil
+	enabled := s.attachments.EnabledAttachments()
+	var readers []stats.StatsReader
+	for _, ea := range enabled {
+		readers = append(readers, &mapStatsReader{m: ea.Maps.StatsMap()})
+	}
+	resp := stats.SnapshotFromReaders(readers)
+	return statsToAPI(resp), nil
+}
+
+type mapStatsReader struct {
+	m *ebpf.Map
+}
+
+func (r *mapStatsReader) StatsMap() *ebpf.Map { return r.m }
+
+// --- Events ---
+
+// Subscribe creates a new event subscription.
+func (s *Store) Subscribe() *api.EventSubscription {
+	sub := s.eventStream.Subscribe()
+	apiSub := &api.EventSubscription{
+		Events: make(chan api.EventData, 64),
+		Done:   make(chan struct{}),
+	}
+	go func() {
+		for {
+			select {
+			case <-sub.Done:
+				return
+			case evt, ok := <-sub.Events:
+				if !ok {
+					return
+				}
+				apiSub.Events <- api.EventData{
+					Timestamp: evt.Timestamp,
+					Type:      evt.Type,
+					RuleID:    evt.RuleID,
+					Action:    evt.Action,
+					Path:      evt.Path,
+					Verdict:   evt.Verdict,
+					Result:    evt.Result,
+					IfIndex:   evt.IfIndex,
+					SIP:       evt.SIP,
+					DIP:       evt.DIP,
+					Sport:     evt.Sport,
+					Dport:     evt.Dport,
+					IPProto:   evt.IPProto,
+				}
+			}
+		}
+	}()
+	return apiSub
+}
+
+// Unsubscribe removes an event subscription.
+func (s *Store) Unsubscribe(sub *api.EventSubscription) {
+	close(sub.Done)
 }
 
 // --- Egress ---
@@ -335,6 +397,38 @@ func apiToRequest(req api.AttachmentRequest) *attachment.Request {
 	return r
 }
 
+// statsToAPI converts internal stats response to API response.
+func statsToAPI(resp stats.Response) api.StatsResponse {
+	return api.StatsResponse{
+		Ingress: api.IngressStats{
+			Packets: resp.Ingress.Packets,
+		},
+		Parse: api.ParseStats{
+			OKPackets:    resp.Parse.OKPackets,
+			ErrorPackets: resp.Parse.ErrorPackets,
+		},
+		Match: api.MatchStats{
+			HitPackets:  resp.Match.HitPackets,
+			MissPackets: resp.Match.MissPackets,
+		},
+		KernelResponse: api.KernelResponseStats{
+			Packets:         resp.KernelResponse.Packets,
+			XDPTXPackets:    resp.KernelResponse.XDPTXPackets,
+			RedirectPackets: resp.KernelResponse.RedirectPackets,
+			ErrorPackets:    resp.KernelResponse.ErrorPackets,
+		},
+		XSKRedirect: api.XSKRedirectStats{
+			Packets:      resp.XSKRedirect.Packets,
+			ErrorPackets: resp.XSKRedirect.ErrorPackets,
+		},
+		UserspaceResponse: api.UserspaceResponseStats{},
+		Errors: api.ErrorsStats{
+			XDPPackets: resp.Errors.XDPPackets,
+			XSKPackets: resp.Errors.XSKPackets,
+		},
+	}
+}
+
 // Ensure Store implements the service interfaces.
 var (
 	_ api.AttachmentService = (*Store)(nil)
@@ -342,4 +436,5 @@ var (
 	_ api.StatsService      = (*Store)(nil)
 	_ api.EgressService     = (*Store)(nil)
 	_ api.StatusService     = (*Store)(nil)
+	_ api.EventStreamer     = (*Store)(nil)
 )

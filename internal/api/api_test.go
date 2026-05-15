@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,10 +112,21 @@ func (m *mockStore) DeleteEgress(_ context.Context) error {
 	return nil
 }
 
+func (m *mockStore) Subscribe() *EventSubscription {
+	return &EventSubscription{
+		Events: make(chan EventData, 64),
+		Done:   make(chan struct{}),
+	}
+}
+
+func (m *mockStore) Unsubscribe(sub *EventSubscription) {
+	close(sub.Done)
+}
+
 func newTestRouter() http.Handler {
 	s := newMockStore()
 	return NewRouter(RouterDeps{
-		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s,
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Events: s,
 	})
 }
 
@@ -255,9 +267,26 @@ func TestRulesetCRUD(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w4.Code)
 }
 
-func TestEventsStreamNotImplemented(t *testing.T) {
-	w := doRequest(newTestRouter(), "GET", "/api/v1/events/stream", nil)
-	assert.Equal(t, http.StatusNotImplemented, w.Code)
+func TestEventsStreamSSE(t *testing.T) {
+	handler := newTestRouter()
+	req := httptest.NewRequest("GET", "/api/v1/events/stream", nil)
+	ctx, cancel := context.WithCancel(req.Context())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(w, req)
+		close(done)
+	}()
+
+	// Give the handler time to set headers, then cancel.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 }
 
 func TestStatsZeroed(t *testing.T) {
@@ -319,6 +348,10 @@ func TestAllRoutesRegistered(t *testing.T) {
 
 	for _, r := range routes {
 		t.Run(r.method+" "+r.path, func(t *testing.T) {
+			// Skip SSE endpoint as it blocks waiting for events.
+			if r.path == "/api/v1/events/stream" {
+				t.Skip("SSE endpoint blocks, tested separately")
+			}
 			var body any
 			if r.method == "PUT" || r.method == "POST" {
 				body = map[string]any{}

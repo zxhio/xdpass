@@ -5,6 +5,35 @@ import (
 	"net/http"
 )
 
+// EventStreamer provides SSE event subscription.
+type EventStreamer interface {
+	Subscribe() *EventSubscription
+	Unsubscribe(sub *EventSubscription)
+}
+
+// EventSubscription is a subscription to the event stream.
+type EventSubscription struct {
+	Events chan EventData
+	Done   chan struct{}
+}
+
+// EventData is a single SSE event.
+type EventData struct {
+	Timestamp int64  `json:"timestamp"`
+	Type      string `json:"type"`
+	RuleID    uint32 `json:"rule_id"`
+	Action    string `json:"action"`
+	Path      string `json:"path,omitempty"`
+	Verdict   string `json:"verdict,omitempty"`
+	Result    string `json:"result,omitempty"`
+	IfIndex   uint32 `json:"ifindex,omitempty"`
+	SIP       string `json:"sip,omitempty"`
+	DIP       string `json:"dip,omitempty"`
+	Sport     uint16 `json:"sport"`
+	Dport     uint16 `json:"dport"`
+	IPProto   uint8  `json:"ip_proto"`
+}
+
 // RouterDeps holds the service dependencies for the HTTP router.
 type RouterDeps struct {
 	Status      StatusService
@@ -12,6 +41,7 @@ type RouterDeps struct {
 	Ruleset     RulesetService
 	Stats       StatsService
 	Egress      EgressService
+	Events      EventStreamer
 }
 
 // NewRouter creates the HTTP handler with all API routes registered.
@@ -35,7 +65,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/ruleset", handleDeleteRuleset(deps.Ruleset))
 
 	// Events
-	mux.HandleFunc("GET /api/v1/events/stream", handleEventsStream)
+	mux.HandleFunc("GET /api/v1/events/stream", handleEventsStream(deps.Events))
 
 	// Stats
 	mux.HandleFunc("GET /api/v1/stats", handleGetStats(deps.Stats))

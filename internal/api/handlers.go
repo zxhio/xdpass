@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -193,8 +194,40 @@ func handleDeleteRuleset(svc RulesetService) http.HandlerFunc {
 
 // --- Events ---
 
-func handleEventsStream(w http.ResponseWriter, _ *http.Request) {
-	writeNotImplemented(w, "events stream not implemented in phase 02")
+func handleEventsStream(stream EventStreamer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeInternalError(w, "streaming not supported")
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		sub := stream.Subscribe()
+		defer stream.Unsubscribe(sub)
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-sub.Done:
+				return
+			case event, ok := <-sub.Events:
+				if !ok {
+					return
+				}
+				data, err := json.Marshal(event)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintf(w, "event: rule_event\ndata: %s\n\n", data)
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 // --- Stats ---

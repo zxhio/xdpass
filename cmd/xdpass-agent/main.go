@@ -18,6 +18,7 @@ import (
 	"xdpass/internal/attachment"
 	"xdpass/internal/config"
 	"xdpass/internal/dataplane/bpfgen"
+	"xdpass/internal/events"
 	"xdpass/internal/store"
 )
 
@@ -68,13 +69,20 @@ func main() {
 	)
 	defer attRuntime.Close()
 
-	s := store.New(attRuntime)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eventStream := events.NewStream(ctx)
+	defer eventStream.Stop()
+
+	s := store.New(attRuntime, eventStream)
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
 		Attachments: s,
 		Ruleset:     s,
 		Stats:       s,
 		Egress:      s,
+		Events:      s,
 	})
 
 	server := &http.Server{
@@ -106,9 +114,9 @@ func main() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		logrus.WithError(err).Fatal("Fail to shut down HTTP server")
 	}
 	if err := <-errCh; err != nil {
