@@ -1,0 +1,7 @@
+internal/dataplane/bpfgen/xdpass_bpfel.o
+
+# Claude Code local config
+.claude/
+
+# Agent plans
+.agent/plans/
