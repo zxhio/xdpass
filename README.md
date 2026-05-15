@@ -67,6 +67,70 @@ HTTP API 默认监听 `127.0.0.1:9527`，详见 `specs/agent/` 目录。
 - `/api/v1/events/stream` - SSE 事件流
 - `/api/v1/response/egress` - 响应出口配置
 
+## 本地 netns 测试环境
+
+提供 `scripts/xdpass-netns.sh` 创建本地 network namespace 拓扑，用于手动验证 attach、ruleset 和响应行为。
+
+拓扑：
+
+```
+bridge: br-xdpass (10.0.1.1/24)
+  ├── veth-xdpass1 <-> ns-xdpass1:eth0 (10.0.1.2/24)
+  └── veth-xdpass2 <-> ns-xdpass2:eth0 (10.0.1.3/24)
+```
+
+```bash
+# 创建环境
+sudo scripts/xdpass-netns.sh setup
+
+# 验证连通性
+sudo scripts/xdpass-netns.sh ping
+
+# 查看状态
+sudo scripts/xdpass-netns.sh status
+
+# 清理
+sudo scripts/xdpass-netns.sh cleanup
+```
+
+## API CLI smoke test
+
+提供 `scripts/xdpass-api-cli.py` 封装常用 API 调用，无需手写 curl。
+
+依赖 Python 3 标准库，无需安装第三方包。
+
+```bash
+# 单个命令
+python3 scripts/xdpass-api-cli.py health
+python3 scripts/xdpass-api-cli.py status
+python3 scripts/xdpass-api-cli.py attach --iface br-xdpass
+python3 scripts/xdpass-api-cli.py detach --iface br-xdpass
+python3 scripts/xdpass-api-cli.py ruleset-apply
+python3 scripts/xdpass-api-cli.py stats
+
+# 完整 smoke test（默认 attach 到 br-xdpass）
+python3 scripts/xdpass-api-cli.py smoke
+```
+
+典型手动验证流程：
+
+```bash
+# 1. 创建 netns 环境
+sudo scripts/xdpass-netns.sh reset
+
+# 2. 启动 agent（另一个终端）
+sudo ./build/xdpass-agent
+
+# 3. 运行 API smoke test
+python3 scripts/xdpass-api-cli.py smoke
+
+# 4. 验证连通性
+sudo scripts/xdpass-netns.sh ping
+
+# 5. 清理
+sudo scripts/xdpass-netns.sh cleanup
+```
+
 ## 已知约束
 
 - `attach_mode` MVP 仅支持 `generic`。
