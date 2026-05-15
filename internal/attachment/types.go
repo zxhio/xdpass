@@ -6,6 +6,17 @@ import (
 	"xdpass/internal/api"
 )
 
+// XSKAfterCreateFunc is called after an attachment is created with XSK enabled.
+// It should start XSK sockets and response workers.
+type XSKAfterCreateFunc func(att *Attachment, maps MapAccessor) error
+
+// XSKAfterPatchFunc is called after PatchEnabled toggles an attachment.
+// enabled=true means the attachment was just enabled; false means disabled.
+type XSKAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool) error
+
+// XSKPreDeleteFunc is called before an attachment is deleted.
+type XSKPreDeleteFunc func(ifIndex uint32)
+
 // Request holds the attachment creation parameters.
 type Request struct {
 	IfIndex     uint32

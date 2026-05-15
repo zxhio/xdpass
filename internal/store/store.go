@@ -19,6 +19,7 @@ import (
 	"xdpass/internal/response"
 	"xdpass/internal/ruleset"
 	"xdpass/internal/stats"
+	"xdpass/internal/xsk"
 )
 
 // Store holds all in-memory runtime state.
@@ -29,6 +30,7 @@ type Store struct {
 	eventStream      *events.Stream
 	responseRuntime  *response.Runtime
 	responseStats    *response.Stats
+	xskRuntime       *xsk.Runtime
 	egressConfigured bool
 	egressIfIndex    uint32
 	egressIfName     string
@@ -36,7 +38,7 @@ type Store struct {
 }
 
 // New creates a new in-memory store.
-func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime) *Store {
+func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime, xskRuntime *xsk.Runtime) *Store {
 	var rs *response.Stats
 	if responseRuntime != nil {
 		rs = responseRuntime.Stats()
@@ -47,8 +49,99 @@ func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRu
 		eventStream:     eventStream,
 		responseRuntime: responseRuntime,
 		responseStats:   rs,
+		xskRuntime:      xskRuntime,
 		egressVLANMode:  "preserve",
 	}
+}
+
+// WireXSKCallbacks registers XSK lifecycle callbacks on the attachment runtime.
+// Must be called after New().
+func (s *Store) WireXSKCallbacks() {
+	if s.xskRuntime == nil || s.responseRuntime == nil {
+		return
+	}
+	s.attachments.SetXSKCallbacks(
+		s.xskAfterCreate,
+		s.xskAfterPatch,
+		s.xskPreDelete,
+	)
+}
+
+func (s *Store) xskAfterCreate(att *attachment.Attachment, maps attachment.MapAccessor) error {
+	xsksMap := maps.XsksMap()
+	if xsksMap == nil {
+		return fmt.Errorf("xsks_map not found")
+	}
+
+	result, err := s.xskRuntime.Start(xsksMap, xsk.StartRequest{
+		IfIndex: att.IfIndex,
+		Queues:  att.XSK.Queues,
+		Options: xsk.DefaultOptions(),
+	})
+	if err != nil {
+		return err
+	}
+
+	sockFD := result.Socket.FD()
+	envCh := make(chan response.Envelope, 64)
+	go func() {
+		for env := range result.PktCh {
+			envCh <- response.Envelope{
+				Packet:  env.Packet,
+				Meta:    response.XSKMeta{RuleID: env.RuleID, Action: env.Action},
+				IfIndex: env.IfIndex,
+			}
+		}
+		close(envCh)
+	}()
+	s.responseRuntime.StartWorker(att.IfIndex, s.currentEgressConfig(), envCh, sockFD, result.Socket)
+	return nil
+}
+
+func (s *Store) xskAfterPatch(att *attachment.Attachment, maps attachment.MapAccessor, enabled bool) error {
+	if enabled {
+		return s.xskAfterCreate(att, maps)
+	}
+	s.xskPreDelete(att.IfIndex)
+	return nil
+}
+
+func (s *Store) xskPreDelete(ifIndex uint32) {
+	s.responseRuntime.StopWorker(ifIndex)
+
+	xsksMap := s.getXsksMap(ifIndex)
+	s.xskRuntime.Stop(xsksMap, ifIndex)
+}
+
+func (s *Store) getXsksMap(ifIndex uint32) *ebpf.Map {
+	maps := s.attachments.Maps(ifIndex)
+	if maps == nil {
+		return nil
+	}
+	return maps.XsksMap()
+}
+
+func (s *Store) currentEgressConfig() response.EgressConfig {
+	return response.EgressConfig{
+		Configured:    s.egressConfigured,
+		EgressIfIndex: s.egressIfIndex,
+		VLANMode:      s.egressVLANMode,
+	}
+}
+
+func (s *Store) updateResponseRules(apiRules []api.RuleResponse) {
+	if s.responseRuntime == nil {
+		return
+	}
+	entries := make([]response.RuleEntry, len(apiRules))
+	for i, r := range apiRules {
+		entries[i] = response.RuleEntry{
+			RuleID: r.RuleID,
+			Action: r.Response.Action,
+			Params: r.Response.Params,
+		}
+	}
+	s.responseRuntime.UpdateRules(entries)
 }
 
 // --- Status ---
@@ -135,6 +228,9 @@ func (s *Store) ReplaceRuleset(_ context.Context, apiRules []api.RuleResponse) (
 		return api.RulesetResponse{}, err
 	}
 
+	// Update response worker rule lookup.
+	s.updateResponseRules(apiRules)
+
 	return api.RulesetResponse{Rules: apiRules}, nil
 }
 
@@ -153,7 +249,13 @@ func (s *Store) DeleteRuleset(_ context.Context) error {
 	getMaps := func() []attachment.MapAccessor {
 		return s.attachmentMapAccessors()
 	}
-	return s.rulesetRuntime.DeleteRuleset(getMaps)
+	if err := s.rulesetRuntime.DeleteRuleset(getMaps); err != nil {
+		return err
+	}
+
+	// Clear response worker rule lookup.
+	s.updateResponseRules(nil)
+	return nil
 }
 
 // getIngressVerdict returns the miss_verdict of the first enabled attachment.

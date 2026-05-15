@@ -47,29 +47,18 @@ func (s *AFPacketSender) Close() error {
 	return unix.Close(s.fd)
 }
 
-// XSKTXSender sends packets via an XSK TX ring (same-port response).
-type XSKTXSender struct {
-	// txRing and other XSK TX ring state would go here.
-	// For MVP, this is a placeholder that delegates to AF_PACKET fallback.
-	fd      int
-	ifIndex uint32
-}
-
-// NewXSKTXSender creates an XSK TX sender.
-// For MVP, this falls back to AF_PACKET if XSK TX is not available.
-func NewXSKTXSender(fd int, ifIndex uint32) *XSKTXSender {
-	return &XSKTXSender{fd: fd, ifIndex: ifIndex}
+// xskTXSender sends packets via an XSK TX ring (same-port response).
+type xskTXSender struct {
+	txWriter TXWriter
 }
 
 // Send writes a raw packet to the XSK TX ring.
-// For MVP, this is a placeholder.
-func (s *XSKTXSender) Send(pkt []byte) error {
-	// TODO: implement XSK TX ring write
-	return fmt.Errorf("xsk tx not yet implemented")
+func (s *xskTXSender) Send(pkt []byte) error {
+	return s.txWriter.WriteTX(pkt)
 }
 
 // Close is a no-op for the XSK TX sender.
-func (s *XSKTXSender) Close() error { return nil }
+func (s *xskTXSender) Close() error { return nil }
 
 // htons converts a 16-bit value from host to network byte order.
 func htons(v uint16) uint16 {
@@ -77,15 +66,15 @@ func htons(v uint16) uint16 {
 }
 
 // NewSender creates the appropriate sender based on whether same-port or cross-port.
-// samePort: use XSK TX (fd from XSK socket)
+// samePort: use XSK TX via txWriter if available, else AF_PACKET fallback
 // crossPort: use AF_PACKET on the egress interface
-func NewSender(samePort bool, xskFD int, ingressIfIndex, egressIfIndex uint32) (Sender, error) {
+func NewSender(samePort bool, txWriter TXWriter, ingressIfIndex, egressIfIndex uint32) (Sender, error) {
 	if samePort {
-		// For same-port, try XSK TX first.
-		// For MVP, fall back to AF_PACKET on the ingress interface.
+		if txWriter != nil {
+			return &xskTXSender{txWriter: txWriter}, nil
+		}
 		return NewAFPacketSender(ingressIfIndex)
 	}
-	// Cross-port: use AF_PACKET on the egress interface.
 	return NewAFPacketSender(egressIfIndex)
 }
 

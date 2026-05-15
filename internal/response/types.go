@@ -43,6 +43,11 @@ type Sender interface {
 	Close() error
 }
 
+// TXWriter writes a packet to an XSK TX ring.
+type TXWriter interface {
+	WriteTX(pkt []byte) error
+}
+
 // Builder constructs a response packet from an original packet and rule params.
 type Builder interface {
 	Build(origPkt []byte, params map[string]any) ([]byte, error)

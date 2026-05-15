@@ -40,7 +40,7 @@ func (rt *Runtime) Stats() *Stats {
 }
 
 // StartWorker starts a response worker for an attachment.
-func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-chan Envelope) {
+func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-chan Envelope, xskFD uint32, txWriter TXWriter) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
@@ -49,7 +49,7 @@ func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-c
 		return
 	}
 
-	w := NewWorker(ifIndex, rt.rules, rt.stats, egressCfg)
+	w := NewWorker(ifIndex, rt.rules, rt.stats, egressCfg, xskFD, txWriter)
 	wCtx, wCancel := context.WithCancel(rt.ctx)
 
 	rt.workers[ifIndex] = &workerState{
@@ -95,6 +95,13 @@ func (rt *Runtime) Stop() {
 	for ifIndex, ws := range rt.workers {
 		ws.cancel()
 		delete(rt.workers, ifIndex)
+	}
+}
+
+// UpdateRules replaces the rule lookup data for all workers.
+func (rt *Runtime) UpdateRules(rules []RuleEntry) {
+	if rl, ok := rt.rules.(*RulesetRuleLookup); ok {
+		rl.Rules = rules
 	}
 }
 

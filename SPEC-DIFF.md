@@ -15,7 +15,8 @@
 | Response egress API | done | GET/PUT/DELETE，tx_config_map 同步 |
 | XSK metadata 解码 | done | 8-byte xsk_meta (rule_id, action) |
 | Response builders | done | icmp_echo_reply, udp_echo_reply, arp_reply |
-| TX backends | done | XSK TX (同口), AF_PACKET TX (异口) |
+| TX backends | done | XSK TX (同口, 真实 AF_XDP TX ring), AF_PACKET TX (异口) |
+| XSK socket lifecycle | done | AF_XDP socket 创建、UMEM、RX/TX ring、queue bind |
 | Response stats/events | done | sent/failed 派生结果 |
 
 ## 未实现 / 部分实现
@@ -41,8 +42,9 @@ Spec 参考：`specs/agent/response.md` 第 275-315 行。
 ### XSK Runtime
 
 - `response.Runtime` 已接入 store 和 egress 更新。
-- **XSK socket 实际创建未实现**：需要 `AF_XDP` socket 绑定到网卡 RX queue，依赖 root + driver mode XDP。
-- attachment lifecycle（Create/Delete）未自动启停 XSK worker。
+- **XSK socket 已实现**：`internal/xsk` 包提供真实 AF_XDP socket 创建、UMEM 注册、RX/TX ring 操作。
+- attachment lifecycle（Create/PatchEnabled/Delete）已通过回调自动启停 XSK worker。
+- XSK 启动失败会回滚 attachment 创建。
 
 ### Dispatch
 
@@ -55,6 +57,6 @@ Spec 参考：`specs/agent/response.md` 第 275-315 行。
 ## 已知约束
 
 - `attach_mode` MVP 仅覆盖 `generic`。
-- `xsk.enabled` 实际启动延后。
+- XSK socket 创建需要 root 权限和真实网卡（driver mode XDP）。
 - 运行态重启即空状态（无持久化）。
 - 构建环境可能没有 kernel headers，`vmlinux.h` 预置提交。

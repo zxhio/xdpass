@@ -44,6 +44,17 @@ type Runtime struct {
 	mu         sync.Mutex
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
+
+	afterCreate XSKAfterCreateFunc
+	afterPatch  XSKAfterPatchFunc
+	preDelete   XSKPreDeleteFunc
+}
+
+// SetXSKCallbacks registers XSK lifecycle callbacks.
+func (r *Runtime) SetXSKCallbacks(afterCreate XSKAfterCreateFunc, afterPatch XSKAfterPatchFunc, preDelete XSKPreDeleteFunc) {
+	r.afterCreate = afterCreate
+	r.afterPatch = afterPatch
+	r.preDelete = preDelete
 }
 
 // New creates a new attachment runtime.
@@ -156,6 +167,15 @@ func (r *Runtime) Create(req *Request) (*Attachment, error) {
 	r.attachments[req.IfIndex] = att
 	r.resources[req.IfIndex] = &bpfResources{coll: coll, link: xdpLink}
 
+	// Start XSK if enabled and callback is set.
+	if att.XSK.Enabled && r.afterCreate != nil {
+		if err := r.afterCreate(att, &collMapAccessor{maps: coll.Maps}); err != nil {
+			// Rollback: close BPF resources and remove attachment.
+			r.cleanup(req.IfIndex)
+			return nil, fmt.Errorf("xsk start: %w", err)
+		}
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"ifindex":     req.IfIndex,
 		"attach_mode": req.AttachMode,
@@ -215,8 +235,23 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 		}
 		res.link = xdpLink
 		att.Enabled = true
+
+		// Start XSK if enabled and callback is set.
+		if att.XSK.Enabled && r.afterPatch != nil {
+			if err := r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, true); err != nil {
+				res.closeLink()
+				att.Enabled = false
+				return nil, fmt.Errorf("xsk start: %w", err)
+			}
+		}
+
 		logrus.WithField("ifindex", ifIndex).Info("Attachment enabled")
 	} else {
+		// Stop XSK before detaching if callback is set.
+		if att.XSK.Enabled && r.afterPatch != nil {
+			r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
+		}
+
 		// Detach XDP, keep BPF object loaded for potential re-enable.
 		res.closeLink()
 		att.Enabled = false
@@ -233,6 +268,11 @@ func (r *Runtime) Delete(ifIndex uint32) error {
 
 	if _, ok := r.attachments[ifIndex]; !ok {
 		return &NotFoundError{IfIndex: ifIndex}
+	}
+
+	// Stop XSK before cleanup if callback is set.
+	if r.preDelete != nil {
+		r.preDelete(ifIndex)
 	}
 
 	r.cleanup(ifIndex)
@@ -254,6 +294,9 @@ func (r *Runtime) Close() {
 	defer r.mu.Unlock()
 
 	for ifIndex := range r.attachments {
+		if r.preDelete != nil {
+			r.preDelete(ifIndex)
+		}
 		r.cleanup(ifIndex)
 	}
 }

@@ -9,7 +9,7 @@ import (
 func TestWorkerProcessPacketRuleNotFound(t *testing.T) {
 	stats := &Stats{}
 	lookup := &RulesetRuleLookup{Rules: nil}
-	w := NewWorker(3, lookup, stats, EgressConfig{})
+	w := NewWorker(3, lookup, stats, EgressConfig{}, 0, nil)
 
 	// Process with a rule_id that doesn't exist.
 	w.ProcessPacket([]byte{0x00}, XSKMeta{RuleID: 999, Action: ActionICMPEchoReply})
@@ -26,7 +26,7 @@ func TestWorkerProcessPacketUnimplementedAction(t *testing.T) {
 			{RuleID: 1001, Action: "tcp_syn_ack", Params: nil},
 		},
 	}
-	w := NewWorker(3, lookup, stats, EgressConfig{})
+	w := NewWorker(3, lookup, stats, EgressConfig{}, 0, nil)
 
 	w.ProcessPacket([]byte{0x00}, XSKMeta{RuleID: 1001, Action: ActionTCPSynAck})
 

@@ -14,6 +14,8 @@ type Worker struct {
 	rules     RuleLookup
 	stats     *Stats
 	egressCfg EgressConfig
+	xskFD     uint32
+	txWriter  TXWriter
 	log       *logrus.Entry
 }
 
@@ -25,12 +27,14 @@ type EgressConfig struct {
 }
 
 // NewWorker creates a new response worker for an attachment.
-func NewWorker(ifIndex uint32, rules RuleLookup, stats *Stats, egressCfg EgressConfig) *Worker {
+func NewWorker(ifIndex uint32, rules RuleLookup, stats *Stats, egressCfg EgressConfig, xskFD uint32, txWriter TXWriter) *Worker {
 	return &Worker{
 		ifIndex:   ifIndex,
 		rules:     rules,
 		stats:     stats,
 		egressCfg: egressCfg,
+		xskFD:     xskFD,
+		txWriter:  txWriter,
 		log: logrus.WithFields(logrus.Fields{
 			"component": "response_worker",
 			"ifindex":   ifIndex,
@@ -77,7 +81,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 
 	// Determine sender based on egress config.
 	samePort := !w.egressCfg.Configured
-	sender, err := NewSender(samePort, 0, w.ifIndex, w.egressCfg.EgressIfIndex)
+	sender, err := NewSender(samePort, w.txWriter, w.ifIndex, w.egressCfg.EgressIfIndex)
 	if err != nil {
 		w.log.WithError(err).Warn("Create sender failed")
 		w.stats.ErrorPackets.Add(1)

@@ -21,6 +21,7 @@ import (
 	"xdpass/internal/events"
 	"xdpass/internal/response"
 	"xdpass/internal/store"
+	"xdpass/internal/xsk"
 )
 
 func main() {
@@ -90,7 +91,11 @@ func main() {
 	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 	defer responseRuntime.Stop()
 
-	s := store.New(attRuntime, eventStream, responseRuntime)
+	xskRuntime := xsk.NewRuntime(ctx)
+	defer xskRuntime.StopAll()
+
+	s := store.New(attRuntime, eventStream, responseRuntime, xskRuntime)
+	s.WireXSKCallbacks()
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
 		Attachments: s,
