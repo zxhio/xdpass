@@ -125,7 +125,9 @@ func clearGlobalCfgMap(m *ebpf.Map) error {
 }
 
 func writePortIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
-	clearHashMap(m)
+	if err := clearHashMap(m); err != nil {
+		return fmt.Errorf("clear: %w", err)
+	}
 	for port, mask := range index {
 		if err := m.Put(port, mask); err != nil {
 			return err
@@ -135,7 +137,9 @@ func writePortIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
 }
 
 func writeVlanIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
-	clearHashMap(m)
+	if err := clearHashMap(m); err != nil {
+		return fmt.Errorf("clear: %w", err)
+	}
 	for vlan, mask := range index {
 		if err := m.Put(vlan, mask); err != nil {
 			return err
@@ -145,7 +149,9 @@ func writeVlanIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
 }
 
 func writeLpmMap(m *ebpf.Map, entries []LPMEntry) error {
-	clearLpmMap(m)
+	if err := clearLpmMap(m); err != nil {
+		return fmt.Errorf("clear: %w", err)
+	}
 	for _, e := range entries {
 		key := bpfIpv4LpmKey{Prefixlen: e.Prefixlen, Addr: e.Addr}
 		if err := m.Put(key, e.Mask); err != nil {
@@ -172,6 +178,9 @@ func clearHashMap(m *ebpf.Map) error {
 	for iter.Next(&key, &[8]uint64{}) {
 		keys = append(keys, key)
 	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
 	for _, k := range keys {
 		if err := m.Delete(k); err != nil {
 			return err
@@ -186,6 +195,9 @@ func clearLpmMap(m *ebpf.Map) error {
 	iter := m.Iterate()
 	for iter.Next(&key, &[8]uint64{}) {
 		keys = append(keys, key)
+	}
+	if err := iter.Err(); err != nil {
+		return err
 	}
 	for _, k := range keys {
 		if err := m.Delete(k); err != nil {

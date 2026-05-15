@@ -50,7 +50,7 @@ Spec 参考：`specs/agent/response.md` 第 275-315 行。
 
 ### Ruleset Writer
 
-- `clearHashMap` 错误被静默丢弃（`writePortIndexMap`、`writeVlanIndexMap`、`writeLpmMap`）。
+- ~~`clearHashMap` 错误被静默丢弃（`writePortIndexMap`、`writeVlanIndexMap`、`writeLpmMap`）。~~ **已修复**：clear 错误现在正确向上传递，`clearHashMap`/`clearLpmMap` 增加了 `iter.Err()` 检测。
 
 ## 已知约束
 
