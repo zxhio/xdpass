@@ -21,6 +21,7 @@
 | Response stats/events | done | sent/failed 派生结果 |
 | response.Runtime 接入 | done | store 和 egress 更新 |
 | Ruleset writer 错误传播 | done | clearHashMap/clearLpmMap 增加 iter.Err() 检测 |
+| Agent deploy/logging | done | 组件化部署路径、默认配置路径、logrus 文件日志和 lumberjack 轮转 |
 
 Spec 参考：`specs/agent/response.md` 第 275-315 行。
 

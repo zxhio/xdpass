@@ -11,6 +11,14 @@
 
 ---
 
+## 配置文件路径
+
+- agent 默认配置路径：`/etc/xdpass/agent/config.yaml`
+- 未显式传入 `-config` 时读取默认配置路径
+- 配置文件读取失败时启动失败
+
+---
+
 ## 配置结构
 
 ```yaml
@@ -43,33 +51,34 @@ logging:
 
 ### `logging.file_path`
 
-- 可选，默认 `/var/log/xdpass/agent.log`
-- 日志文件路径，空值表示仅输出到 stderr
+- 可选，部署配置默认 `/var/log/xdpass/agent.log`
+- 日志文件路径，空值或未配置 `logging` 时仅输出到 stdio
+- stdio 和 file 二选一；配置 `file_path` 时只写文件，不同时写 stdio
 - 部署时需确保目录可写，systemd unit 使用 `LogsDirectory=xdpass` 自动创建
 
 ### `logging.max_size_mb`
 
 - 可选，默认 `100`
 - 日志文件轮转大小上限（MB）
-- 当前版本仅写入配置字段，轮转功能待后续版本实现
+- 通过 lumberjack 执行文件轮转
 
 ### `logging.max_backups`
 
 - 可选，默认 `7`
 - 保留的旧日志文件数量
-- 当前版本仅写入配置字段，轮转功能待后续版本实现
+- 通过 lumberjack 执行文件轮转
 
 ### `logging.max_age_days`
 
 - 可选，默认 `30`
 - 旧日志文件保留天数
-- 当前版本仅写入配置字段，轮转功能待后续版本实现
+- 通过 lumberjack 执行文件轮转
 
 ### `logging.compress`
 
 - 可选，默认 `true`
 - 是否压缩轮转后的日志文件
-- 当前版本仅写入配置字段，轮转功能待后续版本实现
+- 通过 lumberjack 执行文件轮转
 
 ---
 
