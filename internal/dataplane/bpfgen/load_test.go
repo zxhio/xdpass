@@ -59,6 +59,21 @@ func loadObjects(t *testing.T) *XdpassObjects {
 	return &objs
 }
 
+// --- Test helpers ---
+
+// statsMap indexes from BPF common.h.
+const (
+	statIngressPackets             = 0
+	statParseOkPackets             = 1
+	statParseErrorPackets          = 2
+	statMatchHitPackets            = 3
+	statMatchMissPackets           = 4
+	statKernelResponsePackets      = 5
+	statKernelResponseXdpTxPackets = 6
+	statKernelResponseRedirectPkts = 7
+	statKernelResponseErrorPackets = 8
+)
+
 // assertStatsSum reads a PERCPU_ARRAY stat and asserts the sum across CPUs.
 func assertStatsSum(t *testing.T, objs *XdpassObjects, index uint32, expected uint64) {
 	t.Helper()
@@ -69,6 +84,51 @@ func assertStatsSum(t *testing.T, objs *XdpassObjects, index uint32, expected ui
 		sum += v
 	}
 	assert.Equal(t, expected, sum, "stats[%d]", index)
+}
+
+// zeroMask returns a zeroed mask_t (no rules active).
+func zeroMask() XdpassMaskT {
+	return XdpassMaskT{}
+}
+
+// slot0Mask returns a mask_t with bit 0 set (slot 0 active).
+func slot0Mask() XdpassMaskT {
+	return XdpassMaskT{Bits: [8]uint64{1}}
+}
+
+// setupGlobalCfg writes a global_cfg to global_cfg_map[0].
+func setupGlobalCfg(t *testing.T, objs *XdpassObjects, cfg XdpassGlobalCfg) {
+	t.Helper()
+	require.NoError(t, objs.GlobalCfgMap.Put(uint32(0), cfg))
+}
+
+// emptyGlobalCfg returns a global_cfg with no active rules and ingress_verdict=0 (pass).
+func emptyGlobalCfg() XdpassGlobalCfg {
+	return XdpassGlobalCfg{}
+}
+
+// wildcardGlobalCfg returns a global_cfg with slot 0 active and all optional bits set.
+func wildcardGlobalCfg(ingressVerdict uint32) XdpassGlobalCfg {
+	s0 := slot0Mask()
+	cfg := XdpassGlobalCfg{
+		AllActiveRules:         s0,
+		VlanOptionalRules:      s0,
+		SrcPortOptionalRules:   s0,
+		DstPortOptionalRules:   s0,
+		SrcPrefixOptionalRules: s0,
+		DstPrefixOptionalRules: s0,
+		IngressVerdict:         ingressVerdict,
+	}
+	for i := range cfg.ConditionOptionalRules {
+		cfg.ConditionOptionalRules[i] = s0
+	}
+	return cfg
+}
+
+// setupRule writes a rule_meta to rule_index_map[slot].
+func setupRule(t *testing.T, objs *XdpassObjects, slot uint32, rule XdpassRuleMeta) {
+	t.Helper()
+	require.NoError(t, objs.RuleIndexMap.Put(slot, rule))
 }
 
 // buildTCPSYN builds a minimal Ethernet + IPv4 + TCP SYN packet using gopacket.
@@ -97,6 +157,17 @@ func buildTCPSYN(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP, srcPort, 
 	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, tcp)
 	return buf.Bytes()
 }
+
+// testPacket returns a standard test TCP SYN packet fixture.
+func testPacket() []byte {
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+	srcIP := net.IP{10, 0, 0, 1}
+	dstIP := net.IP{192, 168, 1, 1}
+	return buildTCPSYN(srcMAC, dstMAC, srcIP, dstIP, 12345, 80)
+}
+
+// --- Spec tests ---
 
 func TestXdpassSpecParse(t *testing.T) {
 	skipUnlessBPF(t)
@@ -170,10 +241,59 @@ func TestXdpassMapSpecs(t *testing.T) {
 	})
 }
 
+// --- Program load test ---
+
 func TestXdpassProgramLoad(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	loadObjects(t)
+}
+
+// --- Packet path tests ---
+
+func TestEmptyRulesetMissVerdictPass(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	// Empty ruleset: no active rules, ingress_verdict=0 (pass).
+	setupGlobalCfg(t, objs, emptyGlobalCfg())
+
+	pkt := testPacket()
+
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS (2) for empty ruleset with ingress_verdict=0")
+
+	// Stats: ingress=1, parse_ok=1, match_miss=1.
+	assertStatsSum(t, objs, statIngressPackets, 1)
+	assertStatsSum(t, objs, statParseOkPackets, 1)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, statMatchHitPackets, 0)
+}
+
+func TestEmptyRulesetMissVerdictDrop(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	// Empty ruleset with ingress_verdict=1 (drop).
+	cfg := emptyGlobalCfg()
+	cfg.IngressVerdict = 1
+	setupGlobalCfg(t, objs, cfg)
+
+	pkt := testPacket()
+
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP (1) for empty ruleset with ingress_verdict=1")
+
+	assertStatsSum(t, objs, statIngressPackets, 1)
+	assertStatsSum(t, objs, statParseOkPackets, 1)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, statMatchHitPackets, 0)
 }
 
 func TestTcpResetXdpTx(t *testing.T) {
@@ -182,37 +302,19 @@ func TestTcpResetXdpTx(t *testing.T) {
 
 	objs := loadObjects(t)
 
-	// Set up global config: slot 0 active as wildcard rule (all optional bits set).
-	slot0 := XdpassMaskT{Bits: [8]uint64{1}}
-	cfg := XdpassGlobalCfg{
-		AllActiveRules:         slot0,
-		VlanOptionalRules:      slot0,
-		SrcPortOptionalRules:   slot0,
-		DstPortOptionalRules:   slot0,
-		SrcPrefixOptionalRules: slot0,
-		DstPrefixOptionalRules: slot0,
-	}
-	for i := range cfg.ConditionOptionalRules {
-		cfg.ConditionOptionalRules[i] = slot0
-	}
-	require.NoError(t, objs.GlobalCfgMap.Put(uint32(0), cfg))
+	// Wildcard rule: slot 0 active, all optional bits set.
+	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 
-	// Set up rule: slot 0 = tcp_reset (action code 2).
-	rule := XdpassRuleMeta{
+	// Rule: slot 0 = tcp_reset (action code 2).
+	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       100,
 		RequiredMask: 0x01, // COND_PROTO_TCP
 		Action:       2,    // ACTION_TCP_RESET
-	}
-	require.NoError(t, objs.RuleIndexMap.Put(uint32(0), rule))
+	})
 
-	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
-	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
-	srcIP := net.IP{10, 0, 0, 1}
-	dstIP := net.IP{192, 168, 1, 1}
-	pkt := buildTCPSYN(srcMAC, dstMAC, srcIP, dstIP, 12345, 80)
+	pkt := testPacket()
 
-	// XDP return codes from linux/if_link.h.
-	const xdpTx = 3
+	const xdpTx = 3 // XDP_TX from linux/if_link.h
 
 	ret, out, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
@@ -225,6 +327,8 @@ func TestTcpResetXdpTx(t *testing.T) {
 	eth := ethLayer.(*layers.Ethernet)
 
 	// MAC swapped.
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
 	assert.Equal(t, srcMAC.String(), eth.DstMAC.String(), "dst MAC should be original src")
 	assert.Equal(t, dstMAC.String(), eth.SrcMAC.String(), "src MAC should be original dst")
 
@@ -232,7 +336,8 @@ func TestTcpResetXdpTx(t *testing.T) {
 	require.NotNil(t, ipLayer, "output should have IPv4 layer")
 	ip := ipLayer.(*layers.IPv4)
 
-	// IP swapped.
+	srcIP := net.IP{10, 0, 0, 1}
+	dstIP := net.IP{192, 168, 1, 1}
 	assert.Equal(t, dstIP.To4().String(), ip.SrcIP.String(), "src IP should be original dst")
 	assert.Equal(t, srcIP.To4().String(), ip.DstIP.String(), "dst IP should be original src")
 	assert.Equal(t, uint16(40), ip.Length, "IP total length")
@@ -248,8 +353,11 @@ func TestTcpResetXdpTx(t *testing.T) {
 	assert.True(t, tcp.RST, "RST flag should be set")
 	assert.True(t, tcp.ACK, "ACK flag should be set")
 
-	// Stats: kernel_response.packets=1, kernel_response.xdp_tx_packets=1.
-	assertStatsSum(t, objs, 5, 1) // STAT_KERNEL_RESPONSE_PACKETS
-	assertStatsSum(t, objs, 6, 1) // STAT_KERNEL_RESPONSE_XDP_TX_PACKETS
-	assertStatsSum(t, objs, 8, 0) // STAT_KERNEL_RESPONSE_ERROR_PACKETS
+	// Stats.
+	assertStatsSum(t, objs, statIngressPackets, 1)
+	assertStatsSum(t, objs, statParseOkPackets, 1)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 1)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
 }
