@@ -658,16 +658,15 @@ func tcpChecksum(pkt []byte, ethHdrLen, tcpLen int) (byte, byte) {
 	ihl := int(pkt[ethHdrLen]&0x0f) * 4
 	tcpOffset := ethHdrLen + ihl
 
-	// Build pseudo-header: src_ip(4) + dst_ip(4) + zero(1) + proto(1) + tcp_len(2)
-	pseudo := make([]byte, 12+tcpLen)
-	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16]) // src IP
-	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20]) // dst IP
-	pseudo[8] = 0                                     // zero
-	pseudo[9] = 6                                     // protocol = TCP
+	// Build pseudo-header on stack: src_ip(4) + dst_ip(4) + zero(1) + proto(1) + tcp_len(2)
+	var pseudo [12]byte
+	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16])
+	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20])
+	pseudo[8] = 0
+	pseudo[9] = 6 // TCP
 	binary.BigEndian.PutUint16(pseudo[10:12], uint16(tcpLen))
-	copy(pseudo[12:], pkt[tcpOffset:tcpOffset+tcpLen])
 
-	return checksum(pseudo)
+	return checksum(pseudo[:], pkt[tcpOffset:tcpOffset+tcpLen])
 }
 
 // udpChecksum calculates the UDP checksum over pseudo-header + UDP segment.
@@ -675,15 +674,14 @@ func udpChecksum(pkt []byte, ethHdrLen, udpLen int) (byte, byte) {
 	ihl := int(pkt[ethHdrLen]&0x0f) * 4
 	udpOffset := ethHdrLen + ihl
 
-	pseudo := make([]byte, 12+udpLen)
-	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16]) // src IP
-	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20]) // dst IP
-	pseudo[8] = 0                                     // zero
-	pseudo[9] = 17                                    // protocol = UDP
+	var pseudo [12]byte
+	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16])
+	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20])
+	pseudo[8] = 0
+	pseudo[9] = 17 // UDP
 	binary.BigEndian.PutUint16(pseudo[10:12], uint16(udpLen))
-	copy(pseudo[12:], pkt[udpOffset:udpOffset+udpLen])
 
-	return checksum(pseudo)
+	return checksum(pseudo[:], pkt[udpOffset:udpOffset+udpLen])
 }
 
 // getStringArrayParam extracts a string array from params.
@@ -761,18 +759,31 @@ func getIPv4Param(params map[string]any, key string) (net.IP, error) {
 	return ip, nil
 }
 
-// checksum calculates the IPv4/ICMP checksum.
-func checksum(data []byte) (byte, byte) {
+// checksum calculates the internet checksum over one or more byte slices.
+func checksum(parts ...[]byte) (byte, byte) {
 	var sum uint32
-	length := len(data)
-	i := 0
-	for length > 1 {
-		sum += uint32(binary.BigEndian.Uint16(data[i : i+2]))
-		i += 2
-		length -= 2
+	var pending byte
+	var hasPending bool
+
+	for _, data := range parts {
+		i := 0
+		if hasPending {
+			// Combine leftover byte from previous part with first byte of this part.
+			sum += uint32(pending)<<8 | uint32(data[0])
+			i = 1
+			hasPending = false
+		}
+		for i+2 <= len(data) {
+			sum += uint32(binary.BigEndian.Uint16(data[i : i+2]))
+			i += 2
+		}
+		if i < len(data) {
+			pending = data[i]
+			hasPending = true
+		}
 	}
-	if length > 0 {
-		sum += uint32(data[i]) << 8
+	if hasPending {
+		sum += uint32(pending) << 8
 	}
 	for sum>>16 != 0 {
 		sum = (sum & 0xffff) + (sum >> 16)

@@ -5,8 +5,17 @@ import (
 	"net"
 	"testing"
 
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	testSrcMAC = net.HardwareAddr{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb}
+	testDstMAC = net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
+	testSrcIP  = net.ParseIP("10.0.0.1").To4()
+	testDstIP  = net.ParseIP("192.168.1.1").To4()
 )
 
 func TestBuildICMPEchoReply(t *testing.T) {
@@ -368,111 +377,70 @@ func TestDecodeXSKMetaTooShort(t *testing.T) {
 
 func buildTestICMPEchoRequest(t *testing.T) []byte {
 	t.Helper()
-	// Ethernet (14) + IPv4 (20) + ICMP (8 + payload)
-	pkt := make([]byte, 14+20+8+32)
-
-	// Ethernet: dst MAC, src MAC, ethertype
-	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
-	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	binary.BigEndian.PutUint16(pkt[12:14], 0x0800) // IPv4
-
-	// IPv4 header (starts at offset 14):
-	// byte 14: version+ihl, byte 23: protocol
-	// bytes 26-29: src IP, bytes 30-33: dst IP
-	pkt[14] = 0x45                                     // version=4, ihl=5
-	binary.BigEndian.PutUint16(pkt[16:18], 60)         // total length
-	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())    // src IP
-	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4()) // dst IP
-	pkt[23] = 1                                        // protocol = ICMP
-
-	// ICMP: type=8 (echo request), code=0
-	pkt[34] = 8 // echo request
-	pkt[35] = 0
-
-	return pkt
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolICMPv4, SrcIP: testSrcIP, DstIP: testDstIP}
+	icmp := &layers.ICMPv4{TypeCode: layers.CreateICMPv4TypeCode(8, 0)}
+	payload := make([]byte, 32)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, icmp, gopacket.Payload(payload))
+	return buf.Bytes()
 }
 
 func buildTestUDPPacket(t *testing.T) []byte {
 	t.Helper()
-	pkt := make([]byte, 14+20+8+16) // eth+ipv4+udp+payload
-
-	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
-	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
-
-	pkt[14] = 0x45
-	binary.BigEndian.PutUint16(pkt[16:18], 48) // total length
-	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
-	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
-	pkt[23] = 17 // protocol = UDP
-
-	// UDP: src port, dst port, length
-	udpOff := 34
-	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345) // sport
-	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)  // dport
-	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], 24)  // udp length
-
-	return pkt
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: testSrcIP, DstIP: testDstIP}
+	udp := &layers.UDP{SrcPort: 12345, DstPort: 53}
+	udp.SetNetworkLayerForChecksum(ip)
+	payload := make([]byte, 16)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, udp, gopacket.Payload(payload))
+	return buf.Bytes()
 }
 
 func buildTestARPRequest(t *testing.T) []byte {
 	t.Helper()
-	pkt := make([]byte, 14+28) // eth + arp
-
-	copy(pkt[0:6], []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}) // broadcast
-	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	binary.BigEndian.PutUint16(pkt[12:14], 0x0806) // ARP
-
-	// ARP header
-	binary.BigEndian.PutUint16(pkt[14:16], 1)      // hardware type = ethernet
-	binary.BigEndian.PutUint16(pkt[16:18], 0x0800) // proto type = IPv4
-	pkt[18] = 6                                    // hw len
-	pkt[19] = 4                                    // proto len
-	binary.BigEndian.PutUint16(pkt[20:22], 1)      // op = request
-
-	// sender HW (bytes 22-27)
-	copy(pkt[22:28], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	// sender proto (bytes 28-31)
-	copy(pkt[28:32], net.ParseIP("192.168.1.100").To4())
-	// target HW (bytes 32-37, zeros in request)
-	copy(pkt[32:38], []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-	// target proto (bytes 38-41)
-	copy(pkt[38:42], net.ParseIP("10.0.0.1").To4())
-
-	return pkt
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, EthernetType: layers.EthernetTypeARP}
+	arp := &layers.ARP{
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     6,
+		ProtAddressSize:   4,
+		Operation:         1, // request
+		SourceHwAddress:   testSrcMAC,
+		SourceProtAddress: net.ParseIP("192.168.1.100").To4(),
+		DstHwAddress:      make([]byte, 6),
+		DstProtAddress:    testDstIP,
+	}
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{}, eth, arp)
+	return buf.Bytes()
 }
 
 func buildTestTCPSYN(t *testing.T) []byte {
 	t.Helper()
-	pkt := make([]byte, 14+20+20) // eth+ipv4+tcp
-
-	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
-	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
-
-	pkt[14] = 0x45
-	binary.BigEndian.PutUint16(pkt[16:18], 40) // total length
-	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
-	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
-	pkt[23] = 6 // protocol = TCP
-
-	// TCP header (offset 34).
-	tcpOff := 34
-	binary.BigEndian.PutUint16(pkt[tcpOff:tcpOff+2], 12345) // sport
-	binary.BigEndian.PutUint16(pkt[tcpOff+2:tcpOff+4], 80)  // dport
-	binary.BigEndian.PutUint32(pkt[tcpOff+4:tcpOff+8], 0)   // seq = 0
-	binary.BigEndian.PutUint32(pkt[tcpOff+8:tcpOff+12], 0)  // ack = 0
-	pkt[tcpOff+12] = 0x50                                   // data offset = 5 (20 bytes)
-	pkt[tcpOff+13] = 0x02                                   // flags = SYN
-
-	return pkt
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolTCP, SrcIP: testSrcIP, DstIP: testDstIP}
+	tcp := &layers.TCP{SrcPort: 12345, DstPort: 80, SYN: true}
+	tcp.SetNetworkLayerForChecksum(ip)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, tcp)
+	return buf.Bytes()
 }
 
 func buildTestDNSRequest(t *testing.T) []byte {
 	t.Helper()
-	// Ethernet (14) + IPv4 (20) + UDP (8) + DNS header (12) + question
-	// Question: \x03www\x04test\x03com\x00 + QTYPE(2) + QCLASS(2)
-	question := []byte{
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: testSrcIP, DstIP: testDstIP}
+	udp := &layers.UDP{SrcPort: 12345, DstPort: 53}
+	udp.SetNetworkLayerForChecksum(ip)
+	dnsPayload := []byte{
+		0x12, 0x34, // transaction ID
+		0x01, 0x00, // flags: standard query, RD=1
+		0x00, 0x01, // QDCOUNT=1
+		0x00, 0x00, // ANCOUNT
+		0x00, 0x00, // NSCOUNT
+		0x00, 0x00, // ARCOUNT
 		3, 'w', 'w', 'w',
 		4, 't', 'e', 's', 't',
 		3, 'c', 'o', 'm',
@@ -480,32 +448,7 @@ func buildTestDNSRequest(t *testing.T) []byte {
 		0, 1, // QTYPE = A
 		0, 1, // QCLASS = IN
 	}
-	dnsLen := 12 + len(question)
-	pkt := make([]byte, 14+20+8+dnsLen)
-
-	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
-	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
-	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
-
-	pkt[14] = 0x45
-	binary.BigEndian.PutUint16(pkt[16:18], uint16(20+8+dnsLen))
-	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
-	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
-	pkt[23] = 17 // protocol = UDP
-
-	udpOff := 34
-	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345)              // sport
-	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)               // dport
-	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], uint16(8+dnsLen)) // udp length
-
-	// DNS header.
-	dnsOff := udpOff + 8
-	binary.BigEndian.PutUint16(pkt[dnsOff:dnsOff+2], 0x1234)   // transaction ID
-	binary.BigEndian.PutUint16(pkt[dnsOff+2:dnsOff+4], 0x0100) // flags: standard query, RD=1
-	binary.BigEndian.PutUint16(pkt[dnsOff+4:dnsOff+6], 1)      // QDCOUNT=1
-	// ANCOUNT, NSCOUNT, ARCOUNT are 0.
-
-	copy(pkt[dnsOff+12:], question)
-
-	return pkt
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, udp, gopacket.Payload(dnsPayload))
+	return buf.Bytes()
 }
