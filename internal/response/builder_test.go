@@ -248,6 +248,106 @@ func TestBuildDNSSinkholeNoAnswers(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestBuildICMPPortUnreachable(t *testing.T) {
+	pkt := buildTestUDPPacket(t)
+
+	builder := BuilderForAction(ActionICMPPortUnreachable)
+	require.NotNil(t, builder)
+
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
+
+	// Verify Ethernet MAC swap.
+	assert.Equal(t, pkt[6:12], reply[0:6])
+	assert.Equal(t, pkt[0:6], reply[6:12])
+
+	// Verify IPv4 src = original dst, dst = original src.
+	assert.Equal(t, pkt[30:34], reply[26:30]) // reply src = orig dst
+	assert.Equal(t, pkt[26:30], reply[30:34]) // reply dst = orig src
+
+	// Verify ICMP type=3, code=3.
+	icmpOff := 34                              // 14 (eth) + 20 (ipv4)
+	assert.Equal(t, byte(3), reply[icmpOff])   // type = destination unreachable
+	assert.Equal(t, byte(3), reply[icmpOff+1]) // code = port unreachable
+
+	// Verify ICMP body contains original IPv4 header.
+	assert.Equal(t, pkt[14:34], reply[icmpOff+8:icmpOff+28]) // orig IP header (20 bytes)
+
+	// Verify ICMP body contains first 8 bytes of original payload (UDP header).
+	assert.Equal(t, pkt[34:42], reply[icmpOff+28:icmpOff+36]) // orig UDP header (8 bytes)
+
+	// Verify IPv4 total length = 20 (IP) + 8 (ICMP hdr) + 20 (orig IP) + 8 (orig payload) = 56.
+	ipLen := binary.BigEndian.Uint16(reply[16:18])
+	assert.Equal(t, uint16(56), ipLen)
+}
+
+func TestBuildICMPHostUnreachable(t *testing.T) {
+	pkt := buildTestTCPSYN(t)
+
+	builder := BuilderForAction(ActionICMPHostUnreachable)
+	require.NotNil(t, builder)
+
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
+
+	icmpOff := 34
+	assert.Equal(t, byte(3), reply[icmpOff])   // type
+	assert.Equal(t, byte(1), reply[icmpOff+1]) // code = host unreachable
+
+	// Verify ICMP body = orig IP header + first 8 bytes of TCP.
+	assert.Equal(t, pkt[14:34], reply[icmpOff+8:icmpOff+28])
+	assert.Equal(t, pkt[34:42], reply[icmpOff+28:icmpOff+36])
+}
+
+func TestBuildICMPAdminProhibited(t *testing.T) {
+	pkt := buildTestUDPPacket(t)
+
+	builder := BuilderForAction(ActionICMPAdminProhibited)
+	require.NotNil(t, builder)
+
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
+
+	icmpOff := 34
+	assert.Equal(t, byte(3), reply[icmpOff])    // type
+	assert.Equal(t, byte(13), reply[icmpOff+1]) // code = admin prohibited
+}
+
+func TestBuildICMPUnreachableTooShort(t *testing.T) {
+	builder := BuilderForAction(ActionICMPPortUnreachable)
+	_, err := builder([]byte{0x00, 0x01}, nil)
+	assert.ErrorIs(t, err, ErrInvalidPacket)
+}
+
+func TestBuildICMPUnreachableNotIPv4(t *testing.T) {
+	pkt := buildTestARPRequest(t) // ARP, not IPv4
+
+	builder := BuilderForAction(ActionICMPPortUnreachable)
+	_, err := builder(pkt, nil)
+	assert.ErrorIs(t, err, ErrInvalidPacket)
+}
+
+func TestBuildICMPUnreachableShortPayload(t *testing.T) {
+	// IPv4 packet with less than 8 bytes of payload.
+	pkt := make([]byte, 14+20+4) // only 4 bytes of payload
+	copy(pkt[0:6], []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})
+	copy(pkt[6:12], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
+	binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
+	pkt[14] = 0x45
+	binary.BigEndian.PutUint16(pkt[16:18], 24)
+	pkt[23] = 17 // UDP
+	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
+	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
+
+	builder := BuilderForAction(ActionICMPPortUnreachable)
+	reply, err := builder(pkt, nil)
+	require.NoError(t, err)
+
+	// Body should be 20 (orig IP) + 4 (available payload) = 24 bytes.
+	// Total = 14 + 20 + 8 + 24 = 66.
+	assert.Equal(t, 66, len(reply))
+}
+
 func TestDecodeXSKMeta(t *testing.T) {
 	meta := make([]byte, 8)
 	binary.LittleEndian.PutUint32(meta[0:4], 1001)

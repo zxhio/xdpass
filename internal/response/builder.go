@@ -24,6 +24,12 @@ func BuilderForAction(action uint16) BuilderFunc {
 		return buildDNSRefused
 	case ActionDNSSinkhole:
 		return buildDNSSinkhole
+	case ActionICMPPortUnreachable:
+		return buildICMPUnreachable(3)
+	case ActionICMPHostUnreachable:
+		return buildICMPUnreachable(1)
+	case ActionICMPAdminProhibited:
+		return buildICMPUnreachable(13)
 	default:
 		return nil
 	}
@@ -95,6 +101,84 @@ func buildICMPEchoReply(origPkt []byte, _ map[string]any) ([]byte, error) {
 	recalcIPv4Checksum(pkt, ethHdrLen)
 
 	return pkt, nil
+}
+
+// buildICMPUnreachable returns a BuilderFunc that constructs an ICMP destination
+// unreachable response with the given code. The ICMP body contains the original
+// IPv4 header and the first 8 bytes of the original payload.
+func buildICMPUnreachable(code byte) BuilderFunc {
+	return func(origPkt []byte, _ map[string]any) ([]byte, error) {
+		if len(origPkt) < 14+20 {
+			return nil, fmt.Errorf("%w: icmp unreachable requires at least ethernet+ipv4 header", ErrInvalidPacket)
+		}
+
+		ethType := binary.BigEndian.Uint16(origPkt[12:14])
+		ethHdrLen := 14
+
+		if ethType == 0x8100 || ethType == 0x88a8 {
+			if len(origPkt) < 18+20 {
+				return nil, fmt.Errorf("%w: too short for vlan+ipv4", ErrInvalidPacket)
+			}
+			ethType = binary.BigEndian.Uint16(origPkt[16:18])
+			ethHdrLen = 18
+		}
+
+		if ethType != 0x0800 {
+			return nil, fmt.Errorf("%w: not IPv4 (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+		}
+
+		ihl := int(origPkt[ethHdrLen]&0x0f) * 4
+		if ihl < 20 {
+			return nil, fmt.Errorf("%w: IPv4 IHL too small (%d bytes)", ErrInvalidPacket, ihl)
+		}
+		if len(origPkt) < ethHdrLen+ihl {
+			return nil, fmt.Errorf("%w: packet too short for IPv4 header", ErrInvalidPacket)
+		}
+
+		payloadLen := len(origPkt) - ethHdrLen - ihl
+		bodyCopyLen := ihl
+		if payloadLen < 8 {
+			bodyCopyLen += payloadLen
+		} else {
+			bodyCopyLen += 8
+		}
+
+		respLen := ethHdrLen + 20 + 8 + bodyCopyLen
+		pkt := make([]byte, respLen)
+
+		// Ethernet header: swap MAC addresses.
+		copy(pkt[0:6], origPkt[6:12])
+		copy(pkt[6:12], origPkt[0:6])
+		binary.BigEndian.PutUint16(pkt[12:14], 0x0800)
+
+		// IPv4 header.
+		pkt[ethHdrLen] = 0x45 // version=4, ihl=5
+		binary.BigEndian.PutUint16(pkt[ethHdrLen+2:ethHdrLen+4], uint16(respLen-ethHdrLen))
+		pkt[ethHdrLen+8] = 64                                                    // TTL
+		pkt[ethHdrLen+9] = 1                                                     // protocol = ICMP
+		copy(pkt[ethHdrLen+12:ethHdrLen+16], origPkt[ethHdrLen+16:ethHdrLen+20]) // src = orig dst
+		copy(pkt[ethHdrLen+16:ethHdrLen+20], origPkt[ethHdrLen+12:ethHdrLen+16]) // dst = orig src
+
+		// ICMP header: type=3 (destination unreachable), code, checksum.
+		icmpOff := ethHdrLen + 20
+		pkt[icmpOff] = 3
+		pkt[icmpOff+1] = code
+		// unused (4 bytes) = 0
+
+		// ICMP body: original IPv4 header + first 8 bytes of payload.
+		copy(pkt[icmpOff+8:], origPkt[ethHdrLen:ethHdrLen+bodyCopyLen])
+
+		// ICMP checksum over entire ICMP message.
+		pkt[icmpOff+2] = 0
+		pkt[icmpOff+3] = 0
+		icmpLen := 8 + bodyCopyLen
+		pkt[icmpOff+2], pkt[icmpOff+3] = checksum(pkt[icmpOff : icmpOff+icmpLen])
+
+		// IPv4 checksum.
+		recalcIPv4Checksum(pkt, ethHdrLen)
+
+		return pkt, nil
+	}
 }
 
 // buildUDPEchoReply constructs a UDP echo reply by swapping addresses and ports.
