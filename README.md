@@ -32,7 +32,7 @@ make test
 sudo ./build/xdpass-agent
 
 # 使用配置文件
-sudo ./build/xdpass-agent -config /etc/xdpass-agent/config.yaml
+sudo ./build/xdpass-agent -config /etc/xdpass/agent/config.yaml
 ```
 
 需要 root 或 `CAP_NET_ADMIN` + `CAP_BPF` 权限。
@@ -44,14 +44,16 @@ sudo ./build/xdpass-agent -config /etc/xdpass-agent/config.yaml
 sudo cp build/xdpass-agent /usr/local/bin/
 
 # 安装配置
-sudo mkdir -p /etc/xdpass-agent
-sudo cp deploy/config/xdpass-agent.yaml /etc/xdpass-agent/config.yaml
+sudo mkdir -p /etc/xdpass/agent
+sudo cp deploy/config/agent/config.yaml /etc/xdpass/agent/config.yaml
 
 # 安装 systemd unit
 sudo cp deploy/systemd/xdpass-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now xdpass-agent
 ```
+
+日志默认写入 `/var/log/xdpass/agent.log`，systemd unit 通过 `LogsDirectory=xdpass` 自动创建目录。
 
 ## API
 

@@ -1,0 +1,24 @@
+server:
+  # HTTP API listen address.
+  # Default: 127.0.0.1:9527
+  listen_addr: "127.0.0.1:9527"
+
+logging:
+  # Log level: trace, debug, info, warn, error, fatal, panic.
+  # Default: info
+  level: info
+  # Log file path. Empty means stderr only.
+  # Default: /var/log/xdpass/agent.log
+  file_path: /var/log/xdpass/agent.log
+  # Max log file size in MB before rotation.
+  # Default: 100
+  max_size_mb: 100
+  # Max number of old log files to retain.
+  # Default: 7
+  max_backups: 7
+  # Max days to retain old log files.
+  # Default: 30
+  max_age_days: 30
+  # Compress rotated log files.
+  # Default: true
+  compress: true

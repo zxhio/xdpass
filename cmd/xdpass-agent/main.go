@@ -19,25 +19,28 @@ import (
 	"xdpass/internal/config"
 	"xdpass/internal/dataplane/bpfgen"
 	"xdpass/internal/events"
+	"xdpass/internal/logging"
 	"xdpass/internal/response"
 	"xdpass/internal/store"
 	"xdpass/internal/xsk"
 )
 
 func main() {
-	configPath := flag.String("config", "", "path to config file")
+	configPath := flag.String("config", "/etc/xdpass/agent/config.yaml", "path to config file")
 	flag.Parse()
 
-	var serverCfg config.ServerConfig
-	if *configPath != "" {
-		cfg, err := config.Load(*configPath)
-		if err != nil {
-			logrus.WithError(err).Fatal("Fail to load config")
-		}
-		serverCfg = cfg.Server
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		logrus.WithError(err).Fatal("Fail to load config")
 	}
 
-	opts, err := config.NewServerOptions(serverCfg)
+	logOpts, err := logging.NewOptions(cfg.Logging)
+	if err != nil {
+		logrus.WithError(err).Fatal("Fail to parse logging config")
+	}
+	logging.Setup(logOpts)
+
+	opts, err := config.NewServerOptions(cfg.Server)
 	if err != nil {
 		logrus.WithError(err).Fatal("Fail to parse server config")
 	}
@@ -51,17 +54,17 @@ func main() {
 			return &ebpf.Collection{
 				Programs: map[string]*ebpf.Program{"xdpass_prog": objs.XdpassProg},
 				Maps: map[string]*ebpf.Map{
-					"rule_index_map":      objs.RuleIndexMap,
-					"global_cfg_map":      objs.GlobalCfgMap,
-					"tx_config_map":       objs.TxConfigMap,
-					"src_port_index_map":  objs.SrcPortIndexMap,
-					"dst_port_index_map":  objs.DstPortIndexMap,
-					"vlan_index_map":      objs.VlanIndexMap,
-					"src_prefix_lpm_map":  objs.SrcPrefixLpmMap,
-					"dst_prefix_lpm_map":  objs.DstPrefixLpmMap,
-					"event_ringbuf":       objs.EventRingbuf,
-					"stats_map":           objs.StatsMap,
-					"xsks_map":            objs.XsksMap,
+					"rule_index_map":     objs.RuleIndexMap,
+					"global_cfg_map":     objs.GlobalCfgMap,
+					"tx_config_map":      objs.TxConfigMap,
+					"src_port_index_map": objs.SrcPortIndexMap,
+					"dst_port_index_map": objs.DstPortIndexMap,
+					"vlan_index_map":     objs.VlanIndexMap,
+					"src_prefix_lpm_map": objs.SrcPrefixLpmMap,
+					"dst_prefix_lpm_map": objs.DstPrefixLpmMap,
+					"event_ringbuf":      objs.EventRingbuf,
+					"stats_map":          objs.StatsMap,
+					"xsks_map":           objs.XsksMap,
 				},
 			}, nil
 		},

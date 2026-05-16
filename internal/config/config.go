@@ -6,13 +6,16 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"xdpass/internal/logging"
 )
 
 const DefaultListenAddr = "127.0.0.1:9527"
 
 // Config is the raw startup configuration parsed from YAML.
 type Config struct {
-	Server ServerConfig `yaml:"server"`
+	Server  ServerConfig   `yaml:"server"`
+	Logging logging.Config `yaml:"logging"`
 }
 
 // ServerConfig holds the raw server section from the config file.
