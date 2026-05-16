@@ -7,41 +7,41 @@ import (
 
 // Condition bits, aligned with BPF ABI.
 const (
-	CondProtoTCP           uint32 = 1 << 0
-	CondProtoUDP           uint32 = 1 << 1
-	CondProtoICMP          uint32 = 1 << 2
-	CondProtoARP           uint32 = 1 << 3
-	CondVLAN               uint32 = 1 << 4
-	CondSrcPrefix          uint32 = 1 << 5
-	CondDstPrefix          uint32 = 1 << 6
-	CondSrcPort            uint32 = 1 << 7
-	CondDstPort            uint32 = 1 << 8
-	CondTCPSyn             uint32 = 1 << 9
-	CondTCPAck             uint32 = 1 << 10
-	CondTCPRst             uint32 = 1 << 11
-	CondTCPFin             uint32 = 1 << 12
-	CondTCPPsh             uint32 = 1 << 13
-	CondICMPEchoRequest    uint32 = 1 << 14
-	CondICMPEchoReply      uint32 = 1 << 15
-	CondARPRequest         uint32 = 1 << 16
-	CondARPReply           uint32 = 1 << 17
-	CondL4Payload          uint32 = 1 << 18
+	CondProtoTCP        uint32 = 1 << 0
+	CondProtoUDP        uint32 = 1 << 1
+	CondProtoICMP       uint32 = 1 << 2
+	CondProtoARP        uint32 = 1 << 3
+	CondVLAN            uint32 = 1 << 4
+	CondSrcPrefix       uint32 = 1 << 5
+	CondDstPrefix       uint32 = 1 << 6
+	CondSrcPort         uint32 = 1 << 7
+	CondDstPort         uint32 = 1 << 8
+	CondTCPSyn          uint32 = 1 << 9
+	CondTCPAck          uint32 = 1 << 10
+	CondTCPRst          uint32 = 1 << 11
+	CondTCPFin          uint32 = 1 << 12
+	CondTCPPsh          uint32 = 1 << 13
+	CondICMPEchoRequest uint32 = 1 << 14
+	CondICMPEchoReply   uint32 = 1 << 15
+	CondARPRequest      uint32 = 1 << 16
+	CondARPReply        uint32 = 1 << 17
+	CondL4Payload       uint32 = 1 << 18
 )
 
 // Action codes, aligned with BPF ABI.
 const (
-	ActionNone                 uint16 = 0
-	ActionAlert                uint16 = 1
-	ActionTCPReset             uint16 = 2
-	ActionICMPEchoReply        uint16 = 3
-	ActionARPReply             uint16 = 4
-	ActionTCPSynAck            uint16 = 5
-	ActionICMPPortUnreachable  uint16 = 6
-	ActionUDPEchoReply         uint16 = 7
-	ActionDNSRefused           uint16 = 8
-	ActionICMPHostUnreachable  uint16 = 9
-	ActionICMPAdminProhibited  uint16 = 10
-	ActionDNSSinkhole          uint16 = 11
+	ActionNone                uint16 = 0
+	ActionAlert               uint16 = 1
+	ActionTCPReset            uint16 = 2
+	ActionICMPEchoReply       uint16 = 3
+	ActionARPReply            uint16 = 4
+	ActionTCPSynAck           uint16 = 5
+	ActionICMPPortUnreachable uint16 = 6
+	ActionUDPEchoReply        uint16 = 7
+	ActionDNSRefused          uint16 = 8
+	ActionICMPHostUnreachable uint16 = 9
+	ActionICMPAdminProhibited uint16 = 10
+	ActionDNSSinkhole         uint16 = 11
 )
 
 const maxRuleSlots = 512
@@ -59,18 +59,18 @@ var validARPOps = map[string]bool{
 }
 
 var actionCodeMap = map[string]uint16{
-	"none":                   ActionNone,
-	"alert":                  ActionAlert,
-	"tcp_reset":              ActionTCPReset,
-	"icmp_echo_reply":        ActionICMPEchoReply,
-	"arp_reply":              ActionARPReply,
-	"tcp_syn_ack":            ActionTCPSynAck,
-	"icmp_port_unreachable":  ActionICMPPortUnreachable,
-	"udp_echo_reply":         ActionUDPEchoReply,
-	"dns_refused":            ActionDNSRefused,
-	"icmp_host_unreachable":  ActionICMPHostUnreachable,
-	"icmp_admin_prohibited":  ActionICMPAdminProhibited,
-	"dns_sinkhole":           ActionDNSSinkhole,
+	"none":                  ActionNone,
+	"alert":                 ActionAlert,
+	"tcp_reset":             ActionTCPReset,
+	"icmp_echo_reply":       ActionICMPEchoReply,
+	"arp_reply":             ActionARPReply,
+	"tcp_syn_ack":           ActionTCPSynAck,
+	"icmp_port_unreachable": ActionICMPPortUnreachable,
+	"udp_echo_reply":        ActionUDPEchoReply,
+	"dns_refused":           ActionDNSRefused,
+	"icmp_host_unreachable": ActionICMPHostUnreachable,
+	"icmp_admin_prohibited": ActionICMPAdminProhibited,
+	"dns_sinkhole":          ActionDNSSinkhole,
 }
 
 // ValidationError is a validation error with a detail message.

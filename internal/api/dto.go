@@ -89,16 +89,16 @@ type RuleResponse struct {
 
 // MatchResponse holds rule match conditions.
 type MatchResponse struct {
-	Protocol     string     `json:"protocol,omitempty"`
-	VLANS        []uint16   `json:"vlans,omitempty"`
-	SrcCIDRs     []string   `json:"src_cidrs,omitempty"`
-	DstCIDRs     []string   `json:"dst_cidrs,omitempty"`
-	SrcPorts     []uint16   `json:"src_ports,omitempty"`
-	DstPorts     []uint16   `json:"dst_ports,omitempty"`
-	TCPFlags     *TCPFlags  `json:"tcp_flags,omitempty"`
-	ICMPType     string     `json:"icmp_type,omitempty"`
-	ARPOP        string     `json:"arp_op,omitempty"`
-	HasL4Payload *bool      `json:"has_l4_payload,omitempty"`
+	Protocol     string    `json:"protocol,omitempty"`
+	VLANS        []uint16  `json:"vlans,omitempty"`
+	SrcCIDRs     []string  `json:"src_cidrs,omitempty"`
+	DstCIDRs     []string  `json:"dst_cidrs,omitempty"`
+	SrcPorts     []uint16  `json:"src_ports,omitempty"`
+	DstPorts     []uint16  `json:"dst_ports,omitempty"`
+	TCPFlags     *TCPFlags `json:"tcp_flags,omitempty"`
+	ICMPType     string    `json:"icmp_type,omitempty"`
+	ARPOP        string    `json:"arp_op,omitempty"`
+	HasL4Payload *bool     `json:"has_l4_payload,omitempty"`
 }
 
 // TCPFlags holds TCP flag match conditions.

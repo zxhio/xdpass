@@ -27,8 +27,8 @@ type Runtime struct {
 	mu       sync.Mutex
 	ctx      context.Context
 	sockets  map[uint32]map[uint32]*Socket // ifindex → queueID → socket
-	cancelFn map[uint32]context.CancelFunc  // ifindex → cancel
-	channels map[uint32]chan RXEnvelope     // ifindex → packet channel
+	cancelFn map[uint32]context.CancelFunc // ifindex → cancel
+	channels map[uint32]chan RXEnvelope    // ifindex → packet channel
 }
 
 // NewRuntime creates a new XSK runtime.

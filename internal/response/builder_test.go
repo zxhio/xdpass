@@ -20,8 +20,8 @@ func TestBuildICMPEchoReply(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify Ethernet MAC swap.
-	assert.Equal(t, pkt[6:12], reply[0:6])   // dst = original src
-	assert.Equal(t, pkt[0:6], reply[6:12])   // src = original dst
+	assert.Equal(t, pkt[6:12], reply[0:6]) // dst = original src
+	assert.Equal(t, pkt[0:6], reply[6:12]) // src = original dst
 
 	// Verify IPv4 addr swap (src at 26-29, dst at 30-33).
 	assert.Equal(t, pkt[30:34], reply[26:30]) // reply src = original dst
@@ -64,9 +64,9 @@ func TestBuildUDPEchoReply(t *testing.T) {
 	assert.Equal(t, pkt[26:30], reply[30:34]) // reply dst = original src
 
 	// Verify UDP port swap.
-	udpOff := 34 // 14 (eth) + 20 (ipv4)
-	assert.Equal(t, pkt[udpOff+2:udpOff+4], reply[udpOff:udpOff+2])   // reply sport = original dport
-	assert.Equal(t, pkt[udpOff:udpOff+2], reply[udpOff+2:udpOff+4])   // reply dport = original sport
+	udpOff := 34                                                    // 14 (eth) + 20 (ipv4)
+	assert.Equal(t, pkt[udpOff+2:udpOff+4], reply[udpOff:udpOff+2]) // reply sport = original dport
+	assert.Equal(t, pkt[udpOff:udpOff+2], reply[udpOff+2:udpOff+4]) // reply dport = original sport
 }
 
 func TestBuildARPReply(t *testing.T) {
@@ -282,7 +282,7 @@ func buildTestICMPEchoRequest(t *testing.T) []byte {
 	pkt[14] = 0x45                                     // version=4, ihl=5
 	binary.BigEndian.PutUint16(pkt[16:18], 60)         // total length
 	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())    // src IP
-	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())  // dst IP
+	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4()) // dst IP
 	pkt[23] = 1                                        // protocol = ICMP
 
 	// ICMP: type=8 (echo request), code=0
@@ -308,9 +308,9 @@ func buildTestUDPPacket(t *testing.T) []byte {
 
 	// UDP: src port, dst port, length
 	udpOff := 34
-	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345)   // sport
-	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)    // dport
-	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], 24)    // udp length
+	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345) // sport
+	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)  // dport
+	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], 24)  // udp length
 
 	return pkt
 }
@@ -324,11 +324,11 @@ func buildTestARPRequest(t *testing.T) []byte {
 	binary.BigEndian.PutUint16(pkt[12:14], 0x0806) // ARP
 
 	// ARP header
-	binary.BigEndian.PutUint16(pkt[14:16], 1)    // hardware type = ethernet
+	binary.BigEndian.PutUint16(pkt[14:16], 1)      // hardware type = ethernet
 	binary.BigEndian.PutUint16(pkt[16:18], 0x0800) // proto type = IPv4
 	pkt[18] = 6                                    // hw len
 	pkt[19] = 4                                    // proto len
-	binary.BigEndian.PutUint16(pkt[20:22], 1)     // op = request
+	binary.BigEndian.PutUint16(pkt[20:22], 1)      // op = request
 
 	// sender HW (bytes 22-27)
 	copy(pkt[22:28], []byte{0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb})
@@ -358,12 +358,12 @@ func buildTestTCPSYN(t *testing.T) []byte {
 
 	// TCP header (offset 34).
 	tcpOff := 34
-	binary.BigEndian.PutUint16(pkt[tcpOff:tcpOff+2], 12345)   // sport
-	binary.BigEndian.PutUint16(pkt[tcpOff+2:tcpOff+4], 80)    // dport
-	binary.BigEndian.PutUint32(pkt[tcpOff+4:tcpOff+8], 0)     // seq = 0
-	binary.BigEndian.PutUint32(pkt[tcpOff+8:tcpOff+12], 0)    // ack = 0
-	pkt[tcpOff+12] = 0x50                                      // data offset = 5 (20 bytes)
-	pkt[tcpOff+13] = 0x02                                      // flags = SYN
+	binary.BigEndian.PutUint16(pkt[tcpOff:tcpOff+2], 12345) // sport
+	binary.BigEndian.PutUint16(pkt[tcpOff+2:tcpOff+4], 80)  // dport
+	binary.BigEndian.PutUint32(pkt[tcpOff+4:tcpOff+8], 0)   // seq = 0
+	binary.BigEndian.PutUint32(pkt[tcpOff+8:tcpOff+12], 0)  // ack = 0
+	pkt[tcpOff+12] = 0x50                                   // data offset = 5 (20 bytes)
+	pkt[tcpOff+13] = 0x02                                   // flags = SYN
 
 	return pkt
 }
@@ -376,9 +376,9 @@ func buildTestDNSRequest(t *testing.T) []byte {
 		3, 'w', 'w', 'w',
 		4, 't', 'e', 's', 't',
 		3, 'c', 'o', 'm',
-		0,       // end of name
-		0, 1,    // QTYPE = A
-		0, 1,    // QCLASS = IN
+		0,    // end of name
+		0, 1, // QTYPE = A
+		0, 1, // QCLASS = IN
 	}
 	dnsLen := 12 + len(question)
 	pkt := make([]byte, 14+20+8+dnsLen)
@@ -394,13 +394,13 @@ func buildTestDNSRequest(t *testing.T) []byte {
 	pkt[23] = 17 // protocol = UDP
 
 	udpOff := 34
-	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345)       // sport
-	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)        // dport
+	binary.BigEndian.PutUint16(pkt[udpOff:udpOff+2], 12345)              // sport
+	binary.BigEndian.PutUint16(pkt[udpOff+2:udpOff+4], 53)               // dport
 	binary.BigEndian.PutUint16(pkt[udpOff+4:udpOff+6], uint16(8+dnsLen)) // udp length
 
 	// DNS header.
 	dnsOff := udpOff + 8
-	binary.BigEndian.PutUint16(pkt[dnsOff:dnsOff+2], 0x1234)  // transaction ID
+	binary.BigEndian.PutUint16(pkt[dnsOff:dnsOff+2], 0x1234)   // transaction ID
 	binary.BigEndian.PutUint16(pkt[dnsOff+2:dnsOff+4], 0x0100) // flags: standard query, RD=1
 	binary.BigEndian.PutUint16(pkt[dnsOff+4:dnsOff+6], 1)      // QDCOUNT=1
 	// ANCOUNT, NSCOUNT, ARCOUNT are 0.

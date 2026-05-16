@@ -19,12 +19,12 @@ type Subscriber struct {
 
 // Stream manages ringbuf readers and SSE subscribers.
 type Stream struct {
-	mu              sync.RWMutex
-	bootTimeOffset  int64
-	subscribers     map[*Subscriber]struct{}
-	ctx             context.Context
-	cancel          context.CancelFunc
-	wg              sync.WaitGroup
+	mu             sync.RWMutex
+	bootTimeOffset int64
+	subscribers    map[*Subscriber]struct{}
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 }
 
 // NewStream creates a new event stream.

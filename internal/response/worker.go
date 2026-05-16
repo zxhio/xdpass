@@ -21,9 +21,9 @@ type Worker struct {
 
 // EgressConfig holds the current response egress configuration.
 type EgressConfig struct {
-	Configured      bool
-	EgressIfIndex   uint32
-	VLANMode        string
+	Configured    bool
+	EgressIfIndex uint32
+	VLANMode      string
 }
 
 // NewWorker creates a new response worker for an attachment.

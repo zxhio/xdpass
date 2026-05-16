@@ -27,8 +27,8 @@ type XSKMeta struct {
 
 // Envelope holds a packet received from XSK with its metadata.
 type Envelope struct {
-	Packet []byte
-	Meta   XSKMeta
+	Packet  []byte
+	Meta    XSKMeta
 	IfIndex uint32 // ingress interface index
 }
 

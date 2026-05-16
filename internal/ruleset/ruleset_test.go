@@ -207,18 +207,18 @@ func TestCompatAlertWithAnyProtocol(t *testing.T) {
 
 func TestActionToCodeAllActions(t *testing.T) {
 	cases := map[string]uint16{
-		"none":                   0,
-		"alert":                  1,
-		"tcp_reset":              2,
-		"icmp_echo_reply":        3,
-		"arp_reply":              4,
-		"tcp_syn_ack":            5,
-		"icmp_port_unreachable":  6,
-		"udp_echo_reply":         7,
-		"dns_refused":            8,
-		"icmp_host_unreachable":  9,
-		"icmp_admin_prohibited":  10,
-		"dns_sinkhole":           11,
+		"none":                  0,
+		"alert":                 1,
+		"tcp_reset":             2,
+		"icmp_echo_reply":       3,
+		"arp_reply":             4,
+		"tcp_syn_ack":           5,
+		"icmp_port_unreachable": 6,
+		"udp_echo_reply":        7,
+		"dns_refused":           8,
+		"icmp_host_unreachable": 9,
+		"icmp_admin_prohibited": 10,
+		"dns_sinkhole":          11,
 	}
 	for action, expected := range cases {
 		code, ok := ActionToCode(action)

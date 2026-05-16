@@ -13,30 +13,30 @@ import (
 
 // fakeMapAccessor implements attachment.MapAccessor with injectable maps.
 type fakeMapAccessor struct {
-	ruleIndexMap     *ebpf.Map
-	globalCfgMap     *ebpf.Map
-	srcPortIndexMap  *ebpf.Map
-	dstPortIndexMap  *ebpf.Map
-	vlanIndexMap     *ebpf.Map
-	srcPrefixLpmMap  *ebpf.Map
-	dstPrefixLpmMap  *ebpf.Map
-	txConfigMap      *ebpf.Map
-	eventRingbufMap  *ebpf.Map
-	statsMap         *ebpf.Map
-	xsksMap          *ebpf.Map
+	ruleIndexMap    *ebpf.Map
+	globalCfgMap    *ebpf.Map
+	srcPortIndexMap *ebpf.Map
+	dstPortIndexMap *ebpf.Map
+	vlanIndexMap    *ebpf.Map
+	srcPrefixLpmMap *ebpf.Map
+	dstPrefixLpmMap *ebpf.Map
+	txConfigMap     *ebpf.Map
+	eventRingbufMap *ebpf.Map
+	statsMap        *ebpf.Map
+	xsksMap         *ebpf.Map
 }
 
-func (f *fakeMapAccessor) RuleIndexMap() *ebpf.Map      { return f.ruleIndexMap }
-func (f *fakeMapAccessor) GlobalCfgMap() *ebpf.Map      { return f.globalCfgMap }
-func (f *fakeMapAccessor) TxConfigMap() *ebpf.Map       { return f.txConfigMap }
-func (f *fakeMapAccessor) SrcPortIndexMap() *ebpf.Map   { return f.srcPortIndexMap }
-func (f *fakeMapAccessor) DstPortIndexMap() *ebpf.Map   { return f.dstPortIndexMap }
-func (f *fakeMapAccessor) VlanIndexMap() *ebpf.Map      { return f.vlanIndexMap }
-func (f *fakeMapAccessor) SrcPrefixLpmMap() *ebpf.Map   { return f.srcPrefixLpmMap }
-func (f *fakeMapAccessor) DstPrefixLpmMap() *ebpf.Map   { return f.dstPrefixLpmMap }
-func (f *fakeMapAccessor) EventRingbufMap() *ebpf.Map   { return f.eventRingbufMap }
-func (f *fakeMapAccessor) StatsMap() *ebpf.Map          { return f.statsMap }
-func (f *fakeMapAccessor) XsksMap() *ebpf.Map           { return f.xsksMap }
+func (f *fakeMapAccessor) RuleIndexMap() *ebpf.Map    { return f.ruleIndexMap }
+func (f *fakeMapAccessor) GlobalCfgMap() *ebpf.Map    { return f.globalCfgMap }
+func (f *fakeMapAccessor) TxConfigMap() *ebpf.Map     { return f.txConfigMap }
+func (f *fakeMapAccessor) SrcPortIndexMap() *ebpf.Map { return f.srcPortIndexMap }
+func (f *fakeMapAccessor) DstPortIndexMap() *ebpf.Map { return f.dstPortIndexMap }
+func (f *fakeMapAccessor) VlanIndexMap() *ebpf.Map    { return f.vlanIndexMap }
+func (f *fakeMapAccessor) SrcPrefixLpmMap() *ebpf.Map { return f.srcPrefixLpmMap }
+func (f *fakeMapAccessor) DstPrefixLpmMap() *ebpf.Map { return f.dstPrefixLpmMap }
+func (f *fakeMapAccessor) EventRingbufMap() *ebpf.Map { return f.eventRingbufMap }
+func (f *fakeMapAccessor) StatsMap() *ebpf.Map        { return f.statsMap }
+func (f *fakeMapAccessor) XsksMap() *ebpf.Map         { return f.xsksMap }
 
 // Ensure fakeMapAccessor implements the interface.
 var _ attachment.MapAccessor = (*fakeMapAccessor)(nil)

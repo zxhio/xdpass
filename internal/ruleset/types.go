@@ -12,15 +12,15 @@ type Rule struct {
 // Match holds rule match conditions.
 // Empty/nil fields are wildcards.
 type Match struct {
-	Protocol     string   // tcp, udp, icmp, arp, or empty
+	Protocol     string // tcp, udp, icmp, arp, or empty
 	VLANS        []uint16
 	SrcCIDRs     []string
 	DstCIDRs     []string
 	SrcPorts     []uint16
 	DstPorts     []uint16
 	TCPFlags     *TCPFlags
-	ICMPType     string   // echo_request, echo_reply
-	ARPOP        string   // request, reply
+	ICMPType     string // echo_request, echo_reply
+	ARPOP        string // request, reply
 	HasL4Payload *bool
 }
 
@@ -41,16 +41,16 @@ type Response struct {
 
 // CompiledRuleset is the result of compiling a ruleset for BPF maps.
 type CompiledRuleset struct {
-	Rules []CompiledRule
+	Rules     []CompiledRule
 	GlobalCfg GlobalCfgData
-	Indexes IndexData
+	Indexes   IndexData
 }
 
 // CompiledRule is a single compiled rule ready for BPF.
 type CompiledRule struct {
-	Slot    uint32
-	RuleID  uint32
-	Meta    RuleMetaData
+	Slot   uint32
+	RuleID uint32
+	Meta   RuleMetaData
 }
 
 // RuleMetaData is the BPF rule_meta equivalent.

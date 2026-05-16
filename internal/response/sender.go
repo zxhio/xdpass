@@ -9,7 +9,7 @@ import (
 
 // AFPacketSender sends packets via AF_PACKET raw socket.
 type AFPacketSender struct {
-	fd     int
+	fd      int
 	ifIndex uint32
 }
 

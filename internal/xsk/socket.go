@@ -321,7 +321,7 @@ func (s *Socket) drainCompletions() {
 	}
 
 	for i := uint32(0); i < completed; i++ {
-		s.umem.freeFrame(frameBaseAddr(*s.umem.comp.GetAddr(idx+i), s.opts.FrameSize))
+		s.umem.freeFrame(frameBaseAddr(*s.umem.comp.GetAddr(idx + i), s.opts.FrameSize))
 	}
 	s.umem.comp.Release(completed)
 	s.txStanding -= completed

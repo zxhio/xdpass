@@ -9,19 +9,19 @@ import (
 
 // BPF stats map counter indexes from bpf-abi.md.
 const (
-	statIngressPackets              = 0
-	statParseOkPackets              = 1
-	statParseErrorPackets           = 2
-	statMatchHitPackets             = 3
-	statMatchMissPackets            = 4
-	statKernelResponsePackets       = 5
-	statKernelResponseXDPTXPackets  = 6
-	statKernelResponseRedirectPkts  = 7
-	statKernelResponseErrorPackets  = 8
-	statXSKRedirectPackets          = 9
-	statXSKRedirectErrorPackets     = 10
-	statEventDroppedPackets         = 11
-	statCount                       = 17
+	statIngressPackets             = 0
+	statParseOkPackets             = 1
+	statParseErrorPackets          = 2
+	statMatchHitPackets            = 3
+	statMatchMissPackets           = 4
+	statKernelResponsePackets      = 5
+	statKernelResponseXDPTXPackets = 6
+	statKernelResponseRedirectPkts = 7
+	statKernelResponseErrorPackets = 8
+	statXSKRedirectPackets         = 9
+	statXSKRedirectErrorPackets    = 10
+	statEventDroppedPackets        = 11
+	statCount                      = 17
 )
 
 // Response is the stats API response.

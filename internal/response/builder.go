@@ -217,8 +217,8 @@ func buildARPReply(origPkt []byte, params map[string]any) ([]byte, error) {
 	copy(pkt, origPkt)
 
 	// Swap Ethernet MAC for reply.
-	copy(pkt[0:6], senderHW)        // dst = original sender
-	copy(pkt[6:12], replyHW)        // src = reply sender
+	copy(pkt[0:6], senderHW) // dst = original sender
+	copy(pkt[6:12], replyHW) // src = reply sender
 
 	// Set ARP op to reply.
 	binary.BigEndian.PutUint16(pkt[arpOffset+6:arpOffset+8], 2)
@@ -339,8 +339,8 @@ func buildDNSRefused(origPkt []byte, _ map[string]any) ([]byte, error) {
 	resp[dnsOffset+3] = 0x85 // RA=0, Z=0, RCODE=5 (refused)
 
 	// Zero answer, authority, additional counts.
-	binary.BigEndian.PutUint16(resp[dnsOffset+6: dnsOffset+8], 0) // ANCOUNT
-	binary.BigEndian.PutUint16(resp[dnsOffset+8: dnsOffset+10], 0) // NSCOUNT
+	binary.BigEndian.PutUint16(resp[dnsOffset+6:dnsOffset+8], 0)   // ANCOUNT
+	binary.BigEndian.PutUint16(resp[dnsOffset+8:dnsOffset+10], 0)  // NSCOUNT
 	binary.BigEndian.PutUint16(resp[dnsOffset+10:dnsOffset+12], 0) // ARCOUNT
 
 	// Truncate to DNS header + question (no answers).
@@ -576,10 +576,10 @@ func tcpChecksum(pkt []byte, ethHdrLen, tcpLen int) (byte, byte) {
 
 	// Build pseudo-header: src_ip(4) + dst_ip(4) + zero(1) + proto(1) + tcp_len(2)
 	pseudo := make([]byte, 12+tcpLen)
-	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16])  // src IP
-	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20])  // dst IP
-	pseudo[8] = 0                                       // zero
-	pseudo[9] = 6                                       // protocol = TCP
+	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16]) // src IP
+	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20]) // dst IP
+	pseudo[8] = 0                                     // zero
+	pseudo[9] = 6                                     // protocol = TCP
 	binary.BigEndian.PutUint16(pseudo[10:12], uint16(tcpLen))
 	copy(pseudo[12:], pkt[tcpOffset:tcpOffset+tcpLen])
 
@@ -592,10 +592,10 @@ func udpChecksum(pkt []byte, ethHdrLen, udpLen int) (byte, byte) {
 	udpOffset := ethHdrLen + ihl
 
 	pseudo := make([]byte, 12+udpLen)
-	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16])  // src IP
-	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20])  // dst IP
-	pseudo[8] = 0                                       // zero
-	pseudo[9] = 17                                      // protocol = UDP
+	copy(pseudo[0:4], pkt[ethHdrLen+12:ethHdrLen+16]) // src IP
+	copy(pseudo[4:8], pkt[ethHdrLen+16:ethHdrLen+20]) // dst IP
+	pseudo[8] = 0                                     // zero
+	pseudo[9] = 17                                    // protocol = UDP
 	binary.BigEndian.PutUint16(pseudo[10:12], uint16(udpLen))
 	copy(pseudo[12:], pkt[udpOffset:udpOffset+udpLen])
 

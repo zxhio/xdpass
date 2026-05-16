@@ -22,7 +22,7 @@ func Compile(rules []Rule, ingressVerdict string) (*CompiledRuleset, error) {
 	})
 
 	compiled := &CompiledRuleset{
-		Rules:    make([]CompiledRule, len(sorted)),
+		Rules: make([]CompiledRule, len(sorted)),
 		Indexes: IndexData{
 			SrcPortIndex: make(map[uint16][8]uint64),
 			DstPortIndex: make(map[uint16][8]uint64),
