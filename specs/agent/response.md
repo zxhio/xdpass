@@ -142,9 +142,6 @@
 用于：
 
 - `tcp_reset`
-- `icmp_port_unreachable`
-- `icmp_host_unreachable`
-- `icmp_admin_prohibited`
 
 语义：
 
@@ -163,6 +160,9 @@
 用于：
 
 - `icmp_echo_reply`
+- `icmp_port_unreachable`
+- `icmp_host_unreachable`
+- `icmp_admin_prohibited`
 - `tcp_syn_ack`
 - `udp_echo_reply`
 - `dns_sinkhole`
@@ -258,6 +258,27 @@ userspace response builder 只根据原始包、`ruleset.response.params` 和 re
 - 保留 echo id、sequence 和 payload。
 - 重新计算 IPv4 和 ICMP checksum。
 
+### `icmp_port_unreachable`
+
+- 输入主要是 IPv4 UDP packet。
+- 构造 ICMP destination unreachable，type `3`，code `3`。
+- ICMP body 包含原始 IPv4 header 和前 8 bytes payload。
+- 重新计算 IPv4 和 ICMP checksum。
+
+### `icmp_host_unreachable`
+
+- 输入必须是 IPv4 packet。
+- 构造 ICMP destination unreachable，type `3`，code `1`。
+- ICMP body 包含原始 IPv4 header 和前 8 bytes payload。
+- 重新计算 IPv4 和 ICMP checksum。
+
+### `icmp_admin_prohibited`
+
+- 输入必须是 IPv4 packet。
+- 构造 ICMP destination unreachable，type `3`，code `13`。
+- ICMP body 包含原始 IPv4 header 和前 8 bytes payload。
+- 重新计算 IPv4 和 ICMP checksum。
+
 ### `udp_echo_reply`
 
 - 输入必须是 UDP 包，并且 L4 payload 长度大于 `0`。
@@ -305,9 +326,9 @@ userspace response builder 只根据原始包、`ruleset.response.params` 和 re
 | `none` | `none` |
 | `alert` | `none` |
 | `tcp_reset` | `kernel` |
-| `icmp_port_unreachable` | `kernel` |
-| `icmp_host_unreachable` | `kernel` |
-| `icmp_admin_prohibited` | `kernel` |
+| `icmp_port_unreachable` | `userspace` |
+| `icmp_host_unreachable` | `userspace` |
+| `icmp_admin_prohibited` | `userspace` |
 | `icmp_echo_reply` | `userspace` |
 | `tcp_syn_ack` | `userspace` |
 | `udp_echo_reply` | `userspace` |

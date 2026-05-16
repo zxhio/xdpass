@@ -187,9 +187,9 @@
 | `none` | `none` | 不构造响应包 |
 | `alert` | `none` | 只产生事件 |
 | `tcp_reset` | `kernel` | BPF 内核态构造 TCP RST |
-| `icmp_port_unreachable` | `kernel` | BPF 内核态构造 ICMP port unreachable |
-| `icmp_host_unreachable` | `kernel` | BPF 内核态构造 ICMP host unreachable |
-| `icmp_admin_prohibited` | `kernel` | BPF 内核态构造 ICMP administratively prohibited |
+| `icmp_port_unreachable` | `userspace` | 用户态构造 ICMP port unreachable |
+| `icmp_host_unreachable` | `userspace` | 用户态构造 ICMP host unreachable |
+| `icmp_admin_prohibited` | `userspace` | 用户态构造 ICMP administratively prohibited |
 | `icmp_echo_reply` | `userspace` | 用户态构造 ICMP echo reply |
 | `tcp_syn_ack` | `userspace` | 用户态构造 TCP SYN ACK |
 | `udp_echo_reply` | `userspace` | 用户态回显 UDP payload |
