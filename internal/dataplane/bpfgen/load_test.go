@@ -2,12 +2,15 @@ package bpfgen
 
 import (
 	"errors"
+	"net"
 	"os"
 	"testing"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +57,45 @@ func loadObjects(t *testing.T) *XdpassObjects {
 		}
 	})
 	return &objs
+}
+
+// assertStatsSum reads a PERCPU_ARRAY stat and asserts the sum across CPUs.
+func assertStatsSum(t *testing.T, objs *XdpassObjects, index uint32, expected uint64) {
+	t.Helper()
+	var percpu []uint64
+	require.NoError(t, objs.StatsMap.Lookup(index, &percpu))
+	var sum uint64
+	for _, v := range percpu {
+		sum += v
+	}
+	assert.Equal(t, expected, sum, "stats[%d]", index)
+}
+
+// buildTCPSYN builds a minimal Ethernet + IPv4 + TCP SYN packet using gopacket.
+func buildTCPSYN(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP, srcPort, dstPort uint16) []byte {
+	eth := &layers.Ethernet{
+		SrcMAC:       srcMAC,
+		DstMAC:       dstMAC,
+		EthernetType: layers.EthernetTypeIPv4,
+	}
+	ip := &layers.IPv4{
+		Version:  4,
+		IHL:      5,
+		TTL:      64,
+		Protocol: layers.IPProtocolTCP,
+		SrcIP:    srcIP,
+		DstIP:    dstIP,
+	}
+	tcp := &layers.TCP{
+		SrcPort: layers.TCPPort(srcPort),
+		DstPort: layers.TCPPort(dstPort),
+		SYN:     true,
+	}
+	tcp.SetNetworkLayerForChecksum(ip)
+
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, tcp)
+	return buf.Bytes()
 }
 
 func TestXdpassSpecParse(t *testing.T) {
@@ -132,4 +174,82 @@ func TestXdpassProgramLoad(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	loadObjects(t)
+}
+
+func TestTcpResetXdpTx(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	// Set up global config: slot 0 active as wildcard rule (all optional bits set).
+	slot0 := XdpassMaskT{Bits: [8]uint64{1}}
+	cfg := XdpassGlobalCfg{
+		AllActiveRules:         slot0,
+		VlanOptionalRules:      slot0,
+		SrcPortOptionalRules:   slot0,
+		DstPortOptionalRules:   slot0,
+		SrcPrefixOptionalRules: slot0,
+		DstPrefixOptionalRules: slot0,
+	}
+	for i := range cfg.ConditionOptionalRules {
+		cfg.ConditionOptionalRules[i] = slot0
+	}
+	require.NoError(t, objs.GlobalCfgMap.Put(uint32(0), cfg))
+
+	// Set up rule: slot 0 = tcp_reset (action code 2).
+	rule := XdpassRuleMeta{
+		RuleId:       100,
+		RequiredMask: 0x01, // COND_PROTO_TCP
+		Action:       2,    // ACTION_TCP_RESET
+	}
+	require.NoError(t, objs.RuleIndexMap.Put(uint32(0), rule))
+
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+	srcIP := net.IP{10, 0, 0, 1}
+	dstIP := net.IP{192, 168, 1, 1}
+	pkt := buildTCPSYN(srcMAC, dstMAC, srcIP, dstIP, 12345, 80)
+
+	// XDP return codes from linux/if_link.h.
+	const xdpTx = 3
+
+	ret, out, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(xdpTx), ret, "expected XDP_TX")
+
+	// Parse output packet.
+	parsed := gopacket.NewPacket(out, layers.LayerTypeEthernet, gopacket.NoCopy)
+	ethLayer := parsed.Layer(layers.LayerTypeEthernet)
+	require.NotNil(t, ethLayer, "output should have Ethernet layer")
+	eth := ethLayer.(*layers.Ethernet)
+
+	// MAC swapped.
+	assert.Equal(t, srcMAC.String(), eth.DstMAC.String(), "dst MAC should be original src")
+	assert.Equal(t, dstMAC.String(), eth.SrcMAC.String(), "src MAC should be original dst")
+
+	ipLayer := parsed.Layer(layers.LayerTypeIPv4)
+	require.NotNil(t, ipLayer, "output should have IPv4 layer")
+	ip := ipLayer.(*layers.IPv4)
+
+	// IP swapped.
+	assert.Equal(t, dstIP.To4().String(), ip.SrcIP.String(), "src IP should be original dst")
+	assert.Equal(t, srcIP.To4().String(), ip.DstIP.String(), "dst IP should be original src")
+	assert.Equal(t, uint16(40), ip.Length, "IP total length")
+	assert.Equal(t, uint8(5), ip.IHL, "IP IHL")
+
+	tcpLayer := parsed.Layer(layers.LayerTypeTCP)
+	require.NotNil(t, tcpLayer, "output should have TCP layer")
+	tcp := tcpLayer.(*layers.TCP)
+
+	// Ports swapped.
+	assert.Equal(t, layers.TCPPort(80), tcp.SrcPort, "src port should be original dst")
+	assert.Equal(t, layers.TCPPort(12345), tcp.DstPort, "dst port should be original src")
+	assert.True(t, tcp.RST, "RST flag should be set")
+	assert.True(t, tcp.ACK, "ACK flag should be set")
+
+	// Stats: kernel_response.packets=1, kernel_response.xdp_tx_packets=1.
+	assertStatsSum(t, objs, 5, 1) // STAT_KERNEL_RESPONSE_PACKETS
+	assertStatsSum(t, objs, 6, 1) // STAT_KERNEL_RESPONSE_XDP_TX_PACKETS
+	assertStatsSum(t, objs, 8, 0) // STAT_KERNEL_RESPONSE_ERROR_PACKETS
 }
