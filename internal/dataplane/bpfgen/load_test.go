@@ -167,6 +167,52 @@ func testPacket() []byte {
 	return buildTCPSYN(srcMAC, dstMAC, srcIP, dstIP, 12345, 80)
 }
 
+// buildVlanTCPSYN builds a VLAN-tagged Ethernet + IPv4 + TCP SYN packet.
+func buildVlanTCPSYN(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP, srcPort, dstPort uint16, vlanID uint16) []byte {
+	eth := &layers.Ethernet{
+		SrcMAC:       srcMAC,
+		DstMAC:       dstMAC,
+		EthernetType: layers.EthernetTypeDot1Q,
+	}
+	vlan := &layers.Dot1Q{
+		VLANIdentifier: vlanID,
+		Type:           layers.EthernetTypeIPv4,
+	}
+	ip := &layers.IPv4{
+		Version:  4,
+		IHL:      5,
+		TTL:      64,
+		Protocol: layers.IPProtocolTCP,
+		SrcIP:    srcIP,
+		DstIP:    dstIP,
+	}
+	tcp := &layers.TCP{
+		SrcPort: layers.TCPPort(srcPort),
+		DstPort: layers.TCPPort(dstPort),
+		SYN:     true,
+	}
+	tcp.SetNetworkLayerForChecksum(ip)
+
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, vlan, ip, tcp)
+	return buf.Bytes()
+}
+
+// testVlanPacket returns a VLAN-tagged (VLAN 100) test TCP SYN packet fixture.
+func testVlanPacket() []byte {
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+	srcIP := net.IP{10, 0, 0, 1}
+	dstIP := net.IP{192, 168, 1, 1}
+	return buildVlanTCPSYN(srcMAC, dstMAC, srcIP, dstIP, 12345, 80, 100)
+}
+
+// setupTxConfig writes a tx_config to tx_config_map[0].
+func setupTxConfig(t *testing.T, objs *XdpassObjects, cfg XdpassTxConfig) {
+	t.Helper()
+	require.NoError(t, objs.TxConfigMap.Put(uint32(0), cfg))
+}
+
 // --- Spec tests ---
 
 func TestXdpassSpecParse(t *testing.T) {
@@ -360,4 +406,161 @@ func TestTcpResetXdpTx(t *testing.T) {
 	assertStatsSum(t, objs, statKernelResponsePackets, 1)
 	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 1)
 	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+}
+
+func TestTcpResetRedirectPreserve(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
+	setupRule(t, objs, 0, XdpassRuleMeta{
+		RuleId:       100,
+		RequiredMask: 0x01, // COND_PROTO_TCP
+		Action:       2,    // ACTION_TCP_RESET
+	})
+
+	// tx_config: redirect mode, egress ifindex=1 (lo), vlan_mode=preserve.
+	setupTxConfig(t, objs, XdpassTxConfig{
+		TcpResetMode:           1, // TX_MODE_REDIRECT
+		TcpResetEgressIfindex:  1,
+		TcpResetVlanMode:       0, // VLAN_MODE_PRESERVE
+		TcpResetFailureVerdict: 1,
+	})
+
+	pkt := testPacket()
+
+	const xdpRedirect = 4 // XDP_REDIRECT from linux/if_link.h
+
+	ret, out, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(xdpRedirect), ret, "expected XDP_REDIRECT")
+
+	// Parse output: should be a valid RST packet (VLAN preserved = no VLAN in this case).
+	parsed := gopacket.NewPacket(out, layers.LayerTypeEthernet, gopacket.NoCopy)
+	ethLayer := parsed.Layer(layers.LayerTypeEthernet)
+	require.NotNil(t, ethLayer, "output should have Ethernet layer")
+	eth := ethLayer.(*layers.Ethernet)
+
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+	assert.Equal(t, srcMAC.String(), eth.DstMAC.String(), "dst MAC should be original src")
+	assert.Equal(t, dstMAC.String(), eth.SrcMAC.String(), "src MAC should be original dst")
+
+	ipLayer := parsed.Layer(layers.LayerTypeIPv4)
+	require.NotNil(t, ipLayer, "output should have IPv4 layer")
+	ip := ipLayer.(*layers.IPv4)
+	assert.Equal(t, uint16(40), ip.Length, "IP total length")
+
+	tcpLayer := parsed.Layer(layers.LayerTypeTCP)
+	require.NotNil(t, tcpLayer, "output should have TCP layer")
+	tcp := tcpLayer.(*layers.TCP)
+	assert.True(t, tcp.RST, "RST flag should be set")
+	assert.True(t, tcp.ACK, "ACK flag should be set")
+
+	// Stats: redirect success.
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 1)
+	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+}
+
+func TestTcpResetRedirectAccessVlan(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
+	setupRule(t, objs, 0, XdpassRuleMeta{
+		RuleId:       100,
+		RequiredMask: 0x01, // COND_PROTO_TCP
+		Action:       2,    // ACTION_TCP_RESET
+	})
+
+	// tx_config: redirect mode, egress ifindex=1, vlan_mode=access (strip VLAN).
+	setupTxConfig(t, objs, XdpassTxConfig{
+		TcpResetMode:           1, // TX_MODE_REDIRECT
+		TcpResetEgressIfindex:  1,
+		TcpResetVlanMode:       1, // VLAN_MODE_ACCESS
+		TcpResetFailureVerdict: 1,
+	})
+
+	pkt := testVlanPacket() // VLAN 100 tagged
+
+	const xdpRedirect = 4
+
+	ret, out, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(xdpRedirect), ret, "expected XDP_REDIRECT")
+
+	// Parse output: VLAN should be stripped, so it's plain Ethernet.
+	parsed := gopacket.NewPacket(out, layers.LayerTypeEthernet, gopacket.NoCopy)
+	ethLayer := parsed.Layer(layers.LayerTypeEthernet)
+	require.NotNil(t, ethLayer, "output should have Ethernet layer")
+	eth := ethLayer.(*layers.Ethernet)
+
+	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+	dstMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+	assert.Equal(t, srcMAC.String(), eth.DstMAC.String(), "dst MAC should be original src")
+	assert.Equal(t, dstMAC.String(), eth.SrcMAC.String(), "src MAC should be original dst")
+	assert.Equal(t, layers.EthernetTypeIPv4, eth.EthernetType, "ethertype should be IPv4 (no VLAN)")
+
+	// Verify no Dot1Q layer in output.
+	vlanLayer := parsed.Layer(layers.LayerTypeDot1Q)
+	assert.Nil(t, vlanLayer, "VLAN tag should be stripped in access mode")
+
+	ipLayer := parsed.Layer(layers.LayerTypeIPv4)
+	require.NotNil(t, ipLayer, "output should have IPv4 layer")
+	ip := ipLayer.(*layers.IPv4)
+	assert.Equal(t, uint16(40), ip.Length, "IP total length")
+
+	tcpLayer := parsed.Layer(layers.LayerTypeTCP)
+	require.NotNil(t, tcpLayer, "output should have TCP layer")
+	tcp := tcpLayer.(*layers.TCP)
+	assert.True(t, tcp.RST, "RST flag should be set")
+	assert.True(t, tcp.ACK, "ACK flag should be set")
+
+	// Stats: redirect success.
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 1)
+	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+}
+
+func TestTcpResetRedirectNoIfindex(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+
+	objs := loadObjects(t)
+
+	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
+	setupRule(t, objs, 0, XdpassRuleMeta{
+		RuleId:       100,
+		RequiredMask: 0x01, // COND_PROTO_TCP
+		Action:       2,    // ACTION_TCP_RESET
+	})
+
+	// tx_config: redirect mode but egress ifindex=0 (not configured).
+	setupTxConfig(t, objs, XdpassTxConfig{
+		TcpResetMode:           1, // TX_MODE_REDIRECT
+		TcpResetEgressIfindex:  0, // not configured
+		TcpResetVlanMode:       0,
+		TcpResetFailureVerdict: 1,
+	})
+
+	pkt := testPacket()
+
+	const xdpDrop = 1
+
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for redirect with no egress ifindex")
+
+	// Stats: kernel response counted, error counted, no redirect success.
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 0)
+	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
 }
