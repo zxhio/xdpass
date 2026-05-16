@@ -102,23 +102,18 @@ func (s *Store) xskAfterPatch(att *attachment.Attachment, maps attachment.MapAcc
 	if enabled {
 		return s.xskAfterCreate(att, maps)
 	}
-	s.xskPreDelete(att.IfIndex)
+	s.xskPreDelete(att.IfIndex, maps)
 	return nil
 }
 
-func (s *Store) xskPreDelete(ifIndex uint32) {
+func (s *Store) xskPreDelete(ifIndex uint32, maps attachment.MapAccessor) {
 	s.responseRuntime.StopWorker(ifIndex)
 
-	xsksMap := s.getXsksMap(ifIndex)
-	s.xskRuntime.Stop(xsksMap, ifIndex)
-}
-
-func (s *Store) getXsksMap(ifIndex uint32) *ebpf.Map {
-	maps := s.attachments.Maps(ifIndex)
-	if maps == nil {
-		return nil
+	var xsksMap *ebpf.Map
+	if maps != nil {
+		xsksMap = maps.XsksMap()
 	}
-	return maps.XsksMap()
+	s.xskRuntime.Stop(xsksMap, ifIndex)
 }
 
 func (s *Store) currentEgressConfig() response.EgressConfig {

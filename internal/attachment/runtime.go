@@ -39,9 +39,9 @@ func (b *bpfResources) closeAll() {
 
 // Runtime manages attachment state, BPF objects, and XDP links.
 type Runtime struct {
-	loadBPF    LoadFunc
-	attachXDP  AttachXDPFunc
-	mu         sync.Mutex
+	loadBPF     LoadFunc
+	attachXDP   AttachXDPFunc
+	mu          sync.Mutex
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
 
@@ -266,13 +266,14 @@ func (r *Runtime) Delete(ifIndex uint32) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.attachments[ifIndex]; !ok {
+	att, ok := r.attachments[ifIndex]
+	if !ok {
 		return &NotFoundError{IfIndex: ifIndex}
 	}
 
 	// Stop XSK before cleanup if callback is set.
-	if r.preDelete != nil {
-		r.preDelete(ifIndex)
+	if att.XSK.Enabled && r.preDelete != nil {
+		r.preDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 	}
 
 	r.cleanup(ifIndex)
@@ -294,8 +295,9 @@ func (r *Runtime) Close() {
 	defer r.mu.Unlock()
 
 	for ifIndex := range r.attachments {
-		if r.preDelete != nil {
-			r.preDelete(ifIndex)
+		att := r.attachments[ifIndex]
+		if att.XSK.Enabled && r.preDelete != nil {
+			r.preDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 		}
 		r.cleanup(ifIndex)
 	}
@@ -307,6 +309,10 @@ func (r *Runtime) Maps(ifIndex uint32) MapAccessor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	return r.mapAccessorLocked(ifIndex)
+}
+
+func (r *Runtime) mapAccessorLocked(ifIndex uint32) MapAccessor {
 	res, ok := r.resources[ifIndex]
 	if !ok || res.coll == nil {
 		return nil
@@ -380,14 +386,14 @@ type collMapAccessor struct {
 	maps map[string]*ebpf.Map
 }
 
-func (c *collMapAccessor) RuleIndexMap() *ebpf.Map      { return c.maps["rule_index_map"] }
-func (c *collMapAccessor) GlobalCfgMap() *ebpf.Map      { return c.maps["global_cfg_map"] }
-func (c *collMapAccessor) TxConfigMap() *ebpf.Map       { return c.maps["tx_config_map"] }
-func (c *collMapAccessor) SrcPortIndexMap() *ebpf.Map   { return c.maps["src_port_index_map"] }
-func (c *collMapAccessor) DstPortIndexMap() *ebpf.Map   { return c.maps["dst_port_index_map"] }
-func (c *collMapAccessor) VlanIndexMap() *ebpf.Map      { return c.maps["vlan_index_map"] }
-func (c *collMapAccessor) SrcPrefixLpmMap() *ebpf.Map   { return c.maps["src_prefix_lpm_map"] }
-func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map   { return c.maps["dst_prefix_lpm_map"] }
-func (c *collMapAccessor) EventRingbufMap() *ebpf.Map   { return c.maps["event_ringbuf"] }
-func (c *collMapAccessor) StatsMap() *ebpf.Map          { return c.maps["stats_map"] }
-func (c *collMapAccessor) XsksMap() *ebpf.Map           { return c.maps["xsks_map"] }
+func (c *collMapAccessor) RuleIndexMap() *ebpf.Map    { return c.maps["rule_index_map"] }
+func (c *collMapAccessor) GlobalCfgMap() *ebpf.Map    { return c.maps["global_cfg_map"] }
+func (c *collMapAccessor) TxConfigMap() *ebpf.Map     { return c.maps["tx_config_map"] }
+func (c *collMapAccessor) SrcPortIndexMap() *ebpf.Map { return c.maps["src_port_index_map"] }
+func (c *collMapAccessor) DstPortIndexMap() *ebpf.Map { return c.maps["dst_port_index_map"] }
+func (c *collMapAccessor) VlanIndexMap() *ebpf.Map    { return c.maps["vlan_index_map"] }
+func (c *collMapAccessor) SrcPrefixLpmMap() *ebpf.Map { return c.maps["src_prefix_lpm_map"] }
+func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map { return c.maps["dst_prefix_lpm_map"] }
+func (c *collMapAccessor) EventRingbufMap() *ebpf.Map { return c.maps["event_ringbuf"] }
+func (c *collMapAccessor) StatsMap() *ebpf.Map        { return c.maps["stats_map"] }
+func (c *collMapAccessor) XsksMap() *ebpf.Map         { return c.maps["xsks_map"] }

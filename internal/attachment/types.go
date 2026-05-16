@@ -15,7 +15,7 @@ type XSKAfterCreateFunc func(att *Attachment, maps MapAccessor) error
 type XSKAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool) error
 
 // XSKPreDeleteFunc is called before an attachment is deleted.
-type XSKPreDeleteFunc func(ifIndex uint32)
+type XSKPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
 
 // Request holds the attachment creation parameters.
 type Request struct {
