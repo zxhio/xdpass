@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/xdpass-agent -config /etc/xdpass/agent/config.yaml
+ExecStart=/usr/local/bin/xdpass-agent --config /etc/xdpass/agent/config.yaml
 Restart=on-failure
 RestartSec=5
 LogsDirectory=xdpass

@@ -3,16 +3,18 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
@@ -25,9 +27,34 @@ import (
 	"xdpass/internal/xsk"
 )
 
+const (
+	defaultConfigPath = "/etc/xdpass/agent/config.yaml"
+
+	logoAscii = `    |
+ \ \| |\ //| // //
+      |`
+
+	cliDescription = "XDP/BPF runtime agent for xdpass policy enforcement."
+)
+
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+)
+
 func main() {
-	configPath := flag.String("config", "/etc/xdpass/agent/config.yaml", "path to config file")
-	flag.Parse()
+	pflag.CommandLine.SortFlags = false
+	pflag.CommandLine.SetOutput(os.Stdout)
+	configPath := pflag.StringP("config", "c", defaultConfigPath, "path to config file")
+	showVersion := pflag.BoolP("version", "V", false, "print version")
+	pflag.Usage = printHelp
+	pflag.Parse()
+
+	if *showVersion {
+		printVersion()
+		return
+	}
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -145,4 +172,25 @@ func main() {
 	if err := <-errCh; err != nil {
 		logrus.WithError(err).Fatal("Fail to run HTTP server")
 	}
+}
+
+func printHelp() {
+	out := pflag.CommandLine.Output()
+	fmt.Fprintln(out, logoAscii)
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, cliDescription)
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  xdpass-agent [flags]")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Flags:")
+	fmt.Fprint(out, pflag.CommandLine.FlagUsages())
+}
+
+func printVersion() {
+	out := os.Stdout
+	fmt.Fprintf(out, "Version:    %s\n", version)
+	fmt.Fprintf(out, "Commit:     %s\n", commit)
+	fmt.Fprintf(out, "Build time: %s\n", buildTime)
+	fmt.Fprintf(out, "Go version: %s\n", runtime.Version())
 }

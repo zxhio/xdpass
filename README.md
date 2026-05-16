@@ -17,6 +17,13 @@ make build
 
 产物：`build/xdpass-agent`
 
+`make build` 会写入版本信息；发布构建可显式传入版本号：
+
+```bash
+make build VERSION=v0.1.0
+./build/xdpass-agent --version
+```
+
 ## 测试
 
 ```bash
@@ -32,7 +39,7 @@ make test
 sudo ./build/xdpass-agent
 
 # 使用配置文件
-sudo ./build/xdpass-agent -config /etc/xdpass/agent/config.yaml
+sudo ./build/xdpass-agent --config /etc/xdpass/agent/config.yaml
 ```
 
 需要 root 或 `CAP_NET_ADMIN` + `CAP_BPF` 权限。

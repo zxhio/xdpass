@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/cilium/ebpf v0.21.0
 	github.com/sirupsen/logrus v1.9.4
+	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sys v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
