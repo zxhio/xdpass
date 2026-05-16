@@ -36,6 +36,12 @@
 - 构建：`make build`
 - 测试：`make test`（包含 BPF 生成）
 - BPF 代码生成：`make generate`
+- Go 代码改动后必须运行 `gofmt`；优先只格式化本次触达的 `.go` 文件。
+- 验证优先使用 `make check`；如果仓库尚未提供 `make check`，按顺序运行：
+  - `gofmt`（本次触达的 `.go` 文件）
+  - `go vet ./...`
+  - `make test`
+- 如果验证命令产生额外格式化 diff，这些 diff 属于本次改动，需要一起 review。
 - 如果改动涉及 `internal/dataplane/`，优先用 `make test`。
 - 不要直接编辑 `internal/dataplane/bpfgen/xdpass_bpfel.go`，用 `make generate` 重新生成。
 
