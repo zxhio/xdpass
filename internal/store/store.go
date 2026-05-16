@@ -218,13 +218,25 @@ func (s *Store) ReplaceRuleset(_ context.Context, apiRules []api.RuleResponse) (
 	getMaps := func() []attachment.MapAccessor {
 		return s.attachmentMapAccessors()
 	}
+	attachments := len(s.attachmentMapAccessors())
 
 	if err := s.rulesetRuntime.ReplaceRuleset(internalRules, ingressVerdict, getMaps); err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"rules":           len(apiRules),
+			"attachments":     attachments,
+			"ingress_verdict": ingressVerdict,
+		}).Error("Fail to replace ruleset")
 		return api.RulesetResponse{}, err
 	}
 
 	// Update response worker rule lookup.
 	s.updateResponseRules(apiRules)
+
+	logrus.WithFields(logrus.Fields{
+		"rules":           len(apiRules),
+		"attachments":     attachments,
+		"ingress_verdict": ingressVerdict,
+	}).Info("Replaced ruleset")
 
 	return api.RulesetResponse{Rules: apiRules}, nil
 }
@@ -244,12 +256,17 @@ func (s *Store) DeleteRuleset(_ context.Context) error {
 	getMaps := func() []attachment.MapAccessor {
 		return s.attachmentMapAccessors()
 	}
+	attachments := len(s.attachmentMapAccessors())
 	if err := s.rulesetRuntime.DeleteRuleset(getMaps); err != nil {
+		logrus.WithError(err).WithField("attachments", attachments).Error("Fail to delete ruleset")
 		return err
 	}
 
 	// Clear response worker rule lookup.
 	s.updateResponseRules(nil)
+	logrus.WithFields(logrus.Fields{
+		"attachments": attachments,
+	}).Info("Deleted ruleset")
 	return nil
 }
 
@@ -380,7 +397,8 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 
 	// Write tx_config to all enabled attachments before updating memory.
 	cfg := egressToTxConfig(ifIndex, vlanMode)
-	if err := s.writeTxConfigToAll(cfg); err != nil {
+	written, err := s.writeTxConfigToAll(cfg)
+	if err != nil {
 		return api.EgressResponse{}, fmt.Errorf("write tx config: %w", err)
 	}
 
@@ -397,6 +415,13 @@ func (s *Store) ReplaceEgress(_ context.Context, ifIndex uint32, ifName, vlanMod
 		})
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"ifindex":     ifIndex,
+		"ifname":      ifName,
+		"vlan_mode":   vlanMode,
+		"attachments": written,
+	}).Info("Replaced response egress")
+
 	return api.EgressResponse{
 		Configured: true,
 		IfIndex:    ifIndex,
@@ -412,8 +437,9 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	// Write default tx_config (same-port) to all enabled attachments.
 	// Log errors but don't fail — DELETE is idempotent.
 	cfg := egressToTxConfig(0, "preserve")
-	if err := s.writeTxConfigToAll(cfg); err != nil {
-		logrus.WithError(err).Warn("Failed to reset tx config on some attachments")
+	written, err := s.writeTxConfigToAll(cfg)
+	if err != nil {
+		logrus.WithError(err).WithField("attachments", written).Warn("Fail to reset tx config")
 	}
 
 	s.egressConfigured = false
@@ -426,6 +452,10 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 			VLANMode: "preserve",
 		})
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"attachments": written,
+	}).Info("Deleted response egress")
 
 	return nil
 }
@@ -446,18 +476,20 @@ func egressToTxConfig(ifIndex uint32, vlanMode string) bpfgen.XdpassTxConfig {
 }
 
 // writeTxConfigToAll writes tx_config to all enabled attachments.
-func (s *Store) writeTxConfigToAll(cfg bpfgen.XdpassTxConfig) error {
+func (s *Store) writeTxConfigToAll(cfg bpfgen.XdpassTxConfig) (int, error) {
 	enabled := s.attachments.EnabledAttachments()
+	written := 0
 	for _, ea := range enabled {
 		m := ea.Maps.TxConfigMap()
 		if m == nil {
 			continue
 		}
 		if err := m.Put(uint32(0), &cfg); err != nil {
-			return fmt.Errorf("ifindex %d: %w", ea.IfIndex, err)
+			return written, fmt.Errorf("ifindex %d: %w", ea.IfIndex, err)
 		}
+		written++
 	}
-	return nil
+	return written, nil
 }
 
 // --- Error helpers ---

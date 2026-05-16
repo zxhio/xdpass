@@ -84,6 +84,12 @@ func (rt *Runtime) UpdateEgress(cfg EgressConfig) {
 	for _, ws := range rt.workers {
 		ws.worker.UpdateEgress(cfg)
 	}
+	logrus.WithFields(logrus.Fields{
+		"workers":        len(rt.workers),
+		"configured":     cfg.Configured,
+		"egress_ifindex": cfg.EgressIfIndex,
+		"vlan_mode":      cfg.VLANMode,
+	}).Info("Updated response egress")
 }
 
 // Stop stops all response workers.
@@ -102,6 +108,7 @@ func (rt *Runtime) Stop() {
 func (rt *Runtime) UpdateRules(rules []RuleEntry) {
 	if rl, ok := rt.rules.(*RulesetRuleLookup); ok {
 		rl.Rules = rules
+		logrus.WithField("rules", len(rules)).Info("Updated response rules")
 	}
 }
 
