@@ -373,6 +373,201 @@ func TestDecodeXSKMetaTooShort(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- Stage 6: Builder benchmarks ---
+
+func BenchmarkBuildICMPEchoReply(b *testing.B) {
+	pkt := buildTestICMPEchoRequestB(b)
+	builder := BuilderForAction(ActionICMPEchoReply)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil)
+	}
+}
+
+func BenchmarkBuildUDPEchoReply(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderForAction(ActionUDPEchoReply)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil)
+	}
+}
+
+func BenchmarkBuildARPReply(b *testing.B) {
+	pkt := buildTestARPRequestB(b)
+	builder := BuilderForAction(ActionARPReply)
+	params := map[string]any{
+		"hardware_addr": "aa:bb:cc:dd:ee:ff",
+		"sender_ipv4":   "10.0.0.1",
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, params)
+	}
+}
+
+func BenchmarkBuildICMPPortUnreachable(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderForAction(ActionICMPPortUnreachable)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil)
+	}
+}
+
+func BenchmarkBuildICMPHostUnreachable(b *testing.B) {
+	pkt := buildTestTCPSYNB(b)
+	builder := BuilderForAction(ActionICMPHostUnreachable)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil)
+	}
+}
+
+func BenchmarkBuildICMPAdminProhibited(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderForAction(ActionICMPAdminProhibited)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil)
+	}
+}
+
+// --- Stage 6: Zero-alloc BuilderIntoFunc benchmarks ---
+
+const benchBufSize = 256
+
+func BenchmarkBuildIntoICMPEchoReply(b *testing.B) {
+	pkt := buildTestICMPEchoRequestB(b)
+	builder := BuilderIntoForAction(ActionICMPEchoReply)
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil, out)
+	}
+}
+
+func BenchmarkBuildIntoUDPEchoReply(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderIntoForAction(ActionUDPEchoReply)
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil, out)
+	}
+}
+
+func BenchmarkBuildIntoARPReply(b *testing.B) {
+	pkt := buildTestARPRequestB(b)
+	builder := BuilderIntoForAction(ActionARPReply)
+	params := map[string]any{
+		"hardware_addr": net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+		"sender_ipv4":   net.ParseIP("10.0.0.1").To4(),
+	}
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, params, out)
+	}
+}
+
+func BenchmarkBuildIntoICMPPortUnreachable(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderIntoForAction(ActionICMPPortUnreachable)
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil, out)
+	}
+}
+
+func BenchmarkBuildIntoICMPHostUnreachable(b *testing.B) {
+	pkt := buildTestTCPSYNB(b)
+	builder := BuilderIntoForAction(ActionICMPHostUnreachable)
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil, out)
+	}
+}
+
+func BenchmarkBuildIntoICMPAdminProhibited(b *testing.B) {
+	pkt := buildTestUDPPacketB(b)
+	builder := BuilderIntoForAction(ActionICMPAdminProhibited)
+	out := make([]byte, benchBufSize)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		builder(pkt, nil, out)
+	}
+}
+
+// --- Benchmark helpers (using testing.B) ---
+
+func buildTestICMPEchoRequestB(b *testing.B) []byte {
+	b.Helper()
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolICMPv4, SrcIP: testSrcIP, DstIP: testDstIP}
+	icmp := &layers.ICMPv4{TypeCode: layers.CreateICMPv4TypeCode(8, 0)}
+	payload := make([]byte, 32)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, icmp, gopacket.Payload(payload))
+	return buf.Bytes()
+}
+
+func buildTestUDPPacketB(b *testing.B) []byte {
+	b.Helper()
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolUDP, SrcIP: testSrcIP, DstIP: testDstIP}
+	udp := &layers.UDP{SrcPort: 12345, DstPort: 53}
+	udp.SetNetworkLayerForChecksum(ip)
+	payload := make([]byte, 16)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, udp, gopacket.Payload(payload))
+	return buf.Bytes()
+}
+
+func buildTestARPRequestB(b *testing.B) []byte {
+	b.Helper()
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, EthernetType: layers.EthernetTypeARP}
+	arp := &layers.ARP{
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     6,
+		ProtAddressSize:   4,
+		Operation:         1,
+		SourceHwAddress:   testSrcMAC,
+		SourceProtAddress: net.ParseIP("192.168.1.100").To4(),
+		DstHwAddress:      make([]byte, 6),
+		DstProtAddress:    testDstIP,
+	}
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{}, eth, arp)
+	return buf.Bytes()
+}
+
+func buildTestTCPSYNB(b *testing.B) []byte {
+	b.Helper()
+	eth := &layers.Ethernet{SrcMAC: testSrcMAC, DstMAC: testDstMAC, EthernetType: layers.EthernetTypeIPv4}
+	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolTCP, SrcIP: testSrcIP, DstIP: testDstIP}
+	tcp := &layers.TCP{SrcPort: 12345, DstPort: 80, SYN: true}
+	tcp.SetNetworkLayerForChecksum(ip)
+	buf := gopacket.NewSerializeBuffer()
+	gopacket.SerializeLayers(buf, gopacket.SerializeOptions{FixLengths: true, ComputeChecksums: true}, eth, ip, tcp)
+	return buf.Bytes()
+}
+
 // --- Test helpers ---
 
 func buildTestICMPEchoRequest(t *testing.T) []byte {

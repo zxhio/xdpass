@@ -9,6 +9,10 @@ import (
 // BuilderFunc is a function that builds a response packet.
 type BuilderFunc func(origPkt []byte, params map[string]any) ([]byte, error)
 
+// BuilderIntoFunc writes a response packet into a caller-provided buffer.
+// Returns the number of bytes written. The caller must ensure out is large enough.
+type BuilderIntoFunc func(origPkt []byte, params map[string]any, out []byte) (int, error)
+
 // BuilderForAction returns a builder for the given action, or nil if unimplemented.
 func BuilderForAction(action uint16) BuilderFunc {
 	switch action {
@@ -30,6 +34,28 @@ func BuilderForAction(action uint16) BuilderFunc {
 		return buildICMPUnreachable(1)
 	case ActionICMPAdminProhibited:
 		return buildICMPUnreachable(13)
+	default:
+		return nil
+	}
+}
+
+// BuilderIntoForAction returns a zero-alloc builder for the given action, or nil if unimplemented.
+func BuilderIntoForAction(action uint16) BuilderIntoFunc {
+	switch action {
+	case ActionICMPEchoReply:
+		return buildIntoICMPEchoReply
+	case ActionUDPEchoReply:
+		return buildIntoUDPEchoReply
+	case ActionARPReply:
+		return buildIntoARPReply
+	case ActionTCPSynAck:
+		return buildIntoTCPSynAck
+	case ActionICMPPortUnreachable:
+		return buildIntoICMPUnreachable(3)
+	case ActionICMPHostUnreachable:
+		return buildIntoICMPUnreachable(1)
+	case ActionICMPAdminProhibited:
+		return buildIntoICMPUnreachable(13)
 	default:
 		return nil
 	}
@@ -721,6 +747,64 @@ func toUint32(v any) (uint32, bool) {
 	}
 }
 
+// getMACParamBytes extracts a MAC address from params without allocating when
+// the value is already a net.HardwareAddr. Falls back to string parsing.
+func getMACParamBytes(params map[string]any, key string) (net.HardwareAddr, error) {
+	v, ok := params[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required param: %s", key)
+	}
+	switch hw := v.(type) {
+	case net.HardwareAddr:
+		return hw, nil
+	case []byte:
+		return net.HardwareAddr(hw), nil
+	case string:
+		mac, err := net.ParseMAC(hw)
+		if err != nil {
+			return nil, fmt.Errorf("param %s: %w", key, err)
+		}
+		return mac, nil
+	default:
+		return nil, fmt.Errorf("param %s must be a string or net.HardwareAddr", key)
+	}
+}
+
+// getIPv4ParamBytes extracts an IPv4 address from params without allocating when
+// the value is already a net.IP. Falls back to string parsing.
+func getIPv4ParamBytes(params map[string]any, key string) (net.IP, error) {
+	v, ok := params[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required param: %s", key)
+	}
+	switch ip := v.(type) {
+	case net.IP:
+		ip4 := ip.To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("param %s: not an IPv4 address", key)
+		}
+		return ip4, nil
+	case []byte:
+		ip4 := net.IP(ip).To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("param %s: not an IPv4 address", key)
+		}
+		return ip4, nil
+	case string:
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			return nil, fmt.Errorf("param %s: invalid IP address %q", key, ip)
+		}
+		parsed = parsed.To4()
+		if parsed == nil {
+			return nil, fmt.Errorf("param %s: not an IPv4 address", key)
+		}
+		return parsed, nil
+	default:
+		return nil, fmt.Errorf("param %s must be a string or net.IP", key)
+	}
+}
+
 // getMACParam extracts a MAC address from params.
 func getMACParam(params map[string]any, key string) (net.HardwareAddr, error) {
 	v, ok := params[key]
@@ -800,4 +884,303 @@ func recalcIPv4Checksum(pkt []byte, ethHdrLen int) {
 	pkt[ethHdrLen+11] = 0
 	// Calculate and set.
 	pkt[ethHdrLen+10], pkt[ethHdrLen+11] = checksum(pkt[ethHdrLen : ethHdrLen+ihl])
+}
+
+// --- Zero-alloc "into" builders ---
+// These write into a caller-provided buffer, avoiding heap allocations.
+
+func buildIntoICMPEchoReply(origPkt []byte, _ map[string]any, out []byte) (int, error) {
+	if len(origPkt) < 14+20+8 {
+		return 0, fmt.Errorf("%w: icmp echo reply requires at least ethernet+ipv4+icmp header", ErrInvalidPacket)
+	}
+	ethType := binary.BigEndian.Uint16(origPkt[12:14])
+	ethHdrLen := 14
+	if ethType == 0x8100 || ethType == 0x88a8 {
+		if len(origPkt) < 18+20+8 {
+			return 0, fmt.Errorf("%w: too short for vlan+ipv4+icmp", ErrInvalidPacket)
+		}
+		ethType = binary.BigEndian.Uint16(origPkt[16:18])
+		ethHdrLen = 18
+	}
+	if ethType != 0x0800 {
+		return 0, fmt.Errorf("%w: not IPv4 (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+	}
+	ihl := int(origPkt[ethHdrLen]&0x0f) * 4
+	if len(origPkt) < ethHdrLen+ihl+8 {
+		return 0, fmt.Errorf("%w: too short for ipv4+icmp", ErrInvalidPacket)
+	}
+	if origPkt[ethHdrLen+9] != 1 {
+		return 0, fmt.Errorf("%w: not ICMP (proto=%d)", ErrInvalidPacket, origPkt[ethHdrLen+9])
+	}
+	icmpOffset := ethHdrLen + ihl
+	if origPkt[icmpOffset] != 8 {
+		return 0, fmt.Errorf("%w: not echo request (type=%d)", ErrInvalidPacket, origPkt[icmpOffset])
+	}
+	pktLen := len(origPkt)
+	if len(out) < pktLen {
+		return 0, fmt.Errorf("%w: output buffer too small (%d < %d)", ErrInvalidPacket, len(out), pktLen)
+	}
+	copy(out, origPkt)
+	// Swap Ethernet MAC.
+	copy(out[0:6], origPkt[6:12])
+	copy(out[6:12], origPkt[0:6])
+	// Swap IPv4 src/dst.
+	copy(out[ethHdrLen+12:ethHdrLen+16], origPkt[ethHdrLen+16:ethHdrLen+20])
+	copy(out[ethHdrLen+16:ethHdrLen+20], origPkt[ethHdrLen+12:ethHdrLen+16])
+	// ICMP type = echo reply.
+	out[icmpOffset] = 0
+	// ICMP checksum.
+	out[icmpOffset+2] = 0
+	out[icmpOffset+3] = 0
+	icmpLen := pktLen - icmpOffset
+	out[icmpOffset+2], out[icmpOffset+3] = checksum(out[icmpOffset : icmpOffset+icmpLen])
+	// IPv4 checksum.
+	recalcIPv4Checksum(out, ethHdrLen)
+	return pktLen, nil
+}
+
+func buildIntoICMPUnreachable(code byte) BuilderIntoFunc {
+	return func(origPkt []byte, _ map[string]any, out []byte) (int, error) {
+		if len(origPkt) < 14+20 {
+			return 0, fmt.Errorf("%w: icmp unreachable requires at least ethernet+ipv4 header", ErrInvalidPacket)
+		}
+		ethType := binary.BigEndian.Uint16(origPkt[12:14])
+		ethHdrLen := 14
+		if ethType == 0x8100 || ethType == 0x88a8 {
+			if len(origPkt) < 18+20 {
+				return 0, fmt.Errorf("%w: too short for vlan+ipv4", ErrInvalidPacket)
+			}
+			ethType = binary.BigEndian.Uint16(origPkt[16:18])
+			ethHdrLen = 18
+		}
+		if ethType != 0x0800 {
+			return 0, fmt.Errorf("%w: not IPv4 (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+		}
+		ihl := int(origPkt[ethHdrLen]&0x0f) * 4
+		if ihl < 20 {
+			return 0, fmt.Errorf("%w: IPv4 IHL too small (%d bytes)", ErrInvalidPacket, ihl)
+		}
+		if len(origPkt) < ethHdrLen+ihl {
+			return 0, fmt.Errorf("%w: packet too short for IPv4 header", ErrInvalidPacket)
+		}
+		payloadLen := len(origPkt) - ethHdrLen - ihl
+		bodyCopyLen := ihl
+		if payloadLen < 8 {
+			bodyCopyLen += payloadLen
+		} else {
+			bodyCopyLen += 8
+		}
+		respLen := ethHdrLen + 20 + 8 + bodyCopyLen
+		if len(out) < respLen {
+			return 0, fmt.Errorf("%w: output buffer too small (%d < %d)", ErrInvalidPacket, len(out), respLen)
+		}
+		// Ethernet: swap MAC.
+		copy(out[0:6], origPkt[6:12])
+		copy(out[6:12], origPkt[0:6])
+		binary.BigEndian.PutUint16(out[12:14], 0x0800)
+		// IPv4 header.
+		out[ethHdrLen] = 0x45
+		binary.BigEndian.PutUint16(out[ethHdrLen+2:ethHdrLen+4], uint16(respLen-ethHdrLen))
+		out[ethHdrLen+8] = 64
+		out[ethHdrLen+9] = 1
+		copy(out[ethHdrLen+12:ethHdrLen+16], origPkt[ethHdrLen+16:ethHdrLen+20])
+		copy(out[ethHdrLen+16:ethHdrLen+20], origPkt[ethHdrLen+12:ethHdrLen+16])
+		// ICMP header.
+		icmpOff := ethHdrLen + 20
+		out[icmpOff] = 3
+		out[icmpOff+1] = code
+		out[icmpOff+2] = 0
+		out[icmpOff+3] = 0
+		out[icmpOff+4] = 0
+		out[icmpOff+5] = 0
+		out[icmpOff+6] = 0
+		out[icmpOff+7] = 0
+		// ICMP body: original IPv4 header + first 8 bytes of payload.
+		copy(out[icmpOff+8:], origPkt[ethHdrLen:ethHdrLen+bodyCopyLen])
+		// ICMP checksum.
+		icmpLen := 8 + bodyCopyLen
+		out[icmpOff+2], out[icmpOff+3] = checksum(out[icmpOff : icmpOff+icmpLen])
+		// IPv4 checksum.
+		recalcIPv4Checksum(out, ethHdrLen)
+		return respLen, nil
+	}
+}
+
+func buildIntoUDPEchoReply(origPkt []byte, _ map[string]any, out []byte) (int, error) {
+	if len(origPkt) < 14+20+8 {
+		return 0, fmt.Errorf("%w: udp echo reply requires at least ethernet+ipv4+udp header", ErrInvalidPacket)
+	}
+	ethType := binary.BigEndian.Uint16(origPkt[12:14])
+	ethHdrLen := 14
+	if ethType == 0x8100 || ethType == 0x88a8 {
+		if len(origPkt) < 18+20+8 {
+			return 0, fmt.Errorf("%w: too short for vlan+ipv4+udp", ErrInvalidPacket)
+		}
+		ethType = binary.BigEndian.Uint16(origPkt[16:18])
+		ethHdrLen = 18
+	}
+	if ethType != 0x0800 {
+		return 0, fmt.Errorf("%w: not IPv4 (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+	}
+	ihl := int(origPkt[ethHdrLen]&0x0f) * 4
+	if len(origPkt) < ethHdrLen+ihl+8 {
+		return 0, fmt.Errorf("%w: too short for ipv4+udp", ErrInvalidPacket)
+	}
+	if origPkt[ethHdrLen+9] != 17 {
+		return 0, fmt.Errorf("%w: not UDP (proto=%d)", ErrInvalidPacket, origPkt[ethHdrLen+9])
+	}
+	udpOffset := ethHdrLen + ihl
+	udpLen := binary.BigEndian.Uint16(origPkt[udpOffset+4 : udpOffset+6])
+	if udpLen < 8 {
+		return 0, fmt.Errorf("%w: invalid udp length %d", ErrInvalidPacket, udpLen)
+	}
+	if int(udpLen) > len(origPkt)-udpOffset {
+		return 0, fmt.Errorf("%w: udp length %d exceeds packet", ErrInvalidPacket, udpLen)
+	}
+	pktLen := len(origPkt)
+	if len(out) < pktLen {
+		return 0, fmt.Errorf("%w: output buffer too small (%d < %d)", ErrInvalidPacket, len(out), pktLen)
+	}
+	copy(out, origPkt)
+	// Swap Ethernet MAC.
+	copy(out[0:6], origPkt[6:12])
+	copy(out[6:12], origPkt[0:6])
+	// Swap IPv4 src/dst.
+	copy(out[ethHdrLen+12:ethHdrLen+16], origPkt[ethHdrLen+16:ethHdrLen+20])
+	copy(out[ethHdrLen+16:ethHdrLen+20], origPkt[ethHdrLen+12:ethHdrLen+16])
+	// Swap UDP src/dst ports.
+	copy(out[udpOffset:udpOffset+2], origPkt[udpOffset+2:udpOffset+4])
+	copy(out[udpOffset+2:udpOffset+4], origPkt[udpOffset:udpOffset+2])
+	// Zero UDP checksum.
+	out[udpOffset+6] = 0
+	out[udpOffset+7] = 0
+	// IPv4 checksum.
+	recalcIPv4Checksum(out, ethHdrLen)
+	return pktLen, nil
+}
+
+func buildIntoARPReply(origPkt []byte, params map[string]any, out []byte) (int, error) {
+	if len(origPkt) < 14+28 {
+		return 0, fmt.Errorf("%w: arp requires at least ethernet+arp header", ErrInvalidPacket)
+	}
+	ethType := binary.BigEndian.Uint16(origPkt[12:14])
+	ethHdrLen := 14
+	if ethType == 0x8100 || ethType == 0x88a8 {
+		if len(origPkt) < 18+28 {
+			return 0, fmt.Errorf("%w: too short for vlan+arp", ErrInvalidPacket)
+		}
+		ethType = binary.BigEndian.Uint16(origPkt[16:18])
+		ethHdrLen = 18
+	}
+	if ethType != 0x0806 {
+		return 0, fmt.Errorf("%w: not ARP (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+	}
+	arpOffset := ethHdrLen
+	arpOp := binary.BigEndian.Uint16(origPkt[arpOffset+6 : arpOffset+8])
+	if arpOp != 1 {
+		return 0, fmt.Errorf("%w: not ARP request (op=%d)", ErrInvalidPacket, arpOp)
+	}
+	hwLen := origPkt[arpOffset+4]
+	protoLen := origPkt[arpOffset+5]
+	if hwLen != 6 || protoLen != 4 {
+		return 0, fmt.Errorf("%w: unsupported hw_len=%d proto_len=%d", ErrInvalidPacket, hwLen, protoLen)
+	}
+	expectedLen := ethHdrLen + 8 + int(hwLen)*2 + int(protoLen)*2
+	if len(origPkt) < expectedLen {
+		return 0, fmt.Errorf("%w: arp packet too short", ErrInvalidPacket)
+	}
+	senderHW := origPkt[arpOffset+8 : arpOffset+8+6]
+	senderProto := origPkt[arpOffset+14 : arpOffset+14+4]
+	replyHW, err := getMACParamBytes(params, "hardware_addr")
+	if err != nil {
+		return 0, err
+	}
+	replyProto, err := getIPv4ParamBytes(params, "sender_ipv4")
+	if err != nil {
+		return 0, err
+	}
+	if len(out) < len(origPkt) {
+		return 0, fmt.Errorf("%w: output buffer too small", ErrInvalidPacket)
+	}
+	copy(out, origPkt)
+	// Swap Ethernet MAC for reply.
+	copy(out[0:6], senderHW)
+	copy(out[6:12], replyHW)
+	// ARP op = reply.
+	binary.BigEndian.PutUint16(out[arpOffset+6:arpOffset+8], 2)
+	// ARP reply fields.
+	copy(out[arpOffset+8:arpOffset+14], replyHW)
+	copy(out[arpOffset+14:arpOffset+18], replyProto)
+	copy(out[arpOffset+18:arpOffset+24], senderHW)
+	copy(out[arpOffset+24:arpOffset+28], senderProto)
+	return len(origPkt), nil
+}
+
+func buildIntoTCPSynAck(origPkt []byte, params map[string]any, out []byte) (int, error) {
+	if len(origPkt) < 14+20+20 {
+		return 0, fmt.Errorf("%w: tcp syn-ack requires at least ethernet+ipv4+tcp header", ErrInvalidPacket)
+	}
+	ethType := binary.BigEndian.Uint16(origPkt[12:14])
+	ethHdrLen := 14
+	if ethType == 0x8100 || ethType == 0x88a8 {
+		if len(origPkt) < 18+20+20 {
+			return 0, fmt.Errorf("%w: too short for vlan+ipv4+tcp", ErrInvalidPacket)
+		}
+		ethType = binary.BigEndian.Uint16(origPkt[16:18])
+		ethHdrLen = 18
+	}
+	if ethType != 0x0800 {
+		return 0, fmt.Errorf("%w: not IPv4 (ethertype=0x%04x)", ErrInvalidPacket, ethType)
+	}
+	ihl := int(origPkt[ethHdrLen]&0x0f) * 4
+	if len(origPkt) < ethHdrLen+ihl+20 {
+		return 0, fmt.Errorf("%w: too short for ipv4+tcp", ErrInvalidPacket)
+	}
+	if origPkt[ethHdrLen+9] != 6 {
+		return 0, fmt.Errorf("%w: not TCP (proto=%d)", ErrInvalidPacket, origPkt[ethHdrLen+9])
+	}
+	tcpOffset := ethHdrLen + ihl
+	tcpDataOffset := int(origPkt[tcpOffset+12]>>4) * 4
+	if len(origPkt) < tcpOffset+tcpDataOffset {
+		return 0, fmt.Errorf("%w: tcp header too short", ErrInvalidPacket)
+	}
+	flags := origPkt[tcpOffset+13]
+	if flags&0x02 == 0 {
+		return 0, fmt.Errorf("%w: not SYN (flags=0x%02x)", ErrInvalidPacket, flags)
+	}
+	pktLen := len(origPkt)
+	if len(out) < pktLen {
+		return 0, fmt.Errorf("%w: output buffer too small", ErrInvalidPacket)
+	}
+	copy(out, origPkt)
+	// Swap Ethernet MAC.
+	copy(out[0:6], origPkt[6:12])
+	copy(out[6:12], origPkt[0:6])
+	// Swap IPv4 src/dst.
+	copy(out[ethHdrLen+12:ethHdrLen+16], origPkt[ethHdrLen+16:ethHdrLen+20])
+	copy(out[ethHdrLen+16:ethHdrLen+20], origPkt[ethHdrLen+12:ethHdrLen+16])
+	// Swap TCP src/dst ports.
+	copy(out[tcpOffset:tcpOffset+2], origPkt[tcpOffset+2:tcpOffset+4])
+	copy(out[tcpOffset+2:tcpOffset+4], origPkt[tcpOffset:tcpOffset+2])
+	// Set SYN+ACK flags.
+	out[tcpOffset+13] = 0x12
+	// ACK = original SEQ + 1.
+	origSeq := binary.BigEndian.Uint32(origPkt[tcpOffset+4 : tcpOffset+8])
+	binary.BigEndian.PutUint32(out[tcpOffset+8:tcpOffset+12], origSeq+1)
+	// SEQ = tcp_seq param or default.
+	seq := uint32(0)
+	if v, ok := params["tcp_seq"]; ok {
+		if n, ok := toUint32(v); ok {
+			seq = n
+		}
+	}
+	binary.BigEndian.PutUint32(out[tcpOffset+4:tcpOffset+8], seq)
+	// TCP checksum.
+	out[tcpOffset+16] = 0
+	out[tcpOffset+17] = 0
+	tcpLen := pktLen - tcpOffset
+	out[tcpOffset+16], out[tcpOffset+17] = tcpChecksum(out, ethHdrLen, tcpLen)
+	// IPv4 checksum.
+	recalcIPv4Checksum(out, ethHdrLen)
+	return pktLen, nil
 }
