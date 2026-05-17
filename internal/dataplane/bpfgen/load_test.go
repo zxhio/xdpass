@@ -1804,14 +1804,28 @@ func skipUnlessBPF_b(b *testing.B) {
 	}
 }
 
+const benchRepeat = 10000
+
+// benchmarkMatchRun runs the BPF program benchRepeat times in a single syscall
+// via Program.Benchmark() and reports kernel-side ns/run. This isolates BPF
+// execution from Go-side syscall and allocation overhead.
+func benchmarkMatchRun(b *testing.B, prog *ebpf.Program, pkt []byte) {
+	b.Helper()
+	b.ReportAllocs()
+	for range b.N {
+		_, perRun, err := prog.Benchmark(pkt, benchRepeat, b.ResetTimer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.ReportMetric(float64(perRun.Nanoseconds()), "ns/run")
+	}
+}
+
 func BenchmarkMatchEmptyRuleset(b *testing.B) {
 	skipUnlessBPF_b(b)
 	s := newBenchmarkSetup(b, nil, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchSingleWildcard(b *testing.B) {
@@ -1821,10 +1835,7 @@ func BenchmarkMatchSingleWildcard(b *testing.B) {
 	}
 	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchDstPortHit(b *testing.B) {
@@ -1832,12 +1843,9 @@ func BenchmarkMatchDstPortHit(b *testing.B) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "none"}},
 	}
-	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst port 80
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchDstPortMiss(b *testing.B) {
@@ -1845,12 +1853,9 @@ func BenchmarkMatchDstPortMiss(b *testing.B) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{443}}, Response: ruleset.Response{Action: "none"}},
 	}
-	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst port 80, rule wants 443
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchCIDRHit(b *testing.B) {
@@ -1858,12 +1863,9 @@ func BenchmarkMatchCIDRHit(b *testing.B) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"192.168.1.0/24"}}, Response: ruleset.Response{Action: "none"}},
 	}
-	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst 192.168.1.1
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchCIDRMiss(b *testing.B) {
@@ -1871,17 +1873,13 @@ func BenchmarkMatchCIDRMiss(b *testing.B) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "none"}},
 	}
-	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst 192.168.1.1
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatchMixedRules(b *testing.B) {
 	skipUnlessBPF_b(b)
-	// Mix of protocol, port, and CIDR rules. The packet matches rule 3 (port 80).
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "udp", DstPorts: []uint16{53}}, Response: ruleset.Response{Action: "none"}},
 		{RuleID: 2, Priority: 20, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "none"}},
@@ -1891,10 +1889,7 @@ func BenchmarkMatchMixedRules(b *testing.B) {
 	}
 	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 // generateRules creates N rules with the last one matching on dst port 80.
@@ -1922,46 +1917,32 @@ func BenchmarkMatch1Rule(b *testing.B) {
 	skipUnlessBPF_b(b)
 	s := newBenchmarkSetup(b, generateRules(1), "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatch10Rules(b *testing.B) {
 	skipUnlessBPF_b(b)
 	s := newBenchmarkSetup(b, generateRules(10), "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatch100Rules(b *testing.B) {
 	skipUnlessBPF_b(b)
 	s := newBenchmarkSetup(b, generateRules(100), "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatch512RulesLateHit(b *testing.B) {
 	skipUnlessBPF_b(b)
-	// 512 rules, last one matches. Worst-case: must scan all slots.
 	s := newBenchmarkSetup(b, generateRules(512), "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
 func BenchmarkMatch512RulesMiss(b *testing.B) {
 	skipUnlessBPF_b(b)
-	// 512 rules, none match the packet (all on different ports).
 	rules := make([]ruleset.Rule, 512)
 	for i := range 512 {
 		rules[i] = ruleset.Rule{
@@ -1971,10 +1952,7 @@ func BenchmarkMatch512RulesMiss(b *testing.B) {
 			Response: ruleset.Response{Action: "none"},
 		}
 	}
-	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // port 80, no rule matches
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
-	b.ReportAllocs()
-	for range b.N {
-		s.objs.XdpassProg.Test(s.pkt)
-	}
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
