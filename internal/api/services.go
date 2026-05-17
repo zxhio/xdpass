@@ -36,3 +36,10 @@ type EgressService interface {
 	ReplaceEgress(ctx context.Context, ifIndex uint32, ifName, vlanMode string) (EgressResponse, error)
 	DeleteEgress(ctx context.Context) error
 }
+
+// DispatchService manages dispatch configuration.
+type DispatchService interface {
+	GetDispatch(ctx context.Context) (DispatchResponse, error)
+	ReplaceDispatch(ctx context.Context, req PutDispatchRequest) (DispatchResponse, error)
+	DeleteDispatch(ctx context.Context) error
+}

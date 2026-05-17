@@ -13,6 +13,7 @@ type StatusResponse struct {
 	RulesetLoaded            bool   `json:"ruleset_loaded"`
 	Rules                    int    `json:"rules"`
 	ResponseEgressConfigured bool   `json:"response_egress_configured"`
+	DispatchConfigured       bool   `json:"dispatch_configured"`
 }
 
 // --- Attachments ---
@@ -126,6 +127,7 @@ type StatsResponse struct {
 	KernelResponse    KernelResponseStats    `json:"kernel_response"`
 	XSKRedirect       XSKRedirectStats       `json:"xsk_redirect"`
 	UserspaceResponse UserspaceResponseStats `json:"userspace_response"`
+	Dispatch          DispatchStats          `json:"dispatch"`
 	Errors            ErrorsStats            `json:"errors"`
 }
 
@@ -189,4 +191,32 @@ type putEgressRequest struct {
 	IfIndex  uint32 `json:"ifindex"`
 	IfName   string `json:"ifname,omitempty"`
 	VLANMode string `json:"vlan_mode,omitempty"`
+}
+
+// --- Dispatch ---
+
+// DispatchResponse is the dispatch configuration.
+type DispatchResponse struct {
+	Enabled    bool   `json:"enabled"`
+	Configured bool   `json:"configured"`
+	IfIndex    uint32 `json:"ifindex"`
+	IfName     string `json:"ifname,omitempty"`
+	QueueSize  int    `json:"queue_size"`
+}
+
+// PutDispatchRequest is the PUT /api/v1/dispatch request.
+type PutDispatchRequest struct {
+	Enabled   bool   `json:"enabled"`
+	IfIndex   uint32 `json:"ifindex"`
+	IfName    string `json:"ifname,omitempty"`
+	QueueSize int    `json:"queue_size,omitempty"`
+}
+
+// DispatchStats holds dispatch counters.
+type DispatchStats struct {
+	EnqueuePackets   uint64 `json:"enqueue_packets"`
+	Packets          uint64 `json:"packets"`
+	DroppedPackets   uint64 `json:"dropped_packets"`
+	QueueFullPackets uint64 `json:"queue_full_packets"`
+	ErrorPackets     uint64 `json:"error_packets"`
 }

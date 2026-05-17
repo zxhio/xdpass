@@ -18,6 +18,7 @@ import (
 type mockStore struct {
 	attachments map[uint32]AttachmentResponse
 	rules       []RuleResponse
+	dispatch    *DispatchResponse
 }
 
 func newMockStore() *mockStore {
@@ -123,10 +124,37 @@ func (m *mockStore) Unsubscribe(sub *EventSubscription) {
 	close(sub.Done)
 }
 
+func (m *mockStore) GetDispatch(_ context.Context) (DispatchResponse, error) {
+	if m.dispatch != nil {
+		return *m.dispatch, nil
+	}
+	return DispatchResponse{QueueSize: 4096}, nil
+}
+
+func (m *mockStore) ReplaceDispatch(_ context.Context, req PutDispatchRequest) (DispatchResponse, error) {
+	resp := DispatchResponse{
+		Enabled:    req.Enabled,
+		Configured: true,
+		IfIndex:    req.IfIndex,
+		IfName:     req.IfName,
+		QueueSize:  req.QueueSize,
+	}
+	if resp.QueueSize == 0 {
+		resp.QueueSize = 4096
+	}
+	m.dispatch = &resp
+	return resp, nil
+}
+
+func (m *mockStore) DeleteDispatch(_ context.Context) error {
+	m.dispatch = nil
+	return nil
+}
+
 func newTestRouter() http.Handler {
 	s := newMockStore()
 	return NewRouter(RouterDeps{
-		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Events: s,
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Dispatch: s, Events: s,
 	})
 }
 
@@ -336,7 +364,7 @@ func TestEgressPutInvalidVLANMode(t *testing.T) {
 	// Use a mock that validates vlanMode.
 	s := &mockEgressValidator{}
 	router := NewRouter(RouterDeps{
-		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Events: s,
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Dispatch: s, Events: s,
 	})
 	w := doRequest(router, "PUT", "/api/v1/response/egress", putEgressRequest{IfIndex: 3, VLANMode: "invalid"})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -382,6 +410,9 @@ func TestAllRoutesRegistered(t *testing.T) {
 		{"GET", "/api/v1/response/egress"},
 		{"PUT", "/api/v1/response/egress"},
 		{"DELETE", "/api/v1/response/egress"},
+		{"GET", "/api/v1/dispatch"},
+		{"PUT", "/api/v1/dispatch"},
+		{"DELETE", "/api/v1/dispatch"},
 	}
 
 	for _, r := range routes {

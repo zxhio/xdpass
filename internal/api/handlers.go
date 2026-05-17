@@ -298,6 +298,59 @@ func handleDeleteEgress(svc EgressService) http.HandlerFunc {
 	}
 }
 
+// --- Dispatch ---
+
+func handleGetDispatch(svc DispatchService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := svc.GetDispatch(r.Context())
+		if err != nil {
+			logrus.WithError(err).Error("Fail to get dispatch")
+			writeInternalError(w, "fail to get dispatch")
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handlePutDispatch(svc DispatchService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req PutDispatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeBadRequest(w, "invalid JSON body")
+			return
+		}
+
+		if req.IfIndex == 0 {
+			writeValidationFailed(w, "ifindex must be greater than 0")
+			return
+		}
+
+		resp, err := svc.ReplaceDispatch(r.Context(), req)
+		if err != nil {
+			var sve *ServiceValidationError
+			if errors.As(err, &sve) {
+				writeValidationFailed(w, err.Error())
+			} else {
+				logrus.WithError(err).Error("Fail to replace dispatch")
+				writeRuntimeFailed(w, err.Error())
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleDeleteDispatch(svc DispatchService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := svc.DeleteDispatch(r.Context()); err != nil {
+			logrus.WithError(err).Error("Fail to delete dispatch")
+			writeInternalError(w, "fail to delete dispatch")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // --- helpers ---
 
 func parseIfIndex(s string) (uint32, error) {

@@ -41,6 +41,7 @@ type RouterDeps struct {
 	Ruleset     RulesetService
 	Stats       StatsService
 	Egress      EgressService
+	Dispatch    DispatchService
 	Events      EventStreamer
 }
 
@@ -74,6 +75,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 	mux.HandleFunc("GET /api/v1/response/egress", handleGetEgress(deps.Egress))
 	mux.HandleFunc("PUT /api/v1/response/egress", handlePutEgress(deps.Egress))
 	mux.HandleFunc("DELETE /api/v1/response/egress", handleDeleteEgress(deps.Egress))
+
+	// Dispatch
+	mux.HandleFunc("GET /api/v1/dispatch", handleGetDispatch(deps.Dispatch))
+	mux.HandleFunc("PUT /api/v1/dispatch", handlePutDispatch(deps.Dispatch))
+	mux.HandleFunc("DELETE /api/v1/dispatch", handleDeleteDispatch(deps.Dispatch))
 
 	return mux
 }
