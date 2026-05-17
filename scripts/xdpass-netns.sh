@@ -101,7 +101,7 @@ setup() {
     echo "  sudo ./build/xdpass-agent"
     echo ""
     echo "  # Run API smoke test:"
-    echo "  python3 scripts/xdpass-api-cli.py smoke"
+    echo "  python3 scripts/xdpass-cli.py smoke"
     echo ""
     echo "  # Cleanup when done:"
     echo "  sudo scripts/xdpass-netns.sh cleanup"

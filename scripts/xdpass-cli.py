@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-xdpass-api-cli.py — CLI tool for xdpass-agent HTTP API.
+xdpass-cli.py — CLI tool for xdpass-agent HTTP API.
+
+All commands call xdpass-agent HTTP API. No direct netns/BPF/XSK/NIC operations.
 
 Usage:
-    python3 scripts/xdpass-api-cli.py health
-    python3 scripts/xdpass-api-cli.py status
-    python3 scripts/xdpass-api-cli.py attach --iface br-xdpass
-    python3 scripts/xdpass-api-cli.py detach --iface br-xdpass
-    python3 scripts/xdpass-api-cli.py ruleset-apply
-    python3 scripts/xdpass-api-cli.py stats
-    python3 scripts/xdpass-api-cli.py smoke
+    python3 scripts/xdpass-cli.py health
+    python3 scripts/xdpass-cli.py status
+    python3 scripts/xdpass-cli.py attach --iface br-xdpass
+    python3 scripts/xdpass-cli.py detach --iface br-xdpass
+    python3 scripts/xdpass-cli.py ruleset-apply
+    python3 scripts/xdpass-cli.py stats
+    python3 scripts/xdpass-cli.py smoke
 """
 
 import argparse
