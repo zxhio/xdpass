@@ -8,8 +8,8 @@ No direct netns / BPF / XSK / NIC operations.
 Usage:
     python3 scripts/xdpass-cli.py <command> [options]
     python3 scripts/xdpass-cli.py attachments list
-    python3 scripts/xdpass-cli.py attach --iface br-xdpass
-    python3 scripts/xdpass-cli.py smoke
+    python3 scripts/xdpass-cli.py attach --ifname br-xdpass
+    python3 scripts/xdpass-cli.py smoke --ifname br-xdpass
 """
 
 import argparse
@@ -88,13 +88,46 @@ def is_success(status):
     return 200 <= status < 300
 
 
-def resolve_ifindex(iface):
+def resolve_ifindex(ifname):
     """Resolve interface name to ifindex via OS."""
     try:
-        return socket.if_nametoindex(iface)
+        return socket.if_nametoindex(ifname)
     except OSError:
-        print(f"error: interface '{iface}' not found", file=sys.stderr)
+        print(f"error: interface '{ifname}' not found", file=sys.stderr)
         sys.exit(1)
+
+
+def attachment_ifindex(args):
+    """Resolve an attachment command target to ifindex."""
+    if getattr(args, "ifindex", None):
+        return args.ifindex
+    if getattr(args, "ifindex_arg", None):
+        return args.ifindex_arg
+    if getattr(args, "ifname", None):
+        return resolve_ifindex(args.ifname)
+    print("error: --ifname or --ifindex required", file=sys.stderr)
+    sys.exit(1)
+
+
+def parse_queues(raw):
+    """Parse comma-separated XSK queue IDs."""
+    if not raw:
+        return None
+    queues = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            queue = int(item)
+        except ValueError:
+            print(f"error: invalid queue '{item}'", file=sys.stderr)
+            sys.exit(1)
+        if queue < 0:
+            print(f"error: invalid queue '{item}'", file=sys.stderr)
+            sys.exit(1)
+        queues.append(queue)
+    return queues
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +165,7 @@ def cmd_attachments_list(addr, _args):
 
 
 def cmd_attachments_get(addr, args):
+    args.ifindex = attachment_ifindex(args)
     path = f"/api/v1/attachments/{args.ifindex}"
     method = "GET"
     status, body = api_request(addr, method, path)
@@ -143,10 +177,18 @@ def cmd_attachments_get(addr, args):
 
 
 def cmd_attachments_create(addr, args):
-    ifindex = resolve_ifindex(args.iface)
+    ifindex = attachment_ifindex(args)
     body = {"ifindex": ifindex, "attach_mode": args.mode}
     if args.miss_verdict:
         body["miss_verdict"] = args.miss_verdict
+    queues = parse_queues(getattr(args, "xsk_queues", None))
+    xsk_enabled = bool(getattr(args, "xsk", False))
+    if queues is not None:
+        xsk_enabled = True
+    if xsk_enabled:
+        body["xsk"] = {"enabled": True}
+        if queues is not None:
+            body["xsk"]["queues"] = queues
     path = "/api/v1/attachments"
     if args.dry_run:
         path += "?dry_run=true"
@@ -154,12 +196,15 @@ def cmd_attachments_create(addr, args):
     status, resp = api_request(addr, method, path, body)
     if is_success(status):
         print_response(method, "/api/v1/attachments", status, resp)
+        if not xsk_enabled:
+            print("note: XSK is disabled; userspace response actions need --xsk", file=sys.stderr)
         return 0
     print_error(method, "/api/v1/attachments", status, resp)
     return 1
 
 
 def cmd_attachments_set_enabled(addr, args):
+    args.ifindex = attachment_ifindex(args)
     path = f"/api/v1/attachments/{args.ifindex}"
     method = "PATCH"
     status, body = api_request(addr, method, path, {"enabled": args.enabled})
@@ -171,6 +216,7 @@ def cmd_attachments_set_enabled(addr, args):
 
 
 def cmd_attachments_delete(addr, args):
+    args.ifindex = attachment_ifindex(args)
     path = f"/api/v1/attachments/{args.ifindex}"
     method = "DELETE"
     status, body = api_request(addr, method, path)
@@ -233,6 +279,13 @@ def cmd_stats(addr, _args):
     status, body = api_request(addr, method, path)
     if is_success(status):
         print_response(method, path, status, body)
+        if isinstance(body, dict):
+            xsk_redirect = body.get("xsk_redirect") or {}
+            if xsk_redirect.get("error_packets", 0) > 0:
+                print(
+                    "note: xsk_redirect.error_packets > 0; userspace response needs attachment XSK enabled",
+                    file=sys.stderr,
+                )
         return 0
     print_error(method, path, status, body)
     return 1
@@ -249,8 +302,8 @@ def cmd_response_egress_get(addr, _args):
 
 
 def cmd_response_egress_put(addr, args):
-    ifindex = resolve_ifindex(args.iface)
-    body = {"ifindex": ifindex}
+    ifindex = resolve_ifindex(args.ifname)
+    body = {"ifindex": ifindex, "ifname": args.ifname}
     if args.vlan_mode:
         body["vlan_mode"] = args.vlan_mode
     method, path = "PUT", "/api/v1/response/egress"
@@ -283,8 +336,8 @@ def cmd_dispatch_get(addr, _args):
 
 
 def cmd_dispatch_put(addr, args):
-    ifindex = resolve_ifindex(args.iface)
-    body = {"enabled": args.enabled, "ifindex": ifindex}
+    ifindex = resolve_ifindex(args.ifname)
+    body = {"enabled": args.enabled, "ifindex": ifindex, "ifname": args.ifname}
     if args.queue_size:
         body["queue_size"] = args.queue_size
     method, path = "PUT", "/api/v1/dispatch"
@@ -317,13 +370,6 @@ def cmd_attach(addr, args):
 
 def cmd_detach(addr, args):
     """Alias for 'attachments delete'."""
-    if args.ifindex:
-        pass
-    elif args.iface:
-        args.ifindex = resolve_ifindex(args.iface)
-    else:
-        print("error: --iface or --ifindex required", file=sys.stderr)
-        return 1
     return cmd_attachments_delete(addr, args)
 
 
@@ -338,17 +384,21 @@ def cmd_ruleset_apply(addr, args):
 
 def cmd_smoke(addr, args):
     """Run smoke test against agent API."""
-    iface = getattr(args, "iface", None) or "br-xdpass"
+    ifname = getattr(args, "ifname", None)
+    if not ifname:
+        print("error: --ifname required", file=sys.stderr)
+        return 1
+
     steps = [
         ("health", lambda: cmd_health(addr, args)),
         ("status", lambda: cmd_status(addr, args)),
-        ("attachments create", lambda: _smoke_attach(addr, args, iface)),
+        ("attachments create", lambda: _smoke_attach(addr, args, ifname)),
         ("ruleset put", lambda: _smoke_ruleset(addr, args)),
         ("stats", lambda: cmd_stats(addr, args)),
     ]
 
     failures = 0
-    print(f"=== smoke test (addr={addr}, iface={iface}) ===\n")
+    print(f"=== smoke test (addr={addr}, ifname={ifname}) ===\n")
     for i, (name, fn) in enumerate(steps, 1):
         print(f"[{i}/{len(steps)}] {name}")
         if fn():
@@ -361,11 +411,14 @@ def cmd_smoke(addr, args):
     return 1 if failures else 0
 
 
-def _smoke_attach(addr, args, iface):
-    args.iface = iface
+def _smoke_attach(addr, args, ifname):
+    args.ifname = ifname
+    args.ifindex = None
     args.mode = "generic"
     args.dry_run = False
     args.miss_verdict = None
+    args.xsk = True
+    args.xsk_queues = None
     return cmd_attachments_create(addr, args)
 
 
@@ -403,41 +456,60 @@ def build_parser():
     att_sub.add_parser("list", help="GET /api/v1/attachments")
 
     p_att_get = att_sub.add_parser("get", help="GET /api/v1/attachments/{ifindex}")
-    p_att_get.add_argument("ifindex", type=int, help="interface index")
+    p_att_get.add_argument("ifindex_arg", nargs="?", type=int, help="interface index")
+    p_att_get.add_argument("--ifname", help="interface name")
+    p_att_get.add_argument("--ifindex", type=int, help="interface index")
 
     p_att_create = att_sub.add_parser("create", help="POST /api/v1/attachments")
-    p_att_create.add_argument("--iface", required=True, help="interface name")
+    p_att_create.add_argument("--ifname", help="interface name")
+    p_att_create.add_argument("--ifindex", type=int, help="interface index")
     p_att_create.add_argument("--mode", default="generic",
                               help="attach mode: generic/native/driver (default: generic)")
     p_att_create.add_argument("--miss-verdict", dest="miss_verdict",
                               choices=["pass", "drop"], help="miss verdict (default: pass)")
+    p_att_create.add_argument("--xsk", dest="xsk", action="store_true",
+                              help="enable XSK for userspace response actions")
+    p_att_create.add_argument("--xsk-queues", dest="xsk_queues",
+                              help="comma-separated XSK queues, implies --xsk")
     p_att_create.add_argument("--dry-run", dest="dry_run", action="store_true",
                               help="POST /api/v1/attachments?dry_run=true")
 
     p_att_enable = att_sub.add_parser("set-enabled",
                                       help="PATCH /api/v1/attachments/{ifindex}")
-    p_att_enable.add_argument("ifindex", type=int, help="interface index")
+    p_att_enable.add_argument("ifindex_arg", nargs="?", type=int, help="interface index")
+    p_att_enable.add_argument("--ifname", help="interface name")
+    p_att_enable.add_argument("--ifindex", type=int, help="interface index")
     p_att_enable.add_argument("--enabled", type=bool, required=True,
                               help="true/false")
 
     p_att_del = att_sub.add_parser("delete", help="DELETE /api/v1/attachments/{ifindex}")
-    p_att_del.add_argument("ifindex", type=int, help="interface index")
+    p_att_del.add_argument("ifindex_arg", nargs="?", type=int, help="interface index")
+    p_att_del.add_argument("--ifname", help="interface name")
+    p_att_del.add_argument("--ifindex", type=int, help="interface index")
 
     # -- compatible alias: attach --
     p_attach = sub.add_parser("attach",
                               help="(alias) POST /api/v1/attachments")
-    p_attach.add_argument("--iface", required=True, help="interface name")
+    p_attach.add_argument("--ifname", help="interface name")
+    p_attach.add_argument("--ifindex", type=int, help="interface index")
     p_attach.add_argument("--mode", default="generic",
                           help="attach mode (default: generic)")
     p_attach.add_argument("--dry-run", dest="dry_run", action="store_true",
                           help="dry-run mode")
     p_attach.add_argument("--miss-verdict", dest="miss_verdict",
                           choices=["pass", "drop"], help="miss verdict")
+    p_attach.add_argument("--xsk", dest="xsk", action="store_true",
+                          help="enable XSK (default for attach)")
+    p_attach.add_argument("--no-xsk", dest="xsk", action="store_false",
+                          help="disable XSK")
+    p_attach.add_argument("--xsk-queues", dest="xsk_queues",
+                          help="comma-separated XSK queues, implies --xsk")
+    p_attach.set_defaults(xsk=True)
 
     # -- compatible alias: detach --
     p_detach = sub.add_parser("detach",
                               help="(alias) DELETE /api/v1/attachments/{ifindex}")
-    p_detach.add_argument("--iface", help="interface name")
+    p_detach.add_argument("--ifname", help="interface name")
     p_detach.add_argument("--ifindex", type=int, help="interface index")
 
     # -- ruleset --
@@ -468,7 +540,7 @@ def build_parser():
     re_sub.add_parser("get", help="GET /api/v1/response/egress")
 
     p_re_put = re_sub.add_parser("put", help="PUT /api/v1/response/egress")
-    p_re_put.add_argument("--iface", required=True, help="egress interface name")
+    p_re_put.add_argument("--ifname", required=True, help="egress interface name")
     p_re_put.add_argument("--vlan-mode", dest="vlan_mode",
                           choices=["preserve", "access"],
                           help="VLAN mode (default: preserve)")
@@ -482,7 +554,7 @@ def build_parser():
     dp_sub.add_parser("get", help="GET /api/v1/dispatch")
 
     p_dp_put = dp_sub.add_parser("put", help="PUT /api/v1/dispatch")
-    p_dp_put.add_argument("--iface", required=True, help="dispatch interface name")
+    p_dp_put.add_argument("--ifname", required=True, help="dispatch interface name")
     p_dp_put.add_argument("--enabled", type=bool, default=True,
                           help="enable dispatch (default: true)")
     p_dp_put.add_argument("--queue-size", dest="queue_size", type=int,
@@ -492,8 +564,7 @@ def build_parser():
 
     # -- smoke --
     p_smoke = sub.add_parser("smoke", help="run smoke test against agent API")
-    p_smoke.add_argument("--iface", default="br-xdpass",
-                         help="interface for attach (default: br-xdpass)")
+    p_smoke.add_argument("--ifname", required=True, help="interface name for attach")
 
     return parser
 

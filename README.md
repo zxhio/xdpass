@@ -116,10 +116,10 @@ python3 scripts/xdpass-cli.py stats
 
 # attachments
 python3 scripts/xdpass-cli.py attachments list
-python3 scripts/xdpass-cli.py attachments create --iface br-xdpass
-python3 scripts/xdpass-cli.py attachments delete 3
-python3 scripts/xdpass-cli.py attach --iface br-xdpass       # 兼容短命令
-python3 scripts/xdpass-cli.py detach --iface br-xdpass       # 兼容短命令
+python3 scripts/xdpass-cli.py attachments create --ifname br-xdpass --xsk
+python3 scripts/xdpass-cli.py attachments delete --ifname br-xdpass
+python3 scripts/xdpass-cli.py attach --ifname br-xdpass      # 兼容短命令
+python3 scripts/xdpass-cli.py detach --ifname br-xdpass      # 兼容短命令
 
 # ruleset
 python3 scripts/xdpass-cli.py ruleset get
@@ -131,11 +131,14 @@ python3 scripts/xdpass-cli.py response-egress get
 python3 scripts/xdpass-cli.py dispatch get
 
 # smoke test
-python3 scripts/xdpass-cli.py smoke
+python3 scripts/xdpass-cli.py smoke --ifname br-xdpass
 
 # 查看所有命令
 python3 scripts/xdpass-cli.py --help
 ```
+
+`attach` 快捷命令默认启用 XSK，适合测试 userspace response。直接使用
+`attachments create` 时如需 userspace response，请显式加 `--xsk`。
 
 典型手动验证流程：
 
@@ -147,7 +150,7 @@ sudo scripts/xdpass-netns.sh reset
 sudo ./build/xdpass-agent
 
 # 3. 运行 smoke test
-python3 scripts/xdpass-cli.py smoke
+python3 scripts/xdpass-cli.py smoke --ifname br-xdpass
 
 # 4. 验证连通性
 sudo scripts/xdpass-netns.sh ping
