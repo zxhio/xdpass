@@ -165,7 +165,7 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 	list := s.attachments.List()
 	rules := s.rulesetRuntime.GetRuleset()
 	return api.StatusResponse{
-		Status:                   "degraded",
+		Status:                   "running",
 		Attachments:              len(list),
 		RulesetLoaded:            len(rules) > 0,
 		Rules:                    len(rules),

@@ -26,7 +26,7 @@ func newMockStore() *mockStore {
 }
 
 func (m *mockStore) Status(_ context.Context) (StatusResponse, error) {
-	return StatusResponse{Status: "degraded", Attachments: len(m.attachments)}, nil
+	return StatusResponse{Status: "running", Attachments: len(m.attachments)}, nil
 }
 
 func (m *mockStore) ListAttachments(_ context.Context) ([]AttachmentResponse, error) {
@@ -188,7 +188,7 @@ func TestStatusEndpoint(t *testing.T) {
 
 	var resp StatusResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Equal(t, "degraded", resp.Status)
+	assert.Equal(t, "running", resp.Status)
 }
 
 func TestErrorFormatIsProblemDetails(t *testing.T) {
