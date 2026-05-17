@@ -15,6 +15,7 @@ import (
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
 	"xdpass/internal/dataplane/bpfgen"
+	"xdpass/internal/dispatch"
 	"xdpass/internal/events"
 	"xdpass/internal/response"
 	"xdpass/internal/ruleset"
@@ -24,21 +25,25 @@ import (
 
 // Store holds all in-memory runtime state.
 type Store struct {
-	mu               sync.RWMutex
-	attachments      *attachment.Runtime
-	rulesetRuntime   *ruleset.Runtime
-	eventStream      *events.Stream
-	responseRuntime  *response.Runtime
-	responseStats    *response.Stats
-	xskRuntime       *xsk.Runtime
-	egressConfigured bool
-	egressIfIndex    uint32
-	egressIfName     string
-	egressVLANMode   string
+	mu                sync.RWMutex
+	attachments       *attachment.Runtime
+	rulesetRuntime    *ruleset.Runtime
+	eventStream       *events.Stream
+	responseRuntime   *response.Runtime
+	responseStats     *response.Stats
+	xskRuntime        *xsk.Runtime
+	dispatchRuntime   *dispatch.Runtime
+	egressConfigured  bool
+	egressIfIndex     uint32
+	egressIfName      string
+	egressVLANMode    string
+	dispatchIfIndex   uint32
+	dispatchIfName    string
+	dispatchQueueSize int
 }
 
 // New creates a new in-memory store.
-func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime, xskRuntime *xsk.Runtime) *Store {
+func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime, xskRuntime *xsk.Runtime, dispatchRuntime *dispatch.Runtime) *Store {
 	var rs *response.Stats
 	if responseRuntime != nil {
 		rs = responseRuntime.Stats()
@@ -50,6 +55,7 @@ func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRu
 		responseRuntime: responseRuntime,
 		responseStats:   rs,
 		xskRuntime:      xskRuntime,
+		dispatchRuntime: dispatchRuntime,
 		egressVLANMode:  "preserve",
 	}
 }
@@ -94,7 +100,7 @@ func (s *Store) xskAfterCreate(att *attachment.Attachment, maps attachment.MapAc
 		}
 		close(envCh)
 	}()
-	s.responseRuntime.StartWorker(att.IfIndex, s.currentEgressConfig(), envCh, sockFD, result.Socket)
+	s.responseRuntime.StartWorker(att.IfIndex, s.currentEgressConfig(), envCh, sockFD, result.Socket, s.dispatchEnqueue)
 	return nil
 }
 
@@ -114,6 +120,17 @@ func (s *Store) xskPreDelete(ifIndex uint32, maps attachment.MapAccessor) {
 		xsksMap = maps.XsksMap()
 	}
 	s.xskRuntime.Stop(xsksMap, ifIndex)
+}
+
+// dispatchEnqueue is called after a successful response to enqueue the original packet for dispatch.
+func (s *Store) dispatchEnqueue(origPkt []byte) {
+	if s.dispatchRuntime == nil {
+		return
+	}
+	// Copy the packet since the original may be reused by the caller.
+	pkt := make([]byte, len(origPkt))
+	copy(pkt, origPkt)
+	s.dispatchRuntime.TryEnqueue(pkt)
 }
 
 func (s *Store) currentEgressConfig() response.EgressConfig {
@@ -153,6 +170,7 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 		RulesetLoaded:            len(rules) > 0,
 		Rules:                    len(rules),
 		ResponseEgressConfigured: s.egressConfigured,
+		DispatchConfigured:       s.dispatchRuntime != nil && s.dispatchRuntime.IsEnabled(),
 	}, nil
 }
 
@@ -305,7 +323,18 @@ func (s *Store) GetStats(_ context.Context) (api.StatsResponse, error) {
 			ErrorPackets:      snap.ErrorPackets,
 		}
 	}
-	resp := stats.SnapshotFromReaders(readers, usStats)
+	var dsStats *stats.DispatchStats
+	if s.dispatchRuntime != nil {
+		snap := s.dispatchRuntime.Stats().Snapshot()
+		dsStats = &stats.DispatchStats{
+			EnqueuePackets:   snap.EnqueuePackets,
+			Packets:          snap.Packets,
+			DroppedPackets:   snap.DroppedPackets,
+			QueueFullPackets: snap.QueueFullPackets,
+			ErrorPackets:     snap.ErrorPackets,
+		}
+	}
+	resp := stats.SnapshotFromReaders(readers, usStats, dsStats)
 	return statsToAPI(resp), nil
 }
 
@@ -492,6 +521,109 @@ func (s *Store) writeTxConfigToAll(cfg bpfgen.XdpassTxConfig) (int, error) {
 	return written, nil
 }
 
+// --- Dispatch ---
+
+func (s *Store) GetDispatch(_ context.Context) (api.DispatchResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.dispatchRuntime == nil || !s.dispatchRuntime.IsEnabled() {
+		return api.DispatchResponse{
+			QueueSize: dispatch.DefaultQueueSize,
+		}, nil
+	}
+
+	// Return the current configured state from the runtime's config.
+	// We store the config separately since the runtime doesn't expose it.
+	return s.currentDispatchResponse(), nil
+}
+
+func (s *Store) currentDispatchResponse() api.DispatchResponse {
+	// The config is stored in the store's fields set during ReplaceDispatch.
+	return api.DispatchResponse{
+		Enabled:    true,
+		Configured: true,
+		IfIndex:    s.dispatchIfIndex,
+		IfName:     s.dispatchIfName,
+		QueueSize:  s.dispatchQueueSize,
+	}
+}
+
+func (s *Store) ReplaceDispatch(_ context.Context, req api.PutDispatchRequest) (api.DispatchResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if req.IfIndex == 0 {
+		return api.DispatchResponse{}, &api.ServiceValidationError{Detail: "ifindex must be greater than 0"}
+	}
+
+	// Validate ifName matches ifIndex when both are provided.
+	if req.IfName != "" {
+		iface, err := net.InterfaceByName(req.IfName)
+		if err != nil {
+			return api.DispatchResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("interface not found: %s", req.IfName)}
+		}
+		if uint32(iface.Index) != req.IfIndex {
+			return api.DispatchResponse{}, &api.ServiceValidationError{Detail: fmt.Sprintf("ifname %s does not match ifindex %d", req.IfName, req.IfIndex)}
+		}
+	}
+
+	opts := dispatch.Options{QueueSize: req.QueueSize}
+	if err := opts.Validate(); err != nil {
+		return api.DispatchResponse{}, &api.ServiceValidationError{Detail: err.Error()}
+	}
+
+	// Stop existing dispatch if running.
+	if s.dispatchRuntime != nil {
+		s.dispatchRuntime.Stop()
+	}
+
+	// Create AF_PACKET sender for the dispatch interface.
+	sender, err := response.NewAFPacketSender(req.IfIndex)
+	if err != nil {
+		return api.DispatchResponse{}, fmt.Errorf("create dispatch sender: %w", err)
+	}
+
+	if err := s.dispatchRuntime.Start(sender, opts); err != nil {
+		sender.Close()
+		return api.DispatchResponse{}, fmt.Errorf("start dispatch: %w", err)
+	}
+
+	s.dispatchIfIndex = req.IfIndex
+	s.dispatchIfName = req.IfName
+	s.dispatchQueueSize = opts.QueueSize
+
+	logrus.WithFields(logrus.Fields{
+		"ifindex":    req.IfIndex,
+		"ifname":     req.IfName,
+		"queue_size": opts.QueueSize,
+	}).Info("Replaced dispatch")
+
+	return api.DispatchResponse{
+		Enabled:    true,
+		Configured: true,
+		IfIndex:    req.IfIndex,
+		IfName:     req.IfName,
+		QueueSize:  opts.QueueSize,
+	}, nil
+}
+
+func (s *Store) DeleteDispatch(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.dispatchRuntime != nil {
+		s.dispatchRuntime.Stop()
+	}
+
+	s.dispatchIfIndex = 0
+	s.dispatchIfName = ""
+	s.dispatchQueueSize = 0
+
+	logrus.Info("Deleted dispatch")
+	return nil
+}
+
 // --- Error helpers ---
 
 // IsValidation checks if an error is a validation error.
@@ -641,6 +773,13 @@ func statsToAPI(resp stats.Response) api.StatsResponse {
 			AFPacketTXPackets: resp.UserspaceResponse.AFPacketTXPackets,
 			ErrorPackets:      resp.UserspaceResponse.ErrorPackets,
 		},
+		Dispatch: api.DispatchStats{
+			EnqueuePackets:   resp.Dispatch.EnqueuePackets,
+			Packets:          resp.Dispatch.Packets,
+			DroppedPackets:   resp.Dispatch.DroppedPackets,
+			QueueFullPackets: resp.Dispatch.QueueFullPackets,
+			ErrorPackets:     resp.Dispatch.ErrorPackets,
+		},
 		Errors: api.ErrorsStats{
 			XDPPackets: resp.Errors.XDPPackets,
 			XSKPackets: resp.Errors.XSKPackets,
@@ -656,4 +795,5 @@ var (
 	_ api.EgressService     = (*Store)(nil)
 	_ api.StatusService     = (*Store)(nil)
 	_ api.EventStreamer     = (*Store)(nil)
+	_ api.DispatchService   = (*Store)(nil)
 )

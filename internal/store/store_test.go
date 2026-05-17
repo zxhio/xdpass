@@ -11,6 +11,7 @@ import (
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
+	"xdpass/internal/dispatch"
 	"xdpass/internal/events"
 	"xdpass/internal/response"
 	"xdpass/internal/xsk"
@@ -35,11 +36,13 @@ func TestDeleteAttachmentWithCallbacksReturns(t *testing.T) {
 	eventStream := events.NewStream(ctx)
 	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 	xskRuntime := xsk.NewRuntime(ctx)
+	dispatchRuntime := dispatch.NewRuntime(ctx)
 	t.Cleanup(responseRuntime.Stop)
 	t.Cleanup(xskRuntime.StopAll)
+	t.Cleanup(dispatchRuntime.Stop)
 	t.Cleanup(eventStream.Stop)
 
-	s := New(attRuntime, eventStream, responseRuntime, xskRuntime)
+	s := New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
 	s.WireXSKCallbacks()
 
 	_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})

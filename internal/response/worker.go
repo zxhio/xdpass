@@ -17,6 +17,10 @@ type Worker struct {
 	xskFD     uint32
 	txWriter  TXWriter
 	log       *logrus.Entry
+
+	// OnResponseSuccess is called after a successful response send.
+	// The original packet data is passed. May be nil.
+	OnResponseSuccess func(origPkt []byte)
 }
 
 // EgressConfig holds the current response egress configuration.
@@ -101,6 +105,10 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 		w.stats.XSKTXPackets.Add(1)
 	} else {
 		w.stats.AFPacketTXPackets.Add(1)
+	}
+
+	if w.OnResponseSuccess != nil {
+		w.OnResponseSuccess(pkt)
 	}
 
 	w.log.WithFields(logrus.Fields{

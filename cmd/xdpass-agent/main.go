@@ -20,6 +20,7 @@ import (
 	"xdpass/internal/attachment"
 	"xdpass/internal/config"
 	"xdpass/internal/dataplane/bpfgen"
+	"xdpass/internal/dispatch"
 	"xdpass/internal/events"
 	"xdpass/internal/logging"
 	"xdpass/internal/response"
@@ -124,7 +125,10 @@ func main() {
 	xskRuntime := xsk.NewRuntime(ctx)
 	defer xskRuntime.StopAll()
 
-	s := store.New(attRuntime, eventStream, responseRuntime, xskRuntime)
+	dispatchRuntime := dispatch.NewRuntime(ctx)
+	defer dispatchRuntime.Stop()
+
+	s := store.New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
 	s.WireXSKCallbacks()
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
@@ -132,6 +136,7 @@ func main() {
 		Ruleset:     s,
 		Stats:       s,
 		Egress:      s,
+		Dispatch:    s,
 		Events:      s,
 	})
 
