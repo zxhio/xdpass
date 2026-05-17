@@ -20,6 +20,7 @@
 - `kernel_response`：内核态响应
 - `xsk_redirect`：原始包重定向到 XSK
 - `userspace_response`：用户态响应
+- `dispatch`：命中包异步分发
 - `errors`：通用错误
 
 ---
@@ -95,6 +96,24 @@
   - 语义：userspace response 构造或发送失败的包数。
   - 统计位置：response 参数解析失败、原始包不兼容、构包失败或 TX backend 失败时累加。
 
+### `dispatch`
+
+- `enqueue_packets`
+  - 语义：userspace response 成功后尝试进入 dispatch 的原始包数。
+  - 统计位置：response worker 准备 enqueue dispatch 前累加。
+- `packets`
+  - 语义：成功通过 dispatch backend 发出的原始包数。
+  - 统计位置：dispatch worker 通过 `AF_PACKET` 成功发送原始 L2 frame 后累加。
+- `dropped_packets`
+  - 语义：dispatch 未执行而被丢弃的原始包数。
+  - 统计位置：dispatch disabled、未配置、sender 不可用或 queue 满时累加。
+- `queue_full_packets`
+  - 语义：dispatch queue 已满导致丢弃的原始包数。
+  - 统计位置：非阻塞 enqueue 发现 queue 满时累加。
+- `error_packets`
+  - 语义：dispatch 执行失败的原始包数。
+  - 统计位置：AF_PACKET send 返回失败时累加。
+
 ### `errors`
 
 - `xdp_packets`
@@ -138,6 +157,13 @@
     "af_packet_tx_packets": 45,
     "error_packets": 3
   },
+  "dispatch": {
+    "enqueue_packets": 125,
+    "packets": 120,
+    "dropped_packets": 5,
+    "queue_full_packets": 2,
+    "error_packets": 1
+  },
   "errors": {
     "xdp_packets": 0,
     "xsk_packets": 1
@@ -151,8 +177,10 @@
 
 - `xsk_redirect.packets` 只表示原始包成功转入 XSK，不表示用户态响应包已经发出
 - `userspace_response.packets` 表示用户态响应包已经成功发出
+- `dispatch.packets` 表示原始命中包已经成功通过 dispatch backend 发出
 - `kernel_response.error_packets` 不包含 userspace response 错误
 - `userspace_response.error_packets` 不包含 kernel response 错误
+- `dispatch.error_packets` 不包含 response 构造或发送错误
 - `errors.*` 是聚合视图，允许和各阶段 `error_packets` 重叠
 - 本文件约束字段语义和累加位置，不约束内部 counter 名称
 - BPF `stats_map` counter 必须以本文件的字段语义和累加位置为基础

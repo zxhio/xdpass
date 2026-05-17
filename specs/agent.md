@@ -23,6 +23,7 @@
 - 当前运行态 `stats` 查询
 - `fast response` 执行
 - `XSK response` 执行
+- userspace path 命中包 dispatch 分发
 
 ---
 
@@ -34,7 +35,7 @@
 - 不保存历史 `stats` / `events`
 - 不读取和管理业务配置
 - 不提供 Web 页面
-- 暂不提供命中包 dispatch / downstream 分发 API
+- 不负责 downstream 服务生命周期
 
 ---
 
@@ -54,7 +55,7 @@
 
 `agent` 只保存当前进程内的运行态状态。
 
-- 进程重启后，`attachments`、`ruleset`、`response` 回到空状态或默认状态
+- 进程重启后，`attachments`、`ruleset`、`response`、`dispatch` 回到空状态或默认状态
 - `agent` 不从本地文件恢复旧运行态
 - `agent` 不主动从外部服务拉取运行态配置
 - 期望运行态由调用方重新下发
@@ -73,7 +74,7 @@
 - `agent/events.md`：事件推送定义
 - `agent/stats.md`：当前运行态 stats 定义
 - `agent/response.md`：response 网口与响应路径定义
-- `agent/dispatch.md`：dispatch 暂缓设计记录，不属于当前 API 合同
+- `agent/dispatch.md`：dispatch 分发资源定义
 - `agent/runtime-lifecycle.md`：运行态生命周期和回滚约定
 - `agent/dataplane.md`：快路径包处理语义
 - `agent/bpf-abi.md`：BPF / Go 内部 ABI

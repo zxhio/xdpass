@@ -89,6 +89,12 @@ XDP attachment 运行态资源。
 
 ## Dispatch
 
-dispatch 当前暂缓设计，不属于现阶段 agent API 合同。
+命中包异步分发配置。
 
-`agent/dispatch.md` 只保留待设计问题和后续方向，不定义可实现路由。
+详细定义见：`agent/dispatch.md`
+
+| 方法 | 路径 | 描述 |
+|---|---|---|
+| `GET` | `/api/v1/dispatch` | 查看 dispatch 配置 |
+| `PUT` | `/api/v1/dispatch` | 整体替换 dispatch 配置 |
+| `DELETE` | `/api/v1/dispatch` | 删除 dispatch 配置并恢复未启用 |

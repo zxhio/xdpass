@@ -6,6 +6,7 @@
 - 外部 HTTP API 不直接暴露 BPF map
 - API 资源见 `ruleset.md`、`events.md`、`stats.md`、`response.md`
 - dataplane 不负责规则 CRUD、规则持久化、历史 stats / events 存储和 downstream 分析服务生命周期
+- dispatch 只在 userspace path 中异步分发原始包，不改变 XDP/BPF 处理语义
 
 dataplane 输入：
 
@@ -28,6 +29,7 @@ dataplane 输出：
 - stats counters
 - rule events
 - XSK 原始包和 metadata
+- userspace path 中可被 dispatch runtime 异步分发的原始包
 
 ---
 
@@ -71,6 +73,18 @@ dataplane 只负责按 action 选择执行路径。
 response action 枚举、路径和失败语义见 `response.md`。
 
 stats、events 的外部语义分别见 `stats.md`、`events.md`。
+
+### Dispatch
+
+dispatch 不属于 XDP/BPF action。
+
+- BPF 不为 dispatch 增加 action code。
+- BPF 不为 dispatch 修改 map layout 或 XSK metadata。
+- kernel response path 不复制或重定向原始包给 dispatch。
+- userspace response worker 收到原始包并成功发送 response 后，可异步 enqueue dispatch。
+- dispatch 发送失败、queue 满或未启用不改变原始 response result。
+
+dispatch API 和运行态语义见 `dispatch.md`。
 
 ---
 
@@ -197,5 +211,7 @@ dataplane 只依赖这些 ABI 能力：
 - rule event ringbuf
 - stats counters
 - XSK metadata
+
+dispatch v1 不增加 BPF ABI 能力。
 
 修改 dataplane 包处理语义时，必须同步检查 `bpf-abi.md` 是否需要变更。

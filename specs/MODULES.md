@@ -15,7 +15,7 @@
 - `ruleset`：agent 当前运行态规则集合，由调用方整体下发
 - `stats`：`agent` 提供当前运行态计数，不保存历史统计
 - `events`：`agent` 推送运行态事件，不保存历史事件
-- `attachments` / `response`：agent 运行态配置
+- `attachments` / `response` / `dispatch`：agent 运行态配置
 
 Web 交互不属于 `agent` 职责范围。
 
@@ -39,7 +39,7 @@ Web 交互不属于 `agent` 职责范围。
 - `agent/events.md`
 - `agent/stats.md`
 - `agent/response.md`
-- `agent/dispatch.md`：暂缓设计，不属于当前 API 合同
+- `agent/dispatch.md`
 - `agent/runtime-lifecycle.md`
 - `agent/dataplane.md`
 - `agent/bpf-abi.md`

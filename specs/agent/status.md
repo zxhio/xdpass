@@ -42,7 +42,8 @@
   "attachments": 1,
   "ruleset_loaded": true,
   "rules": 12,
-  "response_egress_configured": true
+  "response_egress_configured": true,
+  "dispatch_configured": true
 }
 ```
 
@@ -69,3 +70,7 @@
 ### `response_egress_configured`
 
 - 是否已配置 response egress 默认出口
+
+### `dispatch_configured`
+
+- 是否已配置 dispatch

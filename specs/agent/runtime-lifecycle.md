@@ -19,6 +19,7 @@
 - `attachments` 为空
 - `ruleset` 为空
 - `response egress` 为默认同口发送
+- `dispatch` 为未配置、未启用
 - 不主动 attach XDP
 - 不主动加载旧 BPF maps
 - 不主动拉取外部配置
@@ -32,6 +33,7 @@
 - attachments
 - 当前完整 ruleset
 - response egress 配置
+- dispatch 配置和异步 worker
 - 每个 attachment 的 BPF program / map set
 - 每个 attachment 的 XSK runtime
 - 当前进程内 stats 和 event reader
@@ -103,6 +105,31 @@ DELETE response egress：
 - 恢复默认同口发送
 - 将默认 tx config 写入所有 enabled attachment
 
+## dispatch 生命周期
+
+PUT dispatch：
+
+- 校验 ifindex / ifname / queue_size
+- 创建或替换 AF_PACKET sender
+- 创建 bounded dispatch queue
+- 启动或更新 dispatch worker
+- 成功后切换内存配置
+- 任一步失败时保留旧 dispatch 配置和 worker
+
+DELETE dispatch：
+
+- 停止 dispatch worker
+- 清空待分发 queue
+- 释放 AF_PACKET sender
+- 恢复未配置、未启用状态
+
+userspace response worker：
+
+- response 成功后尝试 enqueue dispatch。
+- enqueue 不等待 AF_PACKET 发送完成。
+- queue 满、dispatch disabled、未配置或 sender 不可用时直接丢弃 dispatch packet 并累加 dispatch dropped stats。
+- dispatch 失败不改变 response result/event。
+
 ---
 
 ## 停止
@@ -110,6 +137,7 @@ DELETE response egress：
 进程停止时：
 
 - 停止 event readers
+- 停止 dispatch worker
 - 停止 XSK runtimes
 - 卸载 XDP programs
 - 释放 BPF resources
