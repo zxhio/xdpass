@@ -1569,3 +1569,180 @@ func TestMatchWildcardProtocolWithPort(t *testing.T) {
 	assert.Equal(t, uint32(2), ret)
 	assertStatsSum(t, objs, statMatchHitPackets, 1)
 }
+
+// --- Stage 4: Action path boundary tests ---
+
+func TestActionNoneObserve(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "none"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	// none action: observe + miss_verdict (pass).
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for none action")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+}
+
+func TestActionAlertObserve(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for alert action")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+}
+
+func TestActionNoneObserveDrop(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "none"}},
+	}
+	compileAndWrite(t, objs, rules, "drop")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	// none action with ingress_verdict=drop: observe + miss_verdict (drop).
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for none action with drop verdict")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestActionICMPPortUnreachableKernelFail(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "icmp_port_unreachable"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	// ICMP unreachable goes through kernel response path. Since BPF only implements
+	// TCP reset, non-TCP-reset kernel actions hit the error path: XDP_DROP.
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for ICMP unreachable (not implemented in BPF)")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+}
+
+func TestActionICMPHostUnreachableKernelFail(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "icmp_host_unreachable"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+}
+
+func TestActionICMPAdminProhibitedKernelFail(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "icmp_admin_prohibited"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
+	assertStatsSum(t, objs, statKernelResponsePackets, 1)
+	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+}
+
+func TestActionXSKNoSocket(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// ICMP echo reply -> XSK response path. No XSK socket registered.
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "icmp_echo_reply"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	// XSK redirect without socket: bpf_redirect_map returns != XDP_REDIRECT.
+	// Falls to response_failure_verdict() = XDP_DROP.
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for XSK response without socket")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectPackets, 0)
+}
+
+func TestActionARPReplyXSKNoSocket(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "arp_reply"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
+	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+}
+
+func TestActionUnknownFallback(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// Manually set an unknown action code on a rule.
+	compileAndWrite(t, objs, []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "alert"}},
+	}, "pass")
+
+	// Overwrite slot 0 with an unknown action code (99).
+	setupRule(t, objs, 0, XdpassRuleMeta{
+		RuleId:       1,
+		RequiredMask: condProtoTCP,
+		Action:       99, // unknown
+	})
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	// Unknown action falls through to default -> miss_verdict (pass).
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for unknown action fallback")
+}
