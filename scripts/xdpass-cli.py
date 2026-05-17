@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-xdpass-cli.py — CLI tool for xdpass-agent HTTP API.
+xdpass-cli.py -- CLI for xdpass-agent HTTP API.
 
-All commands call xdpass-agent HTTP API. No direct netns/BPF/XSK/NIC operations.
+All commands call xdpass-agent HTTP API.
+No direct netns / BPF / XSK / NIC operations.
 
 Usage:
-    python3 scripts/xdpass-cli.py health
-    python3 scripts/xdpass-cli.py status
+    python3 scripts/xdpass-cli.py <command> [options]
+    python3 scripts/xdpass-cli.py attachments list
     python3 scripts/xdpass-cli.py attach --iface br-xdpass
-    python3 scripts/xdpass-cli.py detach --iface br-xdpass
-    python3 scripts/xdpass-cli.py ruleset-apply
-    python3 scripts/xdpass-cli.py stats
     python3 scripts/xdpass-cli.py smoke
 """
 
@@ -22,8 +20,19 @@ import urllib.error
 import urllib.request
 
 
-def make_request(addr, method, path, body=None):
-    """Send HTTP request and return (status, body_dict_or_raw)."""
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+def api_request(addr, method, path, body=None):
+    """Send HTTP request to agent API.
+
+    Returns (status_code, body).
+    - 204: body is None.
+    - JSON response: body is dict or list.
+    - Problem Details: body is dict with 'title'/'detail'/'code'.
+    - Connection error: status_code is 0, body is error string.
+    """
     url = addr.rstrip("/") + path
     data = None
     headers = {"Accept": "application/json"}
@@ -35,33 +44,52 @@ def make_request(addr, method, path, body=None):
     try:
         with urllib.request.urlopen(req) as resp:
             raw = resp.read().decode()
-            status = resp.status
+            if not raw:
+                return resp.status, None
             try:
-                return status, json.loads(raw)
+                return resp.status, json.loads(raw)
             except json.JSONDecodeError:
-                return status, raw
+                return resp.status, raw
     except urllib.error.HTTPError as e:
         raw = e.read().decode()
+        if not raw:
+            return e.code, None
         try:
-            resp_body = json.loads(raw)
+            return e.code, json.loads(raw)
         except json.JSONDecodeError:
-            resp_body = raw
-        return e.code, resp_body
+            return e.code, raw
     except urllib.error.URLError as e:
         return 0, str(e.reason)
 
 
-def print_result(method, path, status, body):
-    """Print request result."""
+def print_response(method, path, status, body):
+    """Print API response in a consistent format."""
     print(f"{method} {path} -> {status}")
-    if isinstance(body, dict):
+    if body is None:
+        return
+    if isinstance(body, (dict, list)):
         print(json.dumps(body, indent=2))
-    elif body:
+    else:
         print(body)
 
 
+def print_error(method, path, status, body):
+    """Print API error, extracting Problem Details fields if present."""
+    print(f"{method} {path} -> {status}", file=sys.stderr)
+    if isinstance(body, dict):
+        for key in ("title", "detail", "code"):
+            if key in body:
+                print(f"  {key}: {body[key]}", file=sys.stderr)
+    elif body:
+        print(f"  {body}", file=sys.stderr)
+
+
+def is_success(status):
+    return 200 <= status < 300
+
+
 def resolve_ifindex(iface):
-    """Resolve interface name to ifindex."""
+    """Resolve interface name to ifindex via OS."""
     try:
         return socket.if_nametoindex(iface)
     except OSError:
@@ -69,46 +97,101 @@ def resolve_ifindex(iface):
         sys.exit(1)
 
 
+# ---------------------------------------------------------------------------
+# Command handlers (stubs -- filled in Phase 2-4)
+# ---------------------------------------------------------------------------
+
 def cmd_health(addr, _args):
-    status, body = make_request(addr, "GET", "/api/v1/health")
-    print_result("GET", "/api/v1/health", status, body)
-    return 0 if 200 <= status < 300 else 1
+    method, path = "GET", "/api/v1/health"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
 
 
 def cmd_status(addr, _args):
-    status, body = make_request(addr, "GET", "/api/v1/status")
-    print_result("GET", "/api/v1/status", status, body)
-    return 0 if 200 <= status < 300 else 1
+    method, path = "GET", "/api/v1/status"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
 
 
-def cmd_attach(addr, args):
+def cmd_attachments_list(addr, _args):
+    method, path = "GET", "/api/v1/attachments"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_attachments_get(addr, args):
+    path = f"/api/v1/attachments/{args.ifindex}"
+    method = "GET"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_attachments_create(addr, args):
     ifindex = resolve_ifindex(args.iface)
-    body = {
-        "ifindex": ifindex,
-        "ifname": args.iface,
-        "attach_mode": args.mode,
-    }
-    status, resp = make_request(addr, "POST", "/api/v1/attachments", body)
-    print_result("POST", "/api/v1/attachments", status, resp)
-    return 0 if 200 <= status < 300 else 1
+    body = {"ifindex": ifindex, "attach_mode": args.mode}
+    if args.miss_verdict:
+        body["miss_verdict"] = args.miss_verdict
+    path = "/api/v1/attachments"
+    if args.dry_run:
+        path += "?dry_run=true"
+    method = "POST"
+    status, resp = api_request(addr, method, path, body)
+    if is_success(status):
+        print_response(method, "/api/v1/attachments", status, resp)
+        return 0
+    print_error(method, "/api/v1/attachments", status, resp)
+    return 1
 
 
-def cmd_detach(addr, args):
-    if args.ifindex:
-        ifindex = args.ifindex
-    elif args.iface:
-        ifindex = resolve_ifindex(args.iface)
-    else:
-        print("error: --iface or --ifindex required", file=sys.stderr)
-        return 1
-
-    path = f"/api/v1/attachments/{ifindex}"
-    status, resp = make_request(addr, "DELETE", path)
-    print_result("DELETE", path, status, resp)
-    return 0 if 200 <= status < 300 else 1
+def cmd_attachments_set_enabled(addr, args):
+    path = f"/api/v1/attachments/{args.ifindex}"
+    method = "PATCH"
+    status, body = api_request(addr, method, path, {"enabled": args.enabled})
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
 
 
-def cmd_ruleset_apply(addr, _args):
+def cmd_attachments_delete(addr, args):
+    path = f"/api/v1/attachments/{args.ifindex}"
+    method = "DELETE"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print(f"DELETE {path} -> {status}")
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_ruleset_get(addr, _args):
+    method, path = "GET", "/api/v1/ruleset"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_ruleset_put(addr, args):
     rules = [
         {
             "rule_id": 1,
@@ -123,111 +206,378 @@ def cmd_ruleset_apply(addr, _args):
             "response": {"action": "arp_reply"},
         },
     ]
-    status, resp = make_request(addr, "PUT", "/api/v1/ruleset", {"rules": rules})
-    print_result("PUT", "/api/v1/ruleset", status, resp)
-    return 0 if 200 <= status < 300 else 1
+    path = "/api/v1/ruleset"
+    if args.dry_run:
+        path += "?dry_run=true"
+    method = "PUT"
+    status, body = api_request(addr, method, path, {"rules": rules})
+    if is_success(status):
+        print_response(method, "/api/v1/ruleset", status, body)
+        return 0
+    print_error(method, "/api/v1/ruleset", status, body)
+    return 1
+
+
+def cmd_ruleset_delete(addr, _args):
+    method, path = "DELETE", "/api/v1/ruleset"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print(f"DELETE {path} -> {status}")
+        return 0
+    print_error(method, path, status, body)
+    return 1
 
 
 def cmd_stats(addr, _args):
-    status, body = make_request(addr, "GET", "/api/v1/stats")
-    print_result("GET", "/api/v1/stats", status, body)
-    return 0 if 200 <= status < 300 else 1
+    method, path = "GET", "/api/v1/stats"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
 
+
+def cmd_response_egress_get(addr, _args):
+    method, path = "GET", "/api/v1/response/egress"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_response_egress_put(addr, args):
+    ifindex = resolve_ifindex(args.iface)
+    body = {"ifindex": ifindex}
+    if args.vlan_mode:
+        body["vlan_mode"] = args.vlan_mode
+    method, path = "PUT", "/api/v1/response/egress"
+    status, resp = api_request(addr, method, path, body)
+    if is_success(status):
+        print_response(method, path, status, resp)
+        return 0
+    print_error(method, path, status, resp)
+    return 1
+
+
+def cmd_response_egress_delete(addr, _args):
+    method, path = "DELETE", "/api/v1/response/egress"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print(f"DELETE {path} -> {status}")
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_dispatch_get(addr, _args):
+    method, path = "GET", "/api/v1/dispatch"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print_response(method, path, status, body)
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+def cmd_dispatch_put(addr, args):
+    ifindex = resolve_ifindex(args.iface)
+    body = {"enabled": args.enabled, "ifindex": ifindex}
+    if args.queue_size:
+        body["queue_size"] = args.queue_size
+    method, path = "PUT", "/api/v1/dispatch"
+    status, resp = api_request(addr, method, path, body)
+    if is_success(status):
+        print_response(method, path, status, resp)
+        return 0
+    print_error(method, path, status, resp)
+    return 1
+
+
+def cmd_dispatch_delete(addr, _args):
+    method, path = "DELETE", "/api/v1/dispatch"
+    status, body = api_request(addr, method, path)
+    if is_success(status):
+        print(f"DELETE {path} -> {status}")
+        return 0
+    print_error(method, path, status, body)
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# Compatible aliases (attach / detach / ruleset-apply)
+# ---------------------------------------------------------------------------
+
+def cmd_attach(addr, args):
+    """Alias for 'attachments create'."""
+    return cmd_attachments_create(addr, args)
+
+
+def cmd_detach(addr, args):
+    """Alias for 'attachments delete'."""
+    if args.ifindex:
+        pass
+    elif args.iface:
+        args.ifindex = resolve_ifindex(args.iface)
+    else:
+        print("error: --iface or --ifindex required", file=sys.stderr)
+        return 1
+    return cmd_attachments_delete(addr, args)
+
+
+def cmd_ruleset_apply(addr, args):
+    """Alias for 'ruleset put'."""
+    return cmd_ruleset_put(addr, args)
+
+
+# ---------------------------------------------------------------------------
+# Smoke test
+# ---------------------------------------------------------------------------
 
 def cmd_smoke(addr, args):
-    """Run smoke test: health, status, attach, ruleset-apply, stats."""
+    """Run smoke test against agent API."""
     iface = getattr(args, "iface", None) or "br-xdpass"
+    steps = [
+        ("health", lambda: cmd_health(addr, args)),
+        ("status", lambda: cmd_status(addr, args)),
+        ("attachments create", lambda: _smoke_attach(addr, args, iface)),
+        ("ruleset put", lambda: _smoke_ruleset(addr, args)),
+        ("stats", lambda: cmd_stats(addr, args)),
+    ]
+
     failures = 0
-
     print(f"=== smoke test (addr={addr}, iface={iface}) ===\n")
+    for i, (name, fn) in enumerate(steps, 1):
+        print(f"[{i}/{len(steps)}] {name}")
+        if fn():
+            failures += 1
+            print("  FAIL\n")
+        else:
+            print("  OK\n")
 
-    print("[1/5] health")
-    if cmd_health(addr, args):
-        failures += 1
-        print("  FAIL\n")
-    else:
-        print("  OK\n")
-
-    print("[2/5] status")
-    if cmd_status(addr, args):
-        failures += 1
-        print("  FAIL\n")
-    else:
-        print("  OK\n")
-
-    print("[3/5] attach")
-    args.iface = iface
-    args.mode = "generic"
-    if cmd_attach(addr, args):
-        failures += 1
-        print("  FAIL\n")
-    else:
-        print("  OK\n")
-
-    print("[4/5] ruleset-apply")
-    if cmd_ruleset_apply(addr, args):
-        failures += 1
-        print("  FAIL\n")
-    else:
-        print("  OK\n")
-
-    print("[5/5] stats")
-    if cmd_stats(addr, args):
-        failures += 1
-        print("  FAIL\n")
-    else:
-        print("  OK\n")
-
-    # TODO(phase-02): real response verification
-    # - ping 10.0.1.3 from ns-xdpass1
-    # - verify ARP reply and ICMP echo reply via stats counters
-    # - requires: agent running with XSK enabled, bridge XDP attach
-
-    print(f"=== smoke result: {5 - failures}/5 passed ===")
+    print(f"=== smoke result: {len(steps) - failures}/{len(steps)} passed ===")
     return 1 if failures else 0
 
 
-def main():
-    parser = argparse.ArgumentParser(description="xdpass-agent API CLI")
-    parser.add_argument("--addr", default="http://127.0.0.1:9527",
-                        help="agent API address (default: http://127.0.0.1:9527)")
+def _smoke_attach(addr, args, iface):
+    args.iface = iface
+    args.mode = "generic"
+    args.dry_run = False
+    args.miss_verdict = None
+    return cmd_attachments_create(addr, args)
+
+
+def _smoke_ruleset(addr, args):
+    args.dry_run = False
+    return cmd_ruleset_put(addr, args)
+
+
+# ---------------------------------------------------------------------------
+# argparse
+# ---------------------------------------------------------------------------
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="xdpass-cli",
+        description="CLI for xdpass-agent HTTP API.",
+        epilog="All commands call xdpass-agent HTTP API. "
+               "No direct netns/BPF/XSK/NIC operations.",
+    )
+    parser.add_argument(
+        "--addr", default="http://127.0.0.1:9527",
+        help="agent API address (default: http://127.0.0.1:9527)",
+    )
 
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("health", help="GET /api/v1/health")
-    sub.add_parser("status", help="GET /api/v1/status")
+    # -- basic --
+    sub.add_parser("health", help="GET /api/v1/health  -- process liveness check")
+    sub.add_parser("status", help="GET /api/v1/status  -- runtime overview")
 
-    p_attach = sub.add_parser("attach", help="POST /api/v1/attachments")
+    # -- attachments --
+    att = sub.add_parser("attachments", help="manage XDP attachments")
+    att_sub = att.add_subparsers(dest="att_cmd")
+
+    att_sub.add_parser("list", help="GET /api/v1/attachments")
+
+    p_att_get = att_sub.add_parser("get", help="GET /api/v1/attachments/{ifindex}")
+    p_att_get.add_argument("ifindex", type=int, help="interface index")
+
+    p_att_create = att_sub.add_parser("create", help="POST /api/v1/attachments")
+    p_att_create.add_argument("--iface", required=True, help="interface name")
+    p_att_create.add_argument("--mode", default="generic",
+                              help="attach mode: generic/native/driver (default: generic)")
+    p_att_create.add_argument("--miss-verdict", dest="miss_verdict",
+                              choices=["pass", "drop"], help="miss verdict (default: pass)")
+    p_att_create.add_argument("--dry-run", dest="dry_run", action="store_true",
+                              help="POST /api/v1/attachments?dry_run=true")
+
+    p_att_enable = att_sub.add_parser("set-enabled",
+                                      help="PATCH /api/v1/attachments/{ifindex}")
+    p_att_enable.add_argument("ifindex", type=int, help="interface index")
+    p_att_enable.add_argument("--enabled", type=bool, required=True,
+                              help="true/false")
+
+    p_att_del = att_sub.add_parser("delete", help="DELETE /api/v1/attachments/{ifindex}")
+    p_att_del.add_argument("ifindex", type=int, help="interface index")
+
+    # -- compatible alias: attach --
+    p_attach = sub.add_parser("attach",
+                              help="(alias) POST /api/v1/attachments")
     p_attach.add_argument("--iface", required=True, help="interface name")
-    p_attach.add_argument("--mode", default="generic", help="attach mode (default: generic)")
+    p_attach.add_argument("--mode", default="generic",
+                          help="attach mode (default: generic)")
+    p_attach.add_argument("--dry-run", dest="dry_run", action="store_true",
+                          help="dry-run mode")
+    p_attach.add_argument("--miss-verdict", dest="miss_verdict",
+                          choices=["pass", "drop"], help="miss verdict")
 
-    p_detach = sub.add_parser("detach", help="DELETE /api/v1/attachments/{ifindex}")
+    # -- compatible alias: detach --
+    p_detach = sub.add_parser("detach",
+                              help="(alias) DELETE /api/v1/attachments/{ifindex}")
     p_detach.add_argument("--iface", help="interface name")
     p_detach.add_argument("--ifindex", type=int, help="interface index")
 
-    sub.add_parser("ruleset-apply", help="PUT /api/v1/ruleset with minimal rules")
+    # -- ruleset --
+    rs = sub.add_parser("ruleset", help="manage runtime ruleset")
+    rs_sub = rs.add_subparsers(dest="rs_cmd")
+
+    rs_sub.add_parser("get", help="GET /api/v1/ruleset")
+
+    p_rs_put = rs_sub.add_parser("put", help="PUT /api/v1/ruleset")
+    p_rs_put.add_argument("--dry-run", dest="dry_run", action="store_true",
+                          help="PUT /api/v1/ruleset?dry_run=true")
+
+    rs_sub.add_parser("delete", help="DELETE /api/v1/ruleset")
+
+    # -- compatible alias: ruleset-apply --
+    p_rs_apply = sub.add_parser("ruleset-apply",
+                                help="(alias) PUT /api/v1/ruleset")
+    p_rs_apply.add_argument("--dry-run", dest="dry_run", action="store_true",
+                            help="dry-run mode")
+
+    # -- stats --
     sub.add_parser("stats", help="GET /api/v1/stats")
 
-    p_smoke = sub.add_parser("smoke", help="run full smoke test")
-    p_smoke.add_argument("--iface", default="br-xdpass", help="interface for attach (default: br-xdpass)")
+    # -- response egress --
+    re_eg = sub.add_parser("response-egress", help="manage response egress config")
+    re_sub = re_eg.add_subparsers(dest="re_cmd")
 
+    re_sub.add_parser("get", help="GET /api/v1/response/egress")
+
+    p_re_put = re_sub.add_parser("put", help="PUT /api/v1/response/egress")
+    p_re_put.add_argument("--iface", required=True, help="egress interface name")
+    p_re_put.add_argument("--vlan-mode", dest="vlan_mode",
+                          choices=["preserve", "access"],
+                          help="VLAN mode (default: preserve)")
+
+    re_sub.add_parser("delete", help="DELETE /api/v1/response/egress")
+
+    # -- dispatch --
+    dp = sub.add_parser("dispatch", help="manage dispatch config")
+    dp_sub = dp.add_subparsers(dest="dp_cmd")
+
+    dp_sub.add_parser("get", help="GET /api/v1/dispatch")
+
+    p_dp_put = dp_sub.add_parser("put", help="PUT /api/v1/dispatch")
+    p_dp_put.add_argument("--iface", required=True, help="dispatch interface name")
+    p_dp_put.add_argument("--enabled", type=bool, default=True,
+                          help="enable dispatch (default: true)")
+    p_dp_put.add_argument("--queue-size", dest="queue_size", type=int,
+                          help="dispatch queue size (default: 4096)")
+
+    dp_sub.add_parser("delete", help="DELETE /api/v1/dispatch")
+
+    # -- smoke --
+    p_smoke = sub.add_parser("smoke", help="run smoke test against agent API")
+    p_smoke.add_argument("--iface", default="br-xdpass",
+                         help="interface for attach (default: br-xdpass)")
+
+    return parser
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
+COMMANDS = {
+    "health": cmd_health,
+    "status": cmd_status,
+    "attachments": None,
+    "attach": cmd_attach,
+    "detach": cmd_detach,
+    "ruleset": None,
+    "ruleset-apply": cmd_ruleset_apply,
+    "stats": cmd_stats,
+    "response-egress": None,
+    "dispatch": None,
+    "smoke": cmd_smoke,
+}
+
+ATTACHMENTS_COMMANDS = {
+    "list": cmd_attachments_list,
+    "get": cmd_attachments_get,
+    "create": cmd_attachments_create,
+    "set-enabled": cmd_attachments_set_enabled,
+    "delete": cmd_attachments_delete,
+}
+
+RULESET_COMMANDS = {
+    "get": cmd_ruleset_get,
+    "put": cmd_ruleset_put,
+    "delete": cmd_ruleset_delete,
+}
+
+RESPONSE_EGRESS_COMMANDS = {
+    "get": cmd_response_egress_get,
+    "put": cmd_response_egress_put,
+    "delete": cmd_response_egress_delete,
+}
+
+DISPATCH_COMMANDS = {
+    "get": cmd_dispatch_get,
+    "put": cmd_dispatch_put,
+    "delete": cmd_dispatch_delete,
+}
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         return 1
 
-    handlers = {
-        "health": cmd_health,
-        "status": cmd_status,
-        "attach": cmd_attach,
-        "detach": cmd_detach,
-        "ruleset-apply": cmd_ruleset_apply,
-        "stats": cmd_stats,
-        "smoke": cmd_smoke,
-    }
+    addr = args.addr
 
-    return handlers[args.command](args.addr, args)
+    if args.command in ("attachments",):
+        if not args.att_cmd:
+            parser.parse_args([args.command, "--help"])
+            return 1
+        return ATTACHMENTS_COMMANDS[args.att_cmd](addr, args)
+
+    if args.command in ("ruleset",):
+        if not args.rs_cmd:
+            parser.parse_args([args.command, "--help"])
+            return 1
+        return RULESET_COMMANDS[args.rs_cmd](addr, args)
+
+    if args.command in ("response-egress",):
+        if not args.re_cmd:
+            parser.parse_args([args.command, "--help"])
+            return 1
+        return RESPONSE_EGRESS_COMMANDS[args.re_cmd](addr, args)
+
+    if args.command in ("dispatch",):
+        if not args.dp_cmd:
+            parser.parse_args([args.command, "--help"])
+            return 1
+        return DISPATCH_COMMANDS[args.dp_cmd](addr, args)
+
+    return COMMANDS[args.command](addr, args)
 
 
 if __name__ == "__main__":

@@ -102,23 +102,39 @@ sudo scripts/xdpass-netns.sh status
 sudo scripts/xdpass-netns.sh cleanup
 ```
 
-## API CLI smoke test
+## CLI
 
-提供 `scripts/xdpass-cli.py` 封装常用 API 调用，无需手写 curl。
+`scripts/xdpass-cli.py` 封装 agent HTTP API 调用，无需手写 curl。所有命令通过 xdpass-agent HTTP API 实现，不直接操作 netns、BPF、XSK 或网卡。
 
 依赖 Python 3 标准库，无需安装第三方包。
 
 ```bash
-# 单个命令
+# 基础命令
 python3 scripts/xdpass-cli.py health
 python3 scripts/xdpass-cli.py status
-python3 scripts/xdpass-cli.py attach --iface br-xdpass
-python3 scripts/xdpass-cli.py detach --iface br-xdpass
-python3 scripts/xdpass-cli.py ruleset-apply
 python3 scripts/xdpass-cli.py stats
 
-# 完整 smoke test（默认 attach 到 br-xdpass）
+# attachments
+python3 scripts/xdpass-cli.py attachments list
+python3 scripts/xdpass-cli.py attachments create --iface br-xdpass
+python3 scripts/xdpass-cli.py attachments delete 3
+python3 scripts/xdpass-cli.py attach --iface br-xdpass       # 兼容短命令
+python3 scripts/xdpass-cli.py detach --iface br-xdpass       # 兼容短命令
+
+# ruleset
+python3 scripts/xdpass-cli.py ruleset get
+python3 scripts/xdpass-cli.py ruleset put
+python3 scripts/xdpass-cli.py ruleset-apply                  # 兼容短命令
+
+# response egress / dispatch
+python3 scripts/xdpass-cli.py response-egress get
+python3 scripts/xdpass-cli.py dispatch get
+
+# smoke test
 python3 scripts/xdpass-cli.py smoke
+
+# 查看所有命令
+python3 scripts/xdpass-cli.py --help
 ```
 
 典型手动验证流程：
@@ -130,7 +146,7 @@ sudo scripts/xdpass-netns.sh reset
 # 2. 启动 agent（另一个终端）
 sudo ./build/xdpass-agent
 
-# 3. 运行 API smoke test
+# 3. 运行 smoke test
 python3 scripts/xdpass-cli.py smoke
 
 # 4. 验证连通性
