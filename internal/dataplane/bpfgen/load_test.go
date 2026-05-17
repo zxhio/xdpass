@@ -1746,3 +1746,235 @@ func TestActionUnknownFallback(t *testing.T) {
 	// Unknown action falls through to default -> miss_verdict (pass).
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for unknown action fallback")
 }
+
+// --- Stage 5: Match benchmarks ---
+
+// benchmarkSetup holds pre-compiled state for match benchmarks.
+type benchmarkSetup struct {
+	objs *XdpassObjects
+	pkt  []byte
+}
+
+func newBenchmarkSetup(b *testing.B, rules []ruleset.Rule, ingressVerdict string, pkt []byte) *benchmarkSetup {
+	b.Helper()
+	removeMemlockB(b)
+	objs := loadObjectsB(b)
+	compileAndWriteB(b, objs, rules, ingressVerdict)
+	return &benchmarkSetup{objs: objs, pkt: pkt}
+}
+
+func removeMemlockB(b *testing.B) {
+	b.Helper()
+	if err := rlimit.RemoveMemlock(); err != nil {
+		b.Fatalf("remove memlock: %v", err)
+	}
+}
+
+func loadObjectsB(b *testing.B) *XdpassObjects {
+	b.Helper()
+	var objs XdpassObjects
+	if err := LoadXdpassObjects(&objs, &ebpf.CollectionOptions{
+		Programs: ebpf.ProgramOptions{
+			LogLevel:     ebpf.LogLevelBranch | ebpf.LogLevelStats,
+			LogSizeStart: 16 * 1024 * 1024,
+		},
+	}); err != nil {
+		b.Fatalf("load xdpass objects: %+v", err)
+	}
+	b.Cleanup(func() { objs.Close() })
+	return &objs
+}
+
+func compileAndWriteB(b *testing.B, objs *XdpassObjects, rules []ruleset.Rule, ingressVerdict string) {
+	b.Helper()
+	compiled, err := ruleset.Compile(rules, ingressVerdict)
+	if err != nil {
+		b.Fatalf("compile: %v", err)
+	}
+	maps := &objsMapAccessor{maps: &objs.XdpassMaps}
+	if err := ruleset.WriteMaps(maps, compiled); err != nil {
+		b.Fatalf("write maps: %v", err)
+	}
+}
+
+func skipUnlessBPF_b(b *testing.B) {
+	b.Helper()
+	if os.Getenv("XDPASS_RUN_BPF_TESTS") != "1" {
+		b.Skip("set XDPASS_RUN_BPF_TESTS=1 to run BPF benchmarks")
+	}
+}
+
+func BenchmarkMatchEmptyRuleset(b *testing.B) {
+	skipUnlessBPF_b(b)
+	s := newBenchmarkSetup(b, nil, "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchSingleWildcard(b *testing.B) {
+	skipUnlessBPF_b(b)
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchDstPortHit(b *testing.B) {
+	skipUnlessBPF_b(b)
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst port 80
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchDstPortMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{443}}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst port 80, rule wants 443
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchCIDRHit(b *testing.B) {
+	skipUnlessBPF_b(b)
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"192.168.1.0/24"}}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst 192.168.1.1
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchCIDRMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // dst 192.168.1.1
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatchMixedRules(b *testing.B) {
+	skipUnlessBPF_b(b)
+	// Mix of protocol, port, and CIDR rules. The packet matches rule 3 (port 80).
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "udp", DstPorts: []uint16{53}}, Response: ruleset.Response{Action: "none"}},
+		{RuleID: 2, Priority: 20, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "none"}},
+		{RuleID: 3, Priority: 30, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "none"}},
+		{RuleID: 4, Priority: 40, Match: ruleset.Match{Protocol: "icmp"}, Response: ruleset.Response{Action: "none"}},
+		{RuleID: 5, Priority: 50, Match: ruleset.Match{Protocol: "arp"}, Response: ruleset.Response{Action: "none"}},
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+// generateRules creates N rules with the last one matching on dst port 80.
+func generateRules(n int) []ruleset.Rule {
+	rules := make([]ruleset.Rule, n)
+	for i := range n - 1 {
+		rules[i] = ruleset.Rule{
+			RuleID:   uint32(i + 1),
+			Priority: uint32((i + 1) * 10),
+			Match:    ruleset.Match{Protocol: "tcp", DstPorts: []uint16{uint16(1000 + i)}},
+			Response: ruleset.Response{Action: "none"},
+		}
+	}
+	// Last rule matches port 80.
+	rules[n-1] = ruleset.Rule{
+		RuleID:   uint32(n),
+		Priority: uint32(n * 10),
+		Match:    ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}},
+		Response: ruleset.Response{Action: "none"},
+	}
+	return rules
+}
+
+func BenchmarkMatch1Rule(b *testing.B) {
+	skipUnlessBPF_b(b)
+	s := newBenchmarkSetup(b, generateRules(1), "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatch10Rules(b *testing.B) {
+	skipUnlessBPF_b(b)
+	s := newBenchmarkSetup(b, generateRules(10), "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatch100Rules(b *testing.B) {
+	skipUnlessBPF_b(b)
+	s := newBenchmarkSetup(b, generateRules(100), "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatch512RulesLateHit(b *testing.B) {
+	skipUnlessBPF_b(b)
+	// 512 rules, last one matches. Worst-case: must scan all slots.
+	s := newBenchmarkSetup(b, generateRules(512), "pass", testPacket())
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
+
+func BenchmarkMatch512RulesMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	// 512 rules, none match the packet (all on different ports).
+	rules := make([]ruleset.Rule, 512)
+	for i := range 512 {
+		rules[i] = ruleset.Rule{
+			RuleID:   uint32(i + 1),
+			Priority: uint32((i + 1) * 10),
+			Match:    ruleset.Match{Protocol: "tcp", DstPorts: []uint16{uint16(1000 + i)}},
+			Response: ruleset.Response{Action: "none"},
+		}
+	}
+	s := newBenchmarkSetup(b, rules, "pass", testPacket()) // port 80, no rule matches
+	b.ResetTimer()
+	b.ReportAllocs()
+	for range b.N {
+		s.objs.XdpassProg.Test(s.pkt)
+	}
+}
