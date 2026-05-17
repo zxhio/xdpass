@@ -13,6 +13,9 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xdpass/internal/attachment"
+	"xdpass/internal/ruleset"
 )
 
 func skipUnlessBPF(t *testing.T) {
@@ -357,6 +360,34 @@ func testARPPacket() []byte {
 func setupTxConfig(t *testing.T, objs *XdpassObjects, cfg XdpassTxConfig) {
 	t.Helper()
 	require.NoError(t, objs.TxConfigMap.Put(uint32(0), cfg))
+}
+
+// objsMapAccessor adapts XdpassMaps to attachment.MapAccessor for ruleset.WriteMaps.
+type objsMapAccessor struct {
+	maps *XdpassMaps
+}
+
+func (o *objsMapAccessor) RuleIndexMap() *ebpf.Map    { return o.maps.RuleIndexMap }
+func (o *objsMapAccessor) GlobalCfgMap() *ebpf.Map    { return o.maps.GlobalCfgMap }
+func (o *objsMapAccessor) TxConfigMap() *ebpf.Map     { return o.maps.TxConfigMap }
+func (o *objsMapAccessor) SrcPortIndexMap() *ebpf.Map { return o.maps.SrcPortIndexMap }
+func (o *objsMapAccessor) DstPortIndexMap() *ebpf.Map { return o.maps.DstPortIndexMap }
+func (o *objsMapAccessor) VlanIndexMap() *ebpf.Map    { return o.maps.VlanIndexMap }
+func (o *objsMapAccessor) SrcPrefixLpmMap() *ebpf.Map { return o.maps.SrcPrefixLpmMap }
+func (o *objsMapAccessor) DstPrefixLpmMap() *ebpf.Map { return o.maps.DstPrefixLpmMap }
+func (o *objsMapAccessor) EventRingbufMap() *ebpf.Map { return o.maps.EventRingbuf }
+func (o *objsMapAccessor) StatsMap() *ebpf.Map        { return o.maps.StatsMap }
+func (o *objsMapAccessor) XsksMap() *ebpf.Map         { return o.maps.XsksMap }
+
+var _ attachment.MapAccessor = (*objsMapAccessor)(nil)
+
+// compileAndWrite compiles rules and writes them to BPF maps via the MapAccessor.
+func compileAndWrite(t *testing.T, objs *XdpassObjects, rules []ruleset.Rule, ingressVerdict string) {
+	t.Helper()
+	compiled, err := ruleset.Compile(rules, ingressVerdict)
+	require.NoError(t, err, "compile ruleset")
+	maps := &objsMapAccessor{maps: &objs.XdpassMaps}
+	require.NoError(t, ruleset.WriteMaps(maps, compiled), "write maps")
 }
 
 // --- Spec tests ---
@@ -1153,4 +1184,388 @@ func TestParseMalformedARPShort(t *testing.T) {
 
 	assertStatsSum(t, objs, statIngressPackets, 1)
 	assertStatsSum(t, objs, statParseErrorPackets, 1)
+}
+
+// --- Stage 3: Ruleset match boundary tests ---
+
+func TestMatchProtocolTCP(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "none"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // TCP SYN
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for none action")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchProtocolTCPMiss(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "none"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testUDPPacket() // UDP, not TCP
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for miss")
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, statMatchHitPackets, 0)
+}
+
+func TestMatchProtocolUDP(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "udp"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testUDPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for alert action")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchProtocolICMP(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "icmp"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testICMPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchProtocolARP(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testARPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchDstPort(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // dst port 80
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchDstPortMiss(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{443}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // dst port 80, rule wants 443
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, statMatchHitPackets, 0)
+}
+
+func TestMatchSrcPort(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", SrcPorts: []uint16{12345}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // src port 12345
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchCIDRDstPrefix(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"192.168.1.0/24"}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // dst 192.168.1.1
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchCIDRDstPrefixMiss(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // dst 192.168.1.1, rule wants 10.0.0.0/8
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+}
+
+func TestMatchCIDRSrcPrefix(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", SrcCIDRs: []string{"10.0.0.0/8"}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // src 10.0.0.1
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchVLAN(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", VLANS: []uint16{100}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testVlanPacket() // VLAN 100
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchVLANMiss(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", VLANS: []uint16{200}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testVlanPacket() // VLAN 100, rule wants 200
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+}
+
+func TestMatchTCPSynFlag(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	synTrue := true
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{
+			Protocol: "tcp",
+			TCPFlags: &ruleset.TCPFlags{SYN: &synTrue},
+		}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // TCP SYN
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchTCPSynFlagMiss(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	synTrue := true
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{
+			Protocol: "tcp",
+			TCPFlags: &ruleset.TCPFlags{SYN: &synTrue},
+		}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	pkt[47] = 0x10 // TCP flags: ACK only (offset 14+20+13=47)
+
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchMissPackets, 1)
+}
+
+func TestMatchICMPEchoRequest(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "icmp", ICMPType: "echo_request"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testICMPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchARPRequest(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp", ARPOP: "request"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testARPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchPrioritySlotOrder(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// Two rules both match TCP. Lower priority number = higher priority = earlier slot.
+	// Rule 2 (priority 5) goes to slot 0, rule 1 (priority 10) goes to slot 1.
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "none"}},
+		{RuleID: 2, Priority: 5, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchWildcardRule(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// Wildcard rule: no match conditions, matches everything.
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+
+	pkt = testUDPPacket()
+	ret, _, err = objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 2)
+}
+
+func TestMatchOptionalBitmap(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// Rule: protocol=tcp, dst_port=80. No src_port, no VLAN, no CIDR.
+	// Optional bitmaps should allow this rule to match.
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // TCP, dst port 80, no VLAN
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+}
+
+func TestMatchWildcardProtocolWithPort(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	// Rule with port condition but no protocol: matches any protocol with that port.
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testPacket() // TCP dst port 80
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
 }
