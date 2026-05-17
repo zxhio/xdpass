@@ -44,6 +44,7 @@ func (rt *Runtime) Start(sender Sender, opts Options) error {
 
 	rt.sender = sender
 	rt.queue = make(chan []byte, opts.QueueSize)
+	rt.done = make(chan struct{})
 	rt.enabled = true
 
 	go rt.run(rt.ctx)

@@ -389,6 +389,88 @@ func (m *mockEgressValidator) ReplaceEgress(_ context.Context, ifIndex uint32, _
 	return EgressResponse{Configured: true, IfIndex: ifIndex, VLANMode: vlanMode}, nil
 }
 
+func TestDispatchCRUD(t *testing.T) {
+	router := newTestRouter()
+
+	// GET default (not configured)
+	w := doRequest(router, "GET", "/api/v1/dispatch", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	var getResp DispatchResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.False(t, getResp.Configured)
+	assert.False(t, getResp.Enabled)
+	assert.Equal(t, 4096, getResp.QueueSize)
+
+	// PUT
+	w2 := doRequest(router, "PUT", "/api/v1/dispatch", PutDispatchRequest{
+		Enabled:   true,
+		IfIndex:   3,
+		QueueSize: 1024,
+	})
+	require.Equal(t, http.StatusOK, w2.Code)
+	var putResp DispatchResponse
+	require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &putResp))
+	assert.True(t, putResp.Configured)
+	assert.True(t, putResp.Enabled)
+	assert.Equal(t, uint32(3), putResp.IfIndex)
+	assert.Equal(t, 1024, putResp.QueueSize)
+
+	// GET after PUT
+	w3 := doRequest(router, "GET", "/api/v1/dispatch", nil)
+	require.Equal(t, http.StatusOK, w3.Code)
+	var getResp2 DispatchResponse
+	require.NoError(t, json.Unmarshal(w3.Body.Bytes(), &getResp2))
+	assert.True(t, getResp2.Configured)
+	assert.Equal(t, uint32(3), getResp2.IfIndex)
+
+	// DELETE
+	w4 := doRequest(router, "DELETE", "/api/v1/dispatch", nil)
+	assert.Equal(t, http.StatusNoContent, w4.Code)
+
+	// GET after DELETE
+	w5 := doRequest(router, "GET", "/api/v1/dispatch", nil)
+	require.Equal(t, http.StatusOK, w5.Code)
+	var getResp3 DispatchResponse
+	require.NoError(t, json.Unmarshal(w5.Body.Bytes(), &getResp3))
+	assert.False(t, getResp3.Configured)
+}
+
+func TestDispatchPutIfIndexZero(t *testing.T) {
+	w := doRequest(newTestRouter(), "PUT", "/api/v1/dispatch", PutDispatchRequest{
+		Enabled: true,
+	})
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp ProblemDetails
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, CodeValidationFailed, resp.Code)
+}
+
+func TestDispatchDeleteIdempotent(t *testing.T) {
+	router := newTestRouter()
+	w := doRequest(router, "DELETE", "/api/v1/dispatch", nil)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestDispatchStatsInStatsResponse(t *testing.T) {
+	w := doRequest(newTestRouter(), "GET", "/api/v1/stats", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp StatsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, uint64(0), resp.Dispatch.EnqueuePackets)
+	assert.Equal(t, uint64(0), resp.Dispatch.Packets)
+	assert.Equal(t, uint64(0), resp.Dispatch.DroppedPackets)
+}
+
+func TestDispatchConfiguredInStatus(t *testing.T) {
+	w := doRequest(newTestRouter(), "GET", "/api/v1/status", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp StatusResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp.DispatchConfigured)
+}
+
 func TestAllRoutesRegistered(t *testing.T) {
 	router := newTestRouter()
 	routes := []struct {
