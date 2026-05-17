@@ -3,11 +3,18 @@ package attachment
 
 import (
 	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/sirupsen/logrus"
+
+	"xdpass/internal/xsk"
 )
 
 // LoadFunc loads a BPF object for an attachment.
@@ -15,6 +22,9 @@ type LoadFunc func() (*ebpf.Collection, error)
 
 // AttachXDPFunc attaches an XDP program to an interface.
 type AttachXDPFunc func(prog *ebpf.Program, ifindex int, attachMode string) (link.Link, error)
+
+// QueueProbeFunc returns the maximum RX queue count supported by an interface.
+type QueueProbeFunc func(ifIndex uint32) (uint32, error)
 
 // bpfResources holds the BPF resources for a single attachment.
 type bpfResources struct {
@@ -41,6 +51,7 @@ func (b *bpfResources) closeAll() {
 type Runtime struct {
 	loadBPF     LoadFunc
 	attachXDP   AttachXDPFunc
+	queueProbe  QueueProbeFunc
 	mu          sync.Mutex
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
@@ -62,9 +73,15 @@ func New(loadBPF LoadFunc, attachXDP AttachXDPFunc) *Runtime {
 	return &Runtime{
 		loadBPF:     loadBPF,
 		attachXDP:   attachXDP,
+		queueProbe:  probeMaxRXQueues,
 		attachments: make(map[uint32]*Attachment),
 		resources:   make(map[uint32]*bpfResources),
 	}
+}
+
+// SetQueueProbe overrides the RX queue probe. It is intended for tests.
+func (r *Runtime) SetQueueProbe(fn QueueProbeFunc) {
+	r.queueProbe = fn
 }
 
 var validAttachModes = map[string]bool{"generic": true, "native": true, "driver": true}
@@ -82,6 +99,17 @@ func (r *Runtime) normalize(req *Request) {
 	if req.XSK == nil {
 		req.XSK = &XSKConfig{}
 	}
+	if req.XSK.Enabled {
+		req.XSK.UMEM = withDefaultUMEM(req.XSK.UMEM)
+	}
+	maxRXQueues, err := r.queueProbe(req.IfIndex)
+	if err != nil {
+		maxRXQueues = 0
+	}
+	req.Channels.MaxRxQueueCount = maxRXQueues
+	if req.XSK.Enabled && len(req.XSK.Queues) == 0 {
+		req.XSK.Queues = defaultXSKQueues(req.Channels.RxQueueCount, maxRXQueues)
+	}
 }
 
 func (r *Runtime) validate(req *Request) error {
@@ -95,10 +123,17 @@ func (r *Runtime) validate(req *Request) error {
 		return &ValidationError{Detail: fmt.Sprintf("invalid miss_verdict: %s", req.MissVerdict)}
 	}
 	if req.XSK != nil && req.XSK.Enabled {
+		if err := req.XSK.UMEM.Validate(); err != nil {
+			return &ValidationError{Detail: err.Error()}
+		}
+		enabledQueues := enabledRXQueues(req.Channels.RxQueueCount, req.Channels.MaxRxQueueCount)
 		seen := make(map[uint32]bool)
 		for _, q := range req.XSK.Queues {
 			if seen[q] {
 				return &ValidationError{Detail: fmt.Sprintf("duplicate xsk queue: %d", q)}
+			}
+			if enabledQueues > 0 && q >= enabledQueues {
+				return &ValidationError{Detail: fmt.Sprintf("xsk queue %d exceeds enabled rx queues %d", q, enabledQueues)}
 			}
 			seen[q] = true
 		}
@@ -106,24 +141,28 @@ func (r *Runtime) validate(req *Request) error {
 	return nil
 }
 
-func (r *Runtime) buildResponse(req *Request) *Attachment {
-	channels := ChannelsConfig{RxQueueCount: req.Channels.RxQueueCount}
+func (r *Runtime) buildAttachment(req *Request, programID uint32, mapSetID string) *Attachment {
+	channels := ChannelsConfig{
+		RxQueueCount:    req.Channels.RxQueueCount,
+		MaxRxQueueCount: req.Channels.MaxRxQueueCount,
+	}
 
 	var xskCfg XSKConfig
 	if req.XSK.Enabled {
 		queues := make([]uint32, len(req.XSK.Queues))
 		copy(queues, req.XSK.Queues)
-		xskCfg = XSKConfig{Enabled: true, Queues: queues}
+		xskCfg = XSKConfig{Enabled: true, Queues: queues, UMEM: req.XSK.UMEM}
 	}
 
 	return &Attachment{
 		IfIndex:     req.IfIndex,
-		IfName:      req.IfName,
 		AttachMode:  req.AttachMode,
 		Enabled:     true,
 		MissVerdict: req.MissVerdict,
 		Channels:    channels,
 		XSK:         xskCfg,
+		ProgramID:   programID,
+		MapSetID:    mapSetID,
 	}
 }
 
@@ -133,7 +172,7 @@ func (r *Runtime) DryRun(req *Request) (*Attachment, error) {
 	if err := r.validate(req); err != nil {
 		return nil, err
 	}
-	return r.buildResponse(req), nil
+	return r.buildAttachment(req, 0, ""), nil
 }
 
 // Create validates, loads BPF, attaches XDP, and saves the attachment.
@@ -163,7 +202,8 @@ func (r *Runtime) Create(req *Request) (*Attachment, error) {
 		return nil, fmt.Errorf("attach xdp: %w", err)
 	}
 
-	att := r.buildResponse(req)
+	programID := programID(coll.Programs["xdpass_prog"])
+	att := r.buildAttachment(req, programID, fmt.Sprintf("ifindex-%d", req.IfIndex))
 	r.attachments[req.IfIndex] = att
 	r.resources[req.IfIndex] = &bpfResources{coll: coll, link: xdpLink}
 
@@ -235,6 +275,7 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 		}
 		res.link = xdpLink
 		att.Enabled = true
+		att.ProgramID = programID(prog)
 
 		// Start XSK if enabled and callback is set.
 		if att.XSK.Enabled && r.afterPatch != nil {
@@ -255,6 +296,7 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 		// Detach XDP, keep BPF object loaded for potential re-enable.
 		res.closeLink()
 		att.Enabled = false
+		att.ProgramID = 0
 		logrus.WithField("ifindex", ifIndex).Info("Attachment disabled")
 	}
 
@@ -397,3 +439,89 @@ func (c *collMapAccessor) DstPrefixLpmMap() *ebpf.Map { return c.maps["dst_prefi
 func (c *collMapAccessor) EventRingbufMap() *ebpf.Map { return c.maps["event_ringbuf"] }
 func (c *collMapAccessor) StatsMap() *ebpf.Map        { return c.maps["stats_map"] }
 func (c *collMapAccessor) XsksMap() *ebpf.Map         { return c.maps["xsks_map"] }
+
+func programID(prog *ebpf.Program) uint32 {
+	if prog == nil {
+		return 0
+	}
+	info, err := prog.Info()
+	if err != nil {
+		return 0
+	}
+	id, ok := info.ID()
+	if !ok {
+		return 0
+	}
+	return uint32(id)
+}
+
+func defaultXSKQueues(rxQueueCount, maxRXQueueCount uint32) []uint32 {
+	count := enabledRXQueues(rxQueueCount, maxRXQueueCount)
+	if count == 0 {
+		count = 1
+	}
+	queues := make([]uint32, count)
+	for i := range queues {
+		queues[i] = uint32(i)
+	}
+	return queues
+}
+
+func enabledRXQueues(rxQueueCount, maxRXQueueCount uint32) uint32 {
+	if rxQueueCount > 0 {
+		return rxQueueCount
+	}
+	return maxRXQueueCount
+}
+
+func withDefaultUMEM(opts xsk.Options) xsk.Options {
+	defaults := xsk.DefaultOptions()
+	if opts.FrameSize == 0 {
+		opts.FrameSize = defaults.FrameSize
+	}
+	if opts.FrameCount == 0 {
+		opts.FrameCount = defaults.FrameCount
+	}
+	if opts.FillRingSize == 0 {
+		opts.FillRingSize = defaults.FillRingSize
+	}
+	if opts.CompletionRingSize == 0 {
+		opts.CompletionRingSize = defaults.CompletionRingSize
+	}
+	if opts.RXRingSize == 0 {
+		opts.RXRingSize = defaults.RXRingSize
+	}
+	if opts.TXRingSize == 0 {
+		opts.TXRingSize = defaults.TXRingSize
+	}
+	if opts.TXFrameReserve == 0 {
+		opts.TXFrameReserve = defaults.TXFrameReserve
+	}
+	return opts
+}
+
+func probeMaxRXQueues(ifIndex uint32) (uint32, error) {
+	iface, err := net.InterfaceByIndex(int(ifIndex))
+	if err != nil {
+		return 0, err
+	}
+	entries, err := os.ReadDir(filepath.Join("/sys/class/net", iface.Name, "queues"))
+	if err != nil {
+		return 0, err
+	}
+	var count uint32
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "rx-") {
+			continue
+		}
+		queueID, err := strconv.ParseUint(strings.TrimPrefix(name, "rx-"), 10, 32)
+		if err != nil {
+			continue
+		}
+		if next := uint32(queueID) + 1; next > count {
+			count = next
+		}
+	}
+	return count, nil
+}

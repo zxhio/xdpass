@@ -70,14 +70,14 @@ func handleCreateAttachment(svc AttachmentService) http.HandlerFunc {
 			return
 		}
 
-		if req.IfIndex == 0 {
-			writeValidationFailed(w, "ifindex must be greater than 0")
-			return
-		}
-
 		if r.URL.Query().Get("dry_run") == "true" {
 			resp, err := svc.DryRunAttachment(r.Context(), req)
 			if err != nil {
+				var validationErr *ServiceValidationError
+				if errors.As(err, &validationErr) {
+					writeValidationFailed(w, validationErr.Detail)
+					return
+				}
 				writeValidationFailed(w, err.Error())
 				return
 			}
@@ -87,6 +87,16 @@ func handleCreateAttachment(svc AttachmentService) http.HandlerFunc {
 
 		resp, err := svc.CreateAttachment(r.Context(), req)
 		if err != nil {
+			var validationErr *ServiceValidationError
+			if errors.As(err, &validationErr) {
+				writeValidationFailed(w, validationErr.Detail)
+				return
+			}
+			if isRuntimeFailed(err) {
+				logrus.WithError(err).Error("Fail to create attachment")
+				writeRuntimeFailed(w, err.Error())
+				return
+			}
 			writeConflict(w, err.Error())
 			return
 		}
@@ -363,5 +373,9 @@ func parseIfIndex(s string) (uint32, error) {
 
 func isRuntimeFailed(err error) bool {
 	msg := err.Error()
-	return strings.Contains(msg, "write maps") || strings.Contains(msg, "clear maps")
+	return strings.Contains(msg, "write maps") ||
+		strings.Contains(msg, "clear maps") ||
+		strings.Contains(msg, "load bpf") ||
+		strings.Contains(msg, "attach xdp") ||
+		strings.Contains(msg, "xsk start")
 }

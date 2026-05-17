@@ -8,6 +8,8 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xdpass/internal/xsk"
 )
 
 func mockLoadBPF() (*ebpf.Collection, error) {
@@ -22,7 +24,9 @@ func mockAttachXDP(_ *ebpf.Program, _ int, _ string) (link.Link, error) {
 }
 
 func newTestRuntime() *Runtime {
-	return New(mockLoadBPF, mockAttachXDP)
+	rt := New(mockLoadBPF, mockAttachXDP)
+	rt.SetQueueProbe(func(uint32) (uint32, error) { return 2, nil })
+	return rt
 }
 
 func TestDryRunDoesNotPersist(t *testing.T) {
@@ -105,6 +109,31 @@ func TestXSKConfigPreserved(t *testing.T) {
 	assert.Equal(t, []uint32{0, 1}, att.XSK.Queues)
 }
 
+func TestXSKConfigNormalized(t *testing.T) {
+	rt := newTestRuntime()
+	att, err := rt.Create(&Request{
+		IfIndex: 3,
+		XSK:     &XSKConfig{Enabled: true},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, uint32(2), att.Channels.MaxRxQueueCount)
+	assert.Equal(t, []uint32{0, 1}, att.XSK.Queues)
+	assert.Equal(t, xsk.DefaultOptions(), att.XSK.UMEM)
+}
+
+func TestXSKQueueMustBeWithinEnabledRXQueues(t *testing.T) {
+	rt := newTestRuntime()
+	_, err := rt.Create(&Request{
+		IfIndex:  3,
+		Channels: &ChannelsConfig{RxQueueCount: 1},
+		XSK:      &XSKConfig{Enabled: true, Queues: []uint32{1}},
+	})
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "exceeds enabled rx queues")
+}
+
 func TestLoadBPFFailureRollback(t *testing.T) {
 	rt := New(func() (*ebpf.Collection, error) {
 		return nil, errors.New("bpf load failed")
@@ -130,17 +159,22 @@ func TestListAttachments(t *testing.T) {
 	assert.Len(t, list, 2)
 }
 
-func TestToAPIResponse(t *testing.T) {
+func TestToAPIResponseIncludesRuntimeResources(t *testing.T) {
 	att := &Attachment{
 		IfIndex:     3,
 		AttachMode:  "native",
 		Enabled:     true,
 		MissVerdict: "pass",
-		XSK:         XSKConfig{Enabled: true, Queues: []uint32{0}},
+		Channels:    ChannelsConfig{RxQueueCount: 1, MaxRxQueueCount: 2},
+		XSK:         XSKConfig{Enabled: true, Queues: []uint32{0}, UMEM: xsk.DefaultOptions()},
+		ProgramID:   128,
+		MapSetID:    "ifindex-3",
 	}
 	resp := att.ToAPIResponse()
-	assert.Equal(t, uint32(3), resp.IfIndex)
-	assert.True(t, resp.Enabled)
-	assert.True(t, resp.XSK.Enabled)
-	assert.Equal(t, []uint32{0}, resp.XSK.Queues)
+
+	assert.Equal(t, uint32(2), resp.Channels.MaxRxQueueCount)
+	require.NotNil(t, resp.XSK.UMEM)
+	assert.Equal(t, uint32(2048), resp.XSK.UMEM.FrameSize)
+	assert.Equal(t, uint32(128), resp.Runtime.ProgramID)
+	assert.Equal(t, "ifindex-3", resp.Runtime.MapSetID)
 }

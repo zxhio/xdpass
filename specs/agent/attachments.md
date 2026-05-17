@@ -17,7 +17,6 @@
 ```json
 {
   "ifindex": 3,
-  "ifname": "eth1",
   "attach_mode": "native",
   "enabled": true,
   "miss_verdict": "pass",
@@ -51,16 +50,10 @@
 
 ### `ifindex`
 
-- 必填
+- 请求必填
 - 必须大于 `0`
 - Linux 网卡 `ifindex`
 - 作为 attachment 唯一标识
-
-### `ifname`
-
-- 可选
-- 如果传入，需要校验是否和 `ifindex` 匹配
-- 仅用于展示、日志和调试
 
 ### `attach_mode`
 
@@ -119,6 +112,12 @@
   - 如果 `channels.rx_queue_count > 0`，使用 `[0..rx_queue_count-1]`
   - 如果 `channels.rx_queue_count = 0`，使用 `[0..max_rx_queue_count-1]`
   - 如果无法获取 `max_rx_queue_count`，使用 `[0]`
+
+### `xsk.umem`
+
+- 可选
+- 省略时使用默认 UMEM 配置
+- 只有 `xsk.enabled=true` 时返回规范化后的 `umem`
 
 ### `xsk.umem.frame_size`
 
@@ -198,6 +197,7 @@
 `POST /api/v1/attachments` 创建并启用 attachment。
 
 - 请求中不包含 `enabled`
+- 请求中使用 `ifindex` 标识网卡
 - 同一 `ifindex` 已存在时返回 `409 conflict`
 - 创建成功后执行 XDP attach
 - 如果 `xsk.enabled=true`，同时启动 XSK

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"xdpass/internal/api"
+	"xdpass/internal/xsk"
 )
 
 // XSKAfterCreateFunc is called after an attachment is created with XSK enabled.
@@ -20,7 +21,6 @@ type XSKPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
 // Request holds the attachment creation parameters.
 type Request struct {
 	IfIndex     uint32
-	IfName      string
 	AttachMode  string
 	MissVerdict string
 	Channels    *ChannelsConfig
@@ -29,50 +29,60 @@ type Request struct {
 
 // ChannelsConfig holds RX queue channel configuration.
 type ChannelsConfig struct {
-	RxQueueCount uint32
+	RxQueueCount    uint32
+	MaxRxQueueCount uint32
 }
 
 // XSKConfig holds XSK configuration.
 type XSKConfig struct {
 	Enabled bool
 	Queues  []uint32
+	UMEM    xsk.Options
 }
 
 // Attachment holds the runtime attachment state.
 type Attachment struct {
 	IfIndex     uint32
-	IfName      string
 	AttachMode  string
 	Enabled     bool
 	MissVerdict string
 	Channels    ChannelsConfig
 	XSK         XSKConfig
+	ProgramID   uint32
+	MapSetID    string
 }
 
 // ToAPIResponse converts an Attachment to an API response.
 func (a *Attachment) ToAPIResponse() api.AttachmentResponse {
 	channels := api.ChannelsResponse{
-		RxQueueCount: a.Channels.RxQueueCount,
+		RxQueueCount:    a.Channels.RxQueueCount,
+		MaxRxQueueCount: a.Channels.MaxRxQueueCount,
 	}
 
 	var xsk api.XSKResponse
 	if a.XSK.Enabled {
 		queues := make([]uint32, len(a.XSK.Queues))
 		copy(queues, a.XSK.Queues)
-		xsk = api.XSKResponse{Enabled: true, Queues: queues}
+		xsk = api.XSKResponse{
+			Enabled: true,
+			Queues:  queues,
+			UMEM:    umemToAPI(a.XSK.UMEM),
+		}
 	} else {
 		xsk = api.XSKResponse{Enabled: false}
 	}
 
 	return api.AttachmentResponse{
 		IfIndex:     a.IfIndex,
-		IfName:      a.IfName,
 		AttachMode:  a.AttachMode,
 		Enabled:     a.Enabled,
 		MissVerdict: a.MissVerdict,
 		Channels:    channels,
 		XSK:         xsk,
-		Runtime:     api.RuntimeResponse{},
+		Runtime: api.RuntimeResponse{
+			ProgramID: a.ProgramID,
+			MapSetID:  a.MapSetID,
+		},
 	}
 }
 
@@ -101,4 +111,16 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return e.Detail
+}
+
+func umemToAPI(opts xsk.Options) *api.UMEMResponse {
+	return &api.UMEMResponse{
+		FrameSize:          opts.FrameSize,
+		FrameCount:         opts.FrameCount,
+		FillRingSize:       opts.FillRingSize,
+		CompletionRingSize: opts.CompletionRingSize,
+		RXRingSize:         opts.RXRingSize,
+		TXRingSize:         opts.TXRingSize,
+		TXFrameReserve:     opts.TXFrameReserve,
+	}
 }

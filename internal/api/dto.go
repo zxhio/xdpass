@@ -21,7 +21,6 @@ type StatusResponse struct {
 // AttachmentRequest is the POST /api/v1/attachments request.
 type AttachmentRequest struct {
 	IfIndex     uint32           `json:"ifindex"`
-	IfName      string           `json:"ifname,omitempty"`
 	AttachMode  string           `json:"attach_mode,omitempty"`
 	MissVerdict string           `json:"miss_verdict,omitempty"`
 	Channels    *ChannelsRequest `json:"channels,omitempty"`
@@ -35,14 +34,14 @@ type ChannelsRequest struct {
 
 // XSKRequest holds XSK configuration.
 type XSKRequest struct {
-	Enabled bool     `json:"enabled,omitempty"`
-	Queues  []uint32 `json:"queues,omitempty"`
+	Enabled bool         `json:"enabled,omitempty"`
+	Queues  []uint32     `json:"queues,omitempty"`
+	UMEM    *UMEMRequest `json:"umem,omitempty"`
 }
 
 // AttachmentResponse is the attachment resource representation.
 type AttachmentResponse struct {
 	IfIndex     uint32           `json:"ifindex"`
-	IfName      string           `json:"ifname,omitempty"`
 	AttachMode  string           `json:"attach_mode"`
 	Enabled     bool             `json:"enabled"`
 	MissVerdict string           `json:"miss_verdict"`
@@ -59,8 +58,31 @@ type ChannelsResponse struct {
 
 // XSKResponse holds XSK configuration.
 type XSKResponse struct {
-	Enabled bool     `json:"enabled"`
-	Queues  []uint32 `json:"queues,omitempty"`
+	Enabled bool          `json:"enabled"`
+	Queues  []uint32      `json:"queues,omitempty"`
+	UMEM    *UMEMResponse `json:"umem,omitempty"`
+}
+
+// UMEMRequest holds optional XSK UMEM configuration.
+type UMEMRequest struct {
+	FrameSize          uint32 `json:"frame_size,omitempty"`
+	FrameCount         uint32 `json:"frame_count,omitempty"`
+	FillRingSize       uint32 `json:"fill_ring_size,omitempty"`
+	CompletionRingSize uint32 `json:"completion_ring_size,omitempty"`
+	RXRingSize         uint32 `json:"rx_ring_size,omitempty"`
+	TXRingSize         uint32 `json:"tx_ring_size,omitempty"`
+	TXFrameReserve     uint32 `json:"tx_frame_reserve,omitempty"`
+}
+
+// UMEMResponse holds normalized XSK UMEM configuration.
+type UMEMResponse struct {
+	FrameSize          uint32 `json:"frame_size"`
+	FrameCount         uint32 `json:"frame_count"`
+	FillRingSize       uint32 `json:"fill_ring_size"`
+	CompletionRingSize uint32 `json:"completion_ring_size"`
+	RXRingSize         uint32 `json:"rx_ring_size"`
+	TXRingSize         uint32 `json:"tx_ring_size"`
+	TXFrameReserve     uint32 `json:"tx_frame_reserve"`
 }
 
 // RuntimeResponse holds runtime state.

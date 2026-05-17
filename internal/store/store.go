@@ -82,7 +82,7 @@ func (s *Store) xskAfterCreate(att *attachment.Attachment, maps attachment.MapAc
 	result, err := s.xskRuntime.Start(xsksMap, xsk.StartRequest{
 		IfIndex: att.IfIndex,
 		Queues:  att.XSK.Queues,
-		Options: xsk.DefaultOptions(),
+		Options: att.XSK.UMEM,
 	})
 	if err != nil {
 		return err
@@ -197,6 +197,9 @@ func (s *Store) GetAttachment(_ context.Context, ifIndex uint32) (api.Attachment
 func (s *Store) CreateAttachment(_ context.Context, req api.AttachmentRequest) (api.AttachmentResponse, error) {
 	att, err := s.attachments.Create(apiToRequest(req))
 	if err != nil {
+		if IsValidation(err) {
+			return api.AttachmentResponse{}, &api.ServiceValidationError{Detail: err.Error()}
+		}
 		return api.AttachmentResponse{}, err
 	}
 	return att.ToAPIResponse(), nil
@@ -205,6 +208,9 @@ func (s *Store) CreateAttachment(_ context.Context, req api.AttachmentRequest) (
 func (s *Store) DryRunAttachment(_ context.Context, req api.AttachmentRequest) (api.AttachmentResponse, error) {
 	att, err := s.attachments.DryRun(apiToRequest(req))
 	if err != nil {
+		if IsValidation(err) {
+			return api.AttachmentResponse{}, &api.ServiceValidationError{Detail: err.Error()}
+		}
 		return api.AttachmentResponse{}, err
 	}
 	return att.ToAPIResponse(), nil
@@ -629,7 +635,8 @@ func (s *Store) DeleteDispatch(_ context.Context) error {
 // IsValidation checks if an error is a validation error.
 func IsValidation(err error) bool {
 	var ve *attachment.ValidationError
-	return errors.As(err, &ve)
+	var se *api.ServiceValidationError
+	return errors.As(err, &ve) || errors.As(err, &se)
 }
 
 // --- Conversion helpers ---
@@ -727,7 +734,6 @@ func matchToAPI(m ruleset.Match) *api.MatchResponse {
 func apiToRequest(req api.AttachmentRequest) *attachment.Request {
 	r := &attachment.Request{
 		IfIndex:     req.IfIndex,
-		IfName:      req.IfName,
 		AttachMode:  req.AttachMode,
 		MissVerdict: req.MissVerdict,
 	}
@@ -737,9 +743,28 @@ func apiToRequest(req api.AttachmentRequest) *attachment.Request {
 	if req.XSK != nil {
 		queues := make([]uint32, len(req.XSK.Queues))
 		copy(queues, req.XSK.Queues)
-		r.XSK = &attachment.XSKConfig{Enabled: req.XSK.Enabled, Queues: queues}
+		r.XSK = &attachment.XSKConfig{
+			Enabled: req.XSK.Enabled,
+			Queues:  queues,
+			UMEM:    apiToUMEM(req.XSK.UMEM),
+		}
 	}
 	return r
+}
+
+func apiToUMEM(req *api.UMEMRequest) xsk.Options {
+	if req == nil {
+		return xsk.Options{}
+	}
+	return xsk.Options{
+		FrameSize:          req.FrameSize,
+		FrameCount:         req.FrameCount,
+		FillRingSize:       req.FillRingSize,
+		CompletionRingSize: req.CompletionRingSize,
+		RXRingSize:         req.RXRingSize,
+		TXRingSize:         req.TXRingSize,
+		TXFrameReserve:     req.TXFrameReserve,
+	}
 }
 
 // statsToAPI converts internal stats response to API response.

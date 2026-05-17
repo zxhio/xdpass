@@ -46,6 +46,9 @@ func (m *mockStore) GetAttachment(_ context.Context, ifIndex uint32) (Attachment
 }
 
 func (m *mockStore) CreateAttachment(_ context.Context, req AttachmentRequest) (AttachmentResponse, error) {
+	if req.IfIndex == 0 {
+		return AttachmentResponse{}, &ServiceValidationError{Detail: "ifindex must be greater than 0"}
+	}
 	if _, exists := m.attachments[req.IfIndex]; exists {
 		return AttachmentResponse{}, errors.New("already exists")
 	}
@@ -74,7 +77,7 @@ func (m *mockStore) DeleteAttachment(_ context.Context, ifIndex uint32) error {
 
 func (m *mockStore) DryRunAttachment(_ context.Context, req AttachmentRequest) (AttachmentResponse, error) {
 	if req.IfIndex == 0 {
-		return AttachmentResponse{}, errors.New("ifindex must be greater than 0")
+		return AttachmentResponse{}, &ServiceValidationError{Detail: "ifindex must be greater than 0"}
 	}
 	return AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "native", MissVerdict: "pass"}, nil
 }
