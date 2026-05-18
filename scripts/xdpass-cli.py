@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import json
+import os
 import socket
 import sys
 import time
@@ -388,6 +389,11 @@ def cmd_events_stream(addr, args):
     raw_sse = getattr(args, "raw_sse", False)
     count = getattr(args, "count", None)
     timeout = getattr(args, "timeout", None)
+
+    # Force line-buffered stdout so each event is flushed immediately,
+    # even when piped (e.g. xdpass-cli events stream | jq).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
 
     url = addr.rstrip("/") + "/api/v1/events/stream"
     req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
