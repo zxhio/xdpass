@@ -1703,11 +1703,11 @@ func TestActionXSKNoSocket(t *testing.T) {
 
 	// ICMP echo reply -> XSK response path. No XSK socket registered.
 	rules := []ruleset.Rule{
-		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "icmp_echo_reply"}},
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "icmp"}, Response: ruleset.Response{Action: "icmp_echo_reply"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
 
-	pkt := testPacket()
+	pkt := testICMPPacket()
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	// XSK redirect without socket: bpf_redirect_map returns != XDP_REDIRECT.
@@ -1724,11 +1724,11 @@ func TestActionARPReplyXSKNoSocket(t *testing.T) {
 	objs := loadObjects(t)
 
 	rules := []ruleset.Rule{
-		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp"}, Response: ruleset.Response{Action: "arp_reply"}},
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp"}, Response: ruleset.Response{Action: "arp_reply"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
 
-	pkt := testPacket()
+	pkt := testARPPacket()
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
