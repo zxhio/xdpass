@@ -69,7 +69,7 @@ HTTP API 默认监听 `127.0.0.1:9527`，详见 `specs/agent/` 目录。
 主要端点：
 
 - `GET /api/v1/health` - 健康检查
-- `GET /api/v1/status` - 服务状态
+- `GET /api/v1/status` - 服务状态（含 `issues[]` degraded 诊断）
 - `/api/v1/attachments` - 网卡 attachment 管理
 - `/api/v1/ruleset` - 规则集管理
 - `/api/v1/stats` - 统计信息
