@@ -15,7 +15,6 @@ Usage:
 import argparse
 import json
 import socket
-import signal
 import sys
 import time
 import urllib.error
@@ -393,15 +392,6 @@ def cmd_events_stream(addr, args):
     url = addr.rstrip("/") + "/api/v1/events/stream"
     req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
 
-    # Handle Ctrl-C gracefully.
-    interrupted = False
-
-    def handle_sigint(sig, frame):
-        nonlocal interrupted
-        interrupted = True
-
-    prev_handler = signal.signal(signal.SIGINT, handle_sigint)
-
     try:
         resp = urllib.request.urlopen(req, timeout=None)
     except urllib.error.URLError as e:
@@ -416,7 +406,7 @@ def cmd_events_stream(addr, args):
     buf = ""
 
     try:
-        while not interrupted:
+        while True:
             if timeout is not None and (time.monotonic() - start) >= timeout:
                 break
             if count is not None and received >= count:
@@ -446,11 +436,10 @@ def cmd_events_stream(addr, args):
                     except json.JSONDecodeError:
                         print(f"warning: non-JSON data: {payload}", file=sys.stderr)
 
-    except (BrokenPipeError, OSError):
+    except KeyboardInterrupt:
         pass
     finally:
         resp.close()
-        signal.signal(signal.SIGINT, prev_handler)
 
     return 0
 
@@ -755,4 +744,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        pass
