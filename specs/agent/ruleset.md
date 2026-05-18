@@ -260,6 +260,8 @@
 
 进程重启后当前 `ruleset` 丢失，由调用方重新调用 `PUT /api/v1/ruleset` 下发。
 
+当当前 ruleset 非空时，create 或 enable attachment 会自动将当前 ruleset 应用到该 attachment 的 map set。apply 失败时回滚 create/enable，不改变当前 ruleset。详见 `runtime-lifecycle.md`。
+
 ---
 
 ## 编译约定

@@ -49,6 +49,21 @@
 
 ---
 
+## Ruleset Apply on Attachment Lifecycle
+
+当当前 ruleset 非空时，create 或 enable attachment 会自动将当前 ruleset 应用到该 attachment 的 map set。
+
+apply 失败时回滚 create/enable 操作，不改变当前 ruleset。
+
+per-attachment apply generation 用于 `/status` 的 `ruleset_not_applied` 诊断：
+
+- `ReplaceRuleset` 成功时递增全局 generation。
+- attachment create/enable apply 成功时记录该 ifindex 已应用的 generation。
+- `DeleteRuleset` 时清空所有 generation 记录。
+- attachment disable/delete 时清理对应 generation 记录。
+
+---
+
 ## attachment 生命周期
 
 create：
@@ -57,11 +72,12 @@ create：
 - 加载独立 BPF program / map set
 - attach XDP
 - 如果 `xsk.enabled=true`，启动 XSK runtime
+- 如果当前 ruleset 非空，将当前 ruleset 写入该 attachment 的 map set
 - 全部成功后写入内存状态
 
 patch enabled：
 
-- `false -> true`：attach XDP，并按配置启动 XSK
+- `false -> true`：attach XDP，按配置启动 XSK，并将当前 ruleset 写入该 attachment 的 map set
 - `true -> false`：停止 XSK，卸载 XDP，保留内存配置
 
 delete：
