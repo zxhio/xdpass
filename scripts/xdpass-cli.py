@@ -15,7 +15,9 @@ Usage:
 import argparse
 import json
 import socket
+import signal
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -379,6 +381,90 @@ def cmd_ruleset_apply(addr, args):
 
 
 # ---------------------------------------------------------------------------
+# Events
+# ---------------------------------------------------------------------------
+
+def cmd_events_stream(addr, args):
+    """Connect to /api/v1/events/stream and print events."""
+    raw_sse = getattr(args, "raw_sse", False)
+    count = getattr(args, "count", None)
+    timeout = getattr(args, "timeout", None)
+
+    url = addr.rstrip("/") + "/api/v1/events/stream"
+    req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
+
+    # Handle Ctrl-C gracefully.
+    interrupted = False
+
+    def handle_sigint(sig, frame):
+        nonlocal interrupted
+        interrupted = True
+
+    prev_handler = signal.signal(signal.SIGINT, handle_sigint)
+
+    try:
+        resp = urllib.request.urlopen(req, timeout=None)
+    except urllib.error.URLError as e:
+        print(f"error: {e.reason}", file=sys.stderr)
+        return 1
+    except OSError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    received = 0
+    start = time.monotonic()
+    buf = ""
+
+    try:
+        while not interrupted:
+            if timeout is not None and (time.monotonic() - start) >= timeout:
+                break
+            if count is not None and received >= count:
+                break
+
+            chunk = resp.read(4096)
+            if not chunk:
+                break
+
+            buf += chunk.decode("utf-8", errors="replace")
+
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                line = line.rstrip("\r")
+
+                if raw_sse:
+                    print(line, flush=True)
+                    continue
+
+                # In JSON mode, only print the data payload.
+                if line.startswith("data: "):
+                    payload = line[6:]
+                    try:
+                        json.loads(payload)  # validate
+                        print(payload, flush=True)
+                        received += 1
+                    except json.JSONDecodeError:
+                        print(f"warning: non-JSON data: {payload}", file=sys.stderr)
+
+    except (BrokenPipeError, OSError):
+        pass
+    finally:
+        resp.close()
+        signal.signal(signal.SIGINT, prev_handler)
+
+    return 0
+
+
+def cmd_events(addr, args):
+    """Dispatch events subcommands."""
+    ev_cmd = getattr(args, "ev_cmd", None)
+    if ev_cmd == "stream":
+        return cmd_events_stream(addr, args)
+    # No subcommand -- help is printed by argparse.
+    return 1
+
+
+# ---------------------------------------------------------------------------
 # Smoke test
 # ---------------------------------------------------------------------------
 
@@ -562,6 +648,16 @@ def build_parser():
 
     dp_sub.add_parser("delete", help="DELETE /api/v1/dispatch")
 
+    # -- events --
+    ev = sub.add_parser("events", help="subscribe to event stream")
+    ev_sub = ev.add_subparsers(dest="ev_cmd")
+
+    p_ev_stream = ev_sub.add_parser("stream", help="GET /api/v1/events/stream")
+    p_ev_stream.add_argument("--raw-sse", dest="raw_sse", action="store_true",
+                             help="print raw SSE lines instead of JSON only")
+    p_ev_stream.add_argument("--count", type=int, help="stop after N events")
+    p_ev_stream.add_argument("--timeout", type=float, help="stop after SEC seconds")
+
     # -- smoke --
     p_smoke = sub.add_parser("smoke", help="run smoke test against agent API")
     p_smoke.add_argument("--ifname", required=True, help="interface name for attach")
@@ -584,6 +680,7 @@ COMMANDS = {
     "stats": cmd_stats,
     "response-egress": None,
     "dispatch": None,
+    "events": cmd_events,
     "smoke": cmd_smoke,
 }
 
@@ -647,6 +744,12 @@ def main():
             parser.parse_args([args.command, "--help"])
             return 1
         return DISPATCH_COMMANDS[args.dp_cmd](addr, args)
+
+    if args.command in ("events",):
+        if not args.ev_cmd:
+            parser.parse_args([args.command, "--help"])
+            return 1
+        return cmd_events(addr, args)
 
     return COMMANDS[args.command](addr, args)
 
