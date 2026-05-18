@@ -101,6 +101,41 @@
 - userspace response 结果来自 response 执行结果
 - 无响应执行路径（`none` / `alert`）或结果未知时不输出
 
+---
+
+## Userspace Response 事件阶段
+
+userspace response 对同一命中包可能产生两个事件：
+
+### redirect 阶段事件
+
+BPF ringbuf 产生的原始事件，表示原始包进入 XSK。
+
+- `path=userspace`
+- `verdict=xsk_redirect`
+- `result` 省略
+- 五元组来自 BPF ringbuf
+
+### final 阶段事件
+
+response 执行结果事件，由 userspace runtime 产生。
+
+- `path=userspace`
+- `result=sent` 或 `result=failed`
+- `verdict` 省略
+- `rule_id`、`action`、`ifindex` 必填
+- 能解析原始包时补充五元组字段
+
+### 失败路径覆盖
+
+final 阶段 `result=failed` 覆盖以下情况：
+
+- rule missing：rule_id 在 response rule lookup 中不存在
+- builder missing：action 无对应 response builder
+- build failed：response 构包失败
+- sender create failed：创建发送器失败
+- send failed：发送响应包失败
+
 ### `ifindex`
 
 - 可选

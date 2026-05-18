@@ -373,6 +373,23 @@ response 执行结果通过 `events` 上报。
 
 response 失败后的原始包处置见 `dataplane.md` 的 response failure verdict。
 
+### userspace response result events
+
+userspace response 对同一命中包产生两个事件：
+
+1. **redirect 事件**（BPF ringbuf）：`path=userspace`、`verdict=xsk_redirect`，省略 `result`。
+2. **final 事件**（userspace runtime）：`path=userspace`、`result=sent|failed`，省略 `verdict`。
+
+final 事件在 response worker 的 build/send 成功或失败时产生，覆盖所有失败路径：
+
+- rule missing
+- builder missing
+- build failed
+- sender create failed
+- send failed
+
+kernel response 不产生 final 事件，其 `result` 由 BPF verdict 派生。
+
 ---
 
 ## 资源边界
