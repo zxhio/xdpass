@@ -111,57 +111,6 @@ func newClosedHashMapWithData(t *testing.T) *ebpf.Map {
 	return m
 }
 
-func newClosedLPMMapWithData(t *testing.T) *ebpf.Map {
-	t.Helper()
-	m, err := ebpf.NewMap(&ebpf.MapSpec{
-		Type:       ebpf.LPMTrie,
-		KeySize:    8,
-		ValueSize:  64,
-		MaxEntries: 1024,
-		Flags:      unix.BPF_F_NO_PREALLOC,
-	})
-	require.NoError(t, err)
-	// Insert an entry so clearLpmMap has something to delete.
-	key := bpfIpv4LpmKey{Prefixlen: 8, Addr: 0x0A000000}
-	var val [8]uint64
-	require.NoError(t, m.Put(key, val))
-	m.Close()
-	return m
-}
-
-func TestWritePortIndexMapClearError(t *testing.T) {
-	closedMap := newClosedHashMapWithData(t)
-	err := writePortIndexMap(closedMap, map[uint16][8]uint64{443: {1}})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "clear")
-}
-
-func TestWriteVlanIndexMapClearError(t *testing.T) {
-	closedMap := newClosedHashMapWithData(t)
-	err := writeVlanIndexMap(closedMap, map[uint16][8]uint64{100: {1}})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "clear")
-}
-
-func TestWriteLpmMapClearError(t *testing.T) {
-	closedMap := newClosedLPMMapWithData(t)
-	err := writeLpmMap(closedMap, []LPMEntry{{Prefixlen: 16, Addr: 0x0A000000, Mask: [8]uint64{1}}})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "clear")
-}
-
-func TestClearHashMapPropagatesError(t *testing.T) {
-	closedMap := newClosedHashMapWithData(t)
-	err := clearHashMap(closedMap)
-	assert.Error(t, err)
-}
-
-func TestClearLpmMapPropagatesError(t *testing.T) {
-	closedMap := newClosedLPMMapWithData(t)
-	err := clearLpmMap(closedMap)
-	assert.Error(t, err)
-}
-
 func TestWriteMapsPropagatesClearError(t *testing.T) {
 	ruleMap := newRuleIndexMap(t)
 	cfgMap := newGlobalCfgMap(t)

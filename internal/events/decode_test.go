@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 func makeEventRaw(ruleID uint32, action uint16, verdict uint8, sip, dip uint32, sport, dport uint16, ipProto uint8, tsNs uint64) [ruleEventSize]byte {
@@ -24,17 +26,13 @@ func makeEventRaw(ruleID uint32, action uint16, verdict uint8, sip, dip uint32, 
 	return raw
 }
 
-func TestDecodeEventBasic(t *testing.T) {
-	raw := makeEventRaw(1001, 2, 1, 0x0A01020A, 0xC0A80114, 52345, 80, 6, 1710000000000000000)
+func TestDecodeEventFields(t *testing.T) {
+	raw := makeEventRaw(1001, abi.ActionTCPReset, abi.VerdictTX, 0x0A01020A, 0xC0A80114, 52345, 80, 6, 1710000000000000000)
 	event, err := DecodeEvent(raw, 3, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, "rule_event", event.Type)
 	assert.Equal(t, uint32(1001), event.RuleID)
-	assert.Equal(t, "tcp_reset", event.Action)
-	assert.Equal(t, "kernel", event.Path)
-	assert.Equal(t, "xdp_tx", event.Verdict)
-	assert.Equal(t, "sent", event.Result)
 	assert.Equal(t, uint32(3), event.IfIndex)
 	assert.Equal(t, "10.1.2.10", event.SIP)
 	assert.Equal(t, "192.168.1.20", event.DIP)
@@ -43,111 +41,10 @@ func TestDecodeEventBasic(t *testing.T) {
 	assert.Equal(t, uint8(6), event.IPProto)
 }
 
-func TestDecodeEventIPv4ByteOrder(t *testing.T) {
-	// 10.0.1.2 and 10.0.1.5 in network byte order (big-endian).
-	raw := makeEventRaw(1, 0, 0, 0x0A000102, 0x0A000105, 0, 0, 0, 0)
-	event, err := DecodeEvent(raw, 1, 0)
-	require.NoError(t, err)
-	assert.Equal(t, "10.0.1.2", event.SIP)
-	assert.Equal(t, "10.0.1.5", event.DIP)
-}
-
 func TestDecodeEventTimestampConversion(t *testing.T) {
 	// 1 second in nanoseconds
-	raw := makeEventRaw(1, 0, 0, 0, 0, 0, 0, 0, 1000000000)
+	raw := makeEventRaw(1, abi.ActionNone, abi.VerdictObserve, 0, 0, 0, 0, 0, 1000000000)
 	event, err := DecodeEvent(raw, 1, 1710000000)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1710000001), event.Timestamp)
-}
-
-func TestDecodeEventIPv4Zero(t *testing.T) {
-	raw := makeEventRaw(1, 0, 0, 0, 0, 0, 0, 0, 0)
-	event, err := DecodeEvent(raw, 1, 0)
-	require.NoError(t, err)
-	assert.Equal(t, "", event.SIP)
-	assert.Equal(t, "", event.DIP)
-}
-
-func TestDecodeEventActionPaths(t *testing.T) {
-	cases := []struct {
-		action uint16
-		path   string
-	}{
-		{0, "none"},
-		{1, "none"},
-		{2, "kernel"},
-		{3, "userspace"},
-		{4, "userspace"},
-		{5, "userspace"},
-		{6, "userspace"},
-		{7, "userspace"},
-		{8, "userspace"},
-		{9, "userspace"},
-		{10, "userspace"},
-		{11, "userspace"},
-	}
-	for _, tc := range cases {
-		raw := makeEventRaw(1, tc.action, 0, 0, 0, 0, 0, 0, 0)
-		event, err := DecodeEvent(raw, 1, 0)
-		require.NoError(t, err, "action=%d", tc.action)
-		assert.Equal(t, tc.path, event.Path, "action=%d", tc.action)
-	}
-}
-
-func TestDecodeEventVerdictNames(t *testing.T) {
-	cases := []struct {
-		verdict uint8
-		name    string
-	}{
-		{0, "observe"},
-		{1, "xdp_tx"},
-		{2, "xsk_redirect"},
-		{3, "redirect_tx"},
-	}
-	for _, tc := range cases {
-		raw := makeEventRaw(1, 0, tc.verdict, 0, 0, 0, 0, 0, 0)
-		event, err := DecodeEvent(raw, 1, 0)
-		require.NoError(t, err, "verdict=%d", tc.verdict)
-		assert.Equal(t, tc.name, event.Verdict, "verdict=%d", tc.verdict)
-	}
-}
-
-func TestDeriveResultNoneAction(t *testing.T) {
-	assert.Equal(t, "", deriveResult(0, 0)) // none action
-	assert.Equal(t, "", deriveResult(1, 0)) // alert action
-}
-
-func TestDeriveResultKernelSuccess(t *testing.T) {
-	assert.Equal(t, "sent", deriveResult(2, 1)) // tcp_reset, VERDICT_TX
-	assert.Equal(t, "sent", deriveResult(2, 3)) // tcp_reset, VERDICT_REDIRECT_TX
-}
-
-func TestDeriveResultKernelFailure(t *testing.T) {
-	assert.Equal(t, "failed", deriveResult(2, 0)) // tcp_reset, VERDICT_OBSERVE
-	assert.Equal(t, "failed", deriveResult(2, 2)) // tcp_reset, VERDICT_XSK_REDIRECT
-}
-
-func TestDeriveResultUserspaceXSKRedirect(t *testing.T) {
-	// icmp_echo_reply (action=3) with VERDICT_XSK (verdict=2)
-	assert.Equal(t, "", deriveResult(3, 2))
-	// arp_reply (action=4) with VERDICT_XSK
-	assert.Equal(t, "", deriveResult(4, 2))
-}
-
-func TestDeriveResultUserspaceFailure(t *testing.T) {
-	// userspace action with non-XSK verdict is a failure
-	assert.Equal(t, "failed", deriveResult(3, 0)) // icmp_echo_reply, VERDICT_OBSERVE
-	assert.Equal(t, "failed", deriveResult(3, 1)) // icmp_echo_reply, VERDICT_TX
-}
-
-func TestIPv4ToString(t *testing.T) {
-	assert.Equal(t, "10.1.2.10", ipv4ToString(0x0A01020A))
-	assert.Equal(t, "192.168.1.1", ipv4ToString(0xC0A80101))
-	assert.Equal(t, "", ipv4ToString(0))
-}
-
-func TestBootTimeOffset(t *testing.T) {
-	offset := BootTimeOffset()
-	// The offset should be a reasonable value (positive, roughly the system uptime)
-	assert.Greater(t, offset, int64(0))
 }

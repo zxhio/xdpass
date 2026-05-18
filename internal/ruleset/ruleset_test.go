@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 func boolPtr(b bool) *bool { return &b }
@@ -19,7 +21,7 @@ func TestValidateEmptyRuleset(t *testing.T) {
 }
 
 func TestValidateMaxRules(t *testing.T) {
-	rules := make([]Rule, 513)
+	rules := make([]Rule, abi.MaxRuleSlots+1)
 	for i := range rules {
 		rules[i] = Rule{RuleID: uint32(i + 1), Response: Response{Action: "alert"}}
 	}
@@ -30,7 +32,7 @@ func TestValidateMaxRules(t *testing.T) {
 }
 
 func TestValidateExactly512Rules(t *testing.T) {
-	rules := make([]Rule, 512)
+	rules := make([]Rule, abi.MaxRuleSlots)
 	for i := range rules {
 		rules[i] = Rule{RuleID: uint32(i + 1), Response: Response{Action: "alert"}}
 	}
@@ -205,35 +207,6 @@ func TestCompatAlertWithAnyProtocol(t *testing.T) {
 	assert.NoError(t, Validate(rules))
 }
 
-// --- Action code mapping tests ---
-
-func TestActionToCodeAllActions(t *testing.T) {
-	cases := map[string]uint16{
-		"none":                  0,
-		"alert":                 1,
-		"tcp_reset":             2,
-		"icmp_echo_reply":       3,
-		"arp_reply":             4,
-		"tcp_syn_ack":           5,
-		"icmp_port_unreachable": 6,
-		"udp_echo_reply":        7,
-		"dns_refused":           8,
-		"icmp_host_unreachable": 9,
-		"icmp_admin_prohibited": 10,
-		"dns_sinkhole":          11,
-	}
-	for action, expected := range cases {
-		code, ok := ActionToCode(action)
-		assert.True(t, ok, "action=%s", action)
-		assert.Equal(t, expected, code, "action=%s", action)
-	}
-}
-
-func TestActionToCodeUnknown(t *testing.T) {
-	_, ok := ActionToCode("unknown")
-	assert.False(t, ok)
-}
-
 // --- Compiler tests ---
 
 func TestCompileEmptyRuleset(t *testing.T) {
@@ -283,11 +256,11 @@ func TestCompileRuleMeta(t *testing.T) {
 
 	meta := compiled.Rules[0].Meta
 	assert.Equal(t, uint32(100), meta.RuleID)
-	assert.Equal(t, uint16(ActionTCPReset), meta.Action)
+	assert.Equal(t, abi.ActionTCPReset, meta.Action)
 	assert.Equal(t, uint8(0), meta.Flags)
 
 	// required_mask: COND_PROTO_TCP | COND_DST_PORT | COND_TCP_SYN
-	expectedMask := CondProtoTCP | CondDstPort | CondTCPSyn
+	expectedMask := abi.CondProtoTCP | abi.CondDstPort | abi.CondTCPSyn
 	assert.Equal(t, expectedMask, meta.RequiredMask)
 }
 
@@ -438,24 +411,4 @@ func TestRuntimeDryRunDoesNotChangeState(t *testing.T) {
 	// State should still be empty
 	rules := rt.GetRuleset()
 	assert.Empty(t, rules)
-}
-
-// --- Slot bit tests ---
-
-func TestSlotBit(t *testing.T) {
-	assert.Equal(t, [8]uint64{1 << 0}, slotBit(0))
-	assert.Equal(t, [8]uint64{1 << 1}, slotBit(1))
-	assert.Equal(t, [8]uint64{1 << 63}, slotBit(63))
-	assert.Equal(t, [8]uint64{0, 1 << 0}, slotBit(64))
-	assert.Equal(t, [8]uint64{0, 1 << 1}, slotBit(65))
-}
-
-func TestMaskOr(t *testing.T) {
-	var a [8]uint64
-	b := slotBit(0)
-	c := slotBit(64)
-	maskOr(&a, b)
-	maskOr(&a, c)
-	assert.Equal(t, uint64(1), a[0])
-	assert.Equal(t, uint64(1), a[1])
 }

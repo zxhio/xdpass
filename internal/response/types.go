@@ -3,22 +3,6 @@ package response
 
 import "errors"
 
-// Action codes from BPF ABI (bpf-abi.md).
-const (
-	ActionNone                uint16 = 0
-	ActionAlert               uint16 = 1
-	ActionTCPReset            uint16 = 2
-	ActionICMPEchoReply       uint16 = 3
-	ActionARPReply            uint16 = 4
-	ActionTCPSynAck           uint16 = 5
-	ActionICMPPortUnreachable uint16 = 6
-	ActionUDPEchoReply        uint16 = 7
-	ActionDNSRefused          uint16 = 8
-	ActionICMPHostUnreachable uint16 = 9
-	ActionICMPAdminProhibited uint16 = 10
-	ActionDNSSinkhole         uint16 = 11
-)
-
 // XSK metadata from BPF (bpf-abi.md).
 type XSKMeta struct {
 	RuleID uint32

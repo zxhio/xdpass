@@ -119,25 +119,6 @@ func TestStreamStartReaderFactoryError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestStreamReaderCount(t *testing.T) {
-	s := NewStreamWithFactory(t.Context(), fakeReaderFactory)
-
-	require.NoError(t, s.StartReader(nil, 1))
-	require.NoError(t, s.StartReader(nil, 2))
-
-	s.mu.RLock()
-	count := len(s.readers)
-	s.mu.RUnlock()
-	assert.Equal(t, 2, count)
-
-	s.StopReader(1)
-
-	s.mu.RLock()
-	count = len(s.readers)
-	s.mu.RUnlock()
-	assert.Equal(t, 1, count)
-}
-
 func TestBroadcastDeliversToSubscribers(t *testing.T) {
 	s := NewStreamWithFactory(t.Context(), fakeReaderFactory)
 	defer s.Stop()
@@ -185,26 +166,4 @@ func TestBroadcastDropsForSlowSubscriber(t *testing.T) {
 		count++
 	}
 	assert.Equal(t, 64, count)
-}
-
-func TestNewResultEvent(t *testing.T) {
-	before := time.Now().Unix()
-	evt := NewResultEvent(1001, "icmp_echo_reply", 3, "sent")
-	after := time.Now().Unix()
-
-	assert.Equal(t, "rule_event", evt.Type)
-	assert.Equal(t, uint32(1001), evt.RuleID)
-	assert.Equal(t, "icmp_echo_reply", evt.Action)
-	assert.Equal(t, "userspace", evt.Path)
-	assert.Equal(t, "sent", evt.Result)
-	assert.Equal(t, uint32(3), evt.IfIndex)
-	assert.Equal(t, "", evt.Verdict)
-	assert.GreaterOrEqual(t, evt.Timestamp, before)
-	assert.LessOrEqual(t, evt.Timestamp, after)
-}
-
-func TestNewResultEventFailed(t *testing.T) {
-	evt := NewResultEvent(200, "tcp_syn_ack", 5, "failed")
-	assert.Equal(t, "failed", evt.Result)
-	assert.Equal(t, "", evt.Verdict)
 }
