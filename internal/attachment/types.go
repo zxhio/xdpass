@@ -137,6 +137,12 @@ func (e *ValidationError) Error() string {
 	return e.Detail
 }
 
+// HealthIssue describes a single attachment health problem.
+type HealthIssue struct {
+	Code    string
+	IfIndex uint32
+}
+
 func umemToAPI(opts xsk.Options) *api.UMEMResponse {
 	return &api.UMEMResponse{
 		FrameSize:          opts.FrameSize,

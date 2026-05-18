@@ -114,6 +114,14 @@ func (rt *Runtime) Stop() {
 	}
 }
 
+// HasWorker reports whether a response worker is running for the given ifindex.
+func (rt *Runtime) HasWorker(ifIndex uint32) bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	_, ok := rt.workers[ifIndex]
+	return ok
+}
+
 // UpdateRules replaces the rule lookup data for all workers.
 func (rt *Runtime) UpdateRules(rules []RuleEntry) {
 	if rl, ok := rt.rules.(*RulesetRuleLookup); ok {

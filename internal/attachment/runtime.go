@@ -489,6 +489,36 @@ type EnabledAttachment struct {
 	Maps    MapAccessor
 }
 
+// Health checks all enabled attachments for runtime inconsistencies.
+// It returns a list of health issues found. An empty list means healthy.
+func (r *Runtime) Health() []HealthIssue {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var issues []HealthIssue
+	for ifIndex, att := range r.attachments {
+		if !att.Enabled {
+			continue
+		}
+		res, ok := r.resources[ifIndex]
+		if !ok {
+			issues = append(issues, HealthIssue{Code: "attachment_resources_missing", IfIndex: ifIndex})
+			continue
+		}
+		if res.link == nil {
+			issues = append(issues, HealthIssue{Code: "attachment_link_missing", IfIndex: ifIndex})
+		}
+		if res.coll == nil {
+			issues = append(issues, HealthIssue{Code: "attachment_resources_missing", IfIndex: ifIndex})
+			continue
+		}
+		if res.coll.Maps["rule_index_map"] == nil || res.coll.Maps["global_cfg_map"] == nil {
+			issues = append(issues, HealthIssue{Code: "attachment_map_missing", IfIndex: ifIndex})
+		}
+	}
+	return issues
+}
+
 // MapAccessor provides access to BPF maps for ruleset operations.
 type MapAccessor interface {
 	RuleIndexMap() *ebpf.Map

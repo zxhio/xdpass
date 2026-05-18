@@ -203,3 +203,15 @@ func ActionToCode(action string) (uint16, bool) {
 	code, ok := actionCodeMap[action]
 	return code, ok
 }
+
+// IsUserspaceAction reports whether the action requires userspace XSK processing.
+func IsUserspaceAction(action string) bool {
+	switch action {
+	case "icmp_echo_reply", "arp_reply", "tcp_syn_ack",
+		"icmp_port_unreachable", "udp_echo_reply", "dns_refused",
+		"icmp_host_unreachable", "icmp_admin_prohibited", "dns_sinkhole":
+		return true
+	default:
+		return false
+	}
+}

@@ -41,6 +41,18 @@ func (rt *Runtime) CurrentCompiled() (*CompiledRuleset, uint64) {
 	return rt.compiled, rt.generation
 }
 
+// HasUserspaceActions reports whether the current ruleset contains any userspace response actions.
+func (rt *Runtime) HasUserspaceActions() bool {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	for _, r := range rt.rules {
+		if IsUserspaceAction(r.Response.Action) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReplaceRuleset validates, compiles, and applies a new ruleset.
 // It uses getMaps to obtain MapAccessors for all enabled attachments.
 // On failure at any step, the old ruleset is preserved.

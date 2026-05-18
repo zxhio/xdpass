@@ -118,6 +118,20 @@ func (rt *Runtime) IsEnabled() bool {
 	return rt.enabled
 }
 
+// HasWorker reports whether the dispatch worker goroutine is running.
+func (rt *Runtime) HasWorker() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.enabled
+}
+
+// HasSender reports whether the dispatch sender is available.
+func (rt *Runtime) HasSender() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.enabled && rt.sender != nil
+}
+
 // Stats returns the shared stats accumulator.
 func (rt *Runtime) Stats() *Stats {
 	return rt.stats

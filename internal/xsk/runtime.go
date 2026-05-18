@@ -179,6 +179,14 @@ func (rt *Runtime) Socket(ifIndex uint32) *Socket {
 	return nil
 }
 
+// HasSocket reports whether XSK sockets are running for the given ifindex.
+func (rt *Runtime) HasSocket(ifIndex uint32) bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	_, ok := rt.sockets[ifIndex]
+	return ok
+}
+
 // Channel returns the packet channel for an attachment, or nil.
 func (rt *Runtime) Channel(ifIndex uint32) chan RXEnvelope {
 	rt.mu.Lock()

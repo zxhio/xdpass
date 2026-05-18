@@ -188,6 +188,14 @@ func NewResultEvent(ruleID uint32, action string, ifIndex uint32, result string)
 	}
 }
 
+// HasReader reports whether a ringbuf reader is running for the given ifindex.
+func (s *Stream) HasReader(ifIndex uint32) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.readers[ifIndex]
+	return ok
+}
+
 // Stop closes all ringbuf readers and waits for them to finish.
 func (s *Stream) Stop() {
 	s.cancel()
