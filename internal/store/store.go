@@ -268,13 +268,77 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 
 	list := s.attachments.List()
 	rules := s.rulesetRuntime.GetRuleset()
+
+	var issues []api.StatusIssue
+
+	// Attachment health (resources, link, maps).
+	for _, hi := range s.attachments.Health() {
+		issues = append(issues, api.StatusIssue{Component: "attachment", Code: hi.Code, IfIndex: hi.IfIndex})
+	}
+
+	// Per-attachment event/xsk/response health.
+	for _, att := range list {
+		if !att.Enabled {
+			continue
+		}
+		if s.eventStream != nil && !s.eventStream.HasReader(att.IfIndex) {
+			// Only flag if the attachment should have an event reader.
+			// We conservatively report it since all enabled attachments get readers.
+			issues = append(issues, api.StatusIssue{Component: "events", Code: "event_reader_missing", IfIndex: att.IfIndex})
+		}
+		if att.XSK.Enabled {
+			if s.xskRuntime != nil && !s.xskRuntime.HasSocket(att.IfIndex) {
+				issues = append(issues, api.StatusIssue{Component: "xsk", Code: "xsk_not_running", IfIndex: att.IfIndex})
+			}
+			if s.responseRuntime != nil && !s.responseRuntime.HasWorker(att.IfIndex) {
+				issues = append(issues, api.StatusIssue{Component: "response", Code: "response_worker_missing", IfIndex: att.IfIndex})
+			}
+		}
+	}
+
+	// Dispatch health.
+	if s.dispatchRuntime != nil && s.dispatchRuntime.IsEnabled() {
+		if !s.dispatchRuntime.HasWorker() {
+			issues = append(issues, api.StatusIssue{Component: "dispatch", Code: "dispatch_worker_missing"})
+		}
+		if !s.dispatchRuntime.HasSender() {
+			issues = append(issues, api.StatusIssue{Component: "dispatch", Code: "dispatch_sender_missing"})
+		}
+	}
+
+	// Ruleset health.
+	if len(rules) > 0 {
+		if s.rulesetRuntime.HasUserspaceActions() {
+			for _, att := range list {
+				if att.Enabled && !att.XSK.Enabled {
+					issues = append(issues, api.StatusIssue{Component: "ruleset", Code: "userspace_action_without_xsk", IfIndex: att.IfIndex})
+				}
+			}
+		}
+		_, gen := s.rulesetRuntime.CurrentCompiled()
+		for _, att := range list {
+			if !att.Enabled {
+				continue
+			}
+			if appliedGen, ok := s.applyGeneration[att.IfIndex]; !ok || appliedGen != gen {
+				issues = append(issues, api.StatusIssue{Component: "ruleset", Code: "ruleset_not_applied", IfIndex: att.IfIndex})
+			}
+		}
+	}
+
+	status := "running"
+	if len(issues) > 0 {
+		status = "degraded"
+	}
+
 	return api.StatusResponse{
-		Status:                   "running",
+		Status:                   status,
 		Attachments:              len(list),
 		RulesetLoaded:            len(rules) > 0,
 		Rules:                    len(rules),
 		ResponseEgressConfigured: s.egressConfigured,
 		DispatchConfigured:       s.dispatchRuntime != nil && s.dispatchRuntime.IsEnabled(),
+		Issues:                   issues,
 	}, nil
 }
 
