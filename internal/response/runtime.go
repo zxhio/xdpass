@@ -42,7 +42,8 @@ func (rt *Runtime) Stats() *Stats {
 
 // StartWorker starts a response worker for an attachment.
 // onResponseSuccess is called after a successful response send with the original packet data.
-func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-chan Envelope, xskFD uint32, txWriter TXWriter, onResponseSuccess func([]byte)) {
+// onResponseResult is called with the response execution result (sent/failed).
+func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-chan Envelope, xskFD uint32, txWriter TXWriter, onResponseSuccess func([]byte), onResponseResult func(uint32, uint32, string, string)) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
@@ -53,6 +54,7 @@ func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-c
 
 	w := NewWorker(ifIndex, rt.rules, rt.stats, egressCfg, xskFD, txWriter)
 	w.OnResponseSuccess = onResponseSuccess
+	w.OnResponseResult = onResponseResult
 	wCtx, wCancel := context.WithCancel(rt.ctx)
 
 	ws := &workerState{

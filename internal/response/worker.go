@@ -21,6 +21,11 @@ type Worker struct {
 	// OnResponseSuccess is called after a successful response send.
 	// The original packet data is passed. May be nil.
 	OnResponseSuccess func(origPkt []byte)
+
+	// OnResponseResult is called with the response execution result.
+	// Called for both success (result="sent") and failure (result="failed").
+	// May be nil.
+	OnResponseResult func(ifIndex, ruleID uint32, action, result string)
 }
 
 // EgressConfig holds the current response egress configuration.
@@ -60,6 +65,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 	if !ok {
 		w.log.WithField("rule_id", meta.RuleID).Warn("Rule not found")
 		w.stats.ErrorPackets.Add(1)
+		w.emitResult(meta.RuleID, "", "failed")
 		return
 	}
 
@@ -70,6 +76,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 			"action":  action,
 		}).Warn("Unimplemented action")
 		w.stats.ErrorPackets.Add(1)
+		w.emitResult(meta.RuleID, action, "failed")
 		return
 	}
 
@@ -80,6 +87,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 			"action":  action,
 		}).Warn("Build response failed")
 		w.stats.ErrorPackets.Add(1)
+		w.emitResult(meta.RuleID, action, "failed")
 		return
 	}
 
@@ -89,6 +97,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 	if err != nil {
 		w.log.WithError(err).Warn("Create sender failed")
 		w.stats.ErrorPackets.Add(1)
+		w.emitResult(meta.RuleID, action, "failed")
 		return
 	}
 	defer sender.Close()
@@ -97,6 +106,7 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 	if err := SendWithVLAN(sender, respPkt, vlanMode); err != nil {
 		w.log.WithError(err).Warn("Send response failed")
 		w.stats.ErrorPackets.Add(1)
+		w.emitResult(meta.RuleID, action, "failed")
 		return
 	}
 
@@ -110,11 +120,18 @@ func (w *Worker) ProcessPacket(pkt []byte, meta XSKMeta) {
 	if w.OnResponseSuccess != nil {
 		w.OnResponseSuccess(pkt)
 	}
+	w.emitResult(meta.RuleID, action, "sent")
 
 	w.log.WithFields(logrus.Fields{
 		"rule_id": meta.RuleID,
 		"action":  action,
 	}).Debug("Response sent")
+}
+
+func (w *Worker) emitResult(ruleID uint32, action, result string) {
+	if w.OnResponseResult != nil {
+		w.OnResponseResult(w.ifIndex, ruleID, action, result)
+	}
 }
 
 // DecodeXSKMeta extracts xsk_meta from XDP metadata preceding the packet.

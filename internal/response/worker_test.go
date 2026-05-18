@@ -71,3 +71,52 @@ func TestStatsSnapshot(t *testing.T) {
 	assert.Equal(t, uint64(5), snap.AFPacketTXPackets)
 	assert.Equal(t, uint64(0), snap.XSKTXPackets)
 }
+
+func TestWorkerProcessPacketResultCallbackRuleNotFound(t *testing.T) {
+	stats := &Stats{}
+	lookup := &RulesetRuleLookup{Rules: nil}
+	w := NewWorker(3, lookup, stats, EgressConfig{}, 0, nil)
+
+	var gotIfIndex, gotRuleID uint32
+	var gotAction, gotResult string
+	w.OnResponseResult = func(ifIndex, ruleID uint32, action, result string) {
+		gotIfIndex = ifIndex
+		gotRuleID = ruleID
+		gotAction = action
+		gotResult = result
+	}
+
+	w.ProcessPacket([]byte{0x00}, XSKMeta{RuleID: 999, Action: ActionICMPEchoReply})
+
+	assert.Equal(t, uint32(3), gotIfIndex)
+	assert.Equal(t, uint32(999), gotRuleID)
+	assert.Equal(t, "", gotAction)
+	assert.Equal(t, "failed", gotResult)
+}
+
+func TestWorkerProcessPacketResultCallbackBuildFailed(t *testing.T) {
+	stats := &Stats{}
+	lookup := &RulesetRuleLookup{
+		Rules: []RuleEntry{
+			{RuleID: 1001, Action: "tcp_syn_ack", Params: nil},
+		},
+	}
+	w := NewWorker(3, lookup, stats, EgressConfig{}, 0, nil)
+
+	var gotIfIndex, gotRuleID uint32
+	var gotAction, gotResult string
+	w.OnResponseResult = func(ifIndex, ruleID uint32, action, result string) {
+		gotIfIndex = ifIndex
+		gotRuleID = ruleID
+		gotAction = action
+		gotResult = result
+	}
+
+	// Action 5 = tcp_syn_ack, but packet is too short for builder.
+	w.ProcessPacket([]byte{0x00}, XSKMeta{RuleID: 1001, Action: ActionTCPSynAck})
+
+	assert.Equal(t, uint32(3), gotIfIndex)
+	assert.Equal(t, uint32(1001), gotRuleID)
+	assert.Equal(t, "tcp_syn_ack", gotAction)
+	assert.Equal(t, "failed", gotResult)
+}

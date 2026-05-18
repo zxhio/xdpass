@@ -113,7 +113,7 @@ func (s *Store) xskAfterCreate(att *attachment.Attachment, maps attachment.MapAc
 		}
 		close(envCh)
 	}()
-	s.responseRuntime.StartWorker(att.IfIndex, s.currentEgressConfig(), envCh, sockFD, result.Socket, s.dispatchEnqueue)
+	s.responseRuntime.StartWorker(att.IfIndex, s.currentEgressConfig(), envCh, sockFD, result.Socket, s.dispatchEnqueue, s.emitResponseResult)
 	return nil
 }
 
@@ -162,6 +162,14 @@ func (s *Store) eventAfterPatch(att *attachment.Attachment, maps attachment.MapA
 // eventPreDelete stops the event ringbuf reader before attachment deletion.
 func (s *Store) eventPreDelete(ifIndex uint32, _ attachment.MapAccessor) {
 	s.eventStream.StopReader(ifIndex)
+}
+
+// emitResponseResult broadcasts a userspace response result event.
+func (s *Store) emitResponseResult(ifIndex, ruleID uint32, action, result string) {
+	if s.eventStream == nil {
+		return
+	}
+	s.eventStream.Broadcast(events.NewResultEvent(ruleID, action, ifIndex, result))
 }
 
 // dispatchEnqueue is called after a successful response to enqueue the original packet for dispatch.
