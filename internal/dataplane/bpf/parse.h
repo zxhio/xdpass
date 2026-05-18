@@ -103,6 +103,8 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 		struct arphdr *arp = data + offset;
 		if (!ptr_ok(arp, data_end, sizeof(*arp)))
 			return -1;
+		if (arp->ar_hln == 0 || arp->ar_pln == 0)
+			return -1;
 		__u64 arp_payload = 2 * (__u64)arp->ar_hln + 2 * (__u64)arp->ar_pln;
 		if (!ptr_ok(arp, data_end, sizeof(*arp) + arp_payload))
 			return -1;
