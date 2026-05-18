@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
@@ -165,6 +166,25 @@ func (s *Stream) broadcast(event Event) {
 		default:
 			// Slow subscriber, drop event.
 		}
+	}
+}
+
+// Broadcast sends an event to all subscribers from external callers (e.g. response runtime).
+// This is distinct from the internal broadcast used by ringbuf readers.
+func (s *Stream) Broadcast(event Event) {
+	s.broadcast(event)
+}
+
+// NewResultEvent creates a userspace result event for the response final stage.
+func NewResultEvent(ruleID uint32, action string, ifIndex uint32, result string) Event {
+	return Event{
+		Timestamp: time.Now().Unix(),
+		Type:      "rule_event",
+		RuleID:    ruleID,
+		Action:    action,
+		Path:      "userspace",
+		Result:    result,
+		IfIndex:   ifIndex,
 	}
 }
 

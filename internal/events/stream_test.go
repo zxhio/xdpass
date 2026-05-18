@@ -137,3 +137,74 @@ func TestStreamReaderCount(t *testing.T) {
 	s.mu.RUnlock()
 	assert.Equal(t, 1, count)
 }
+
+func TestBroadcastDeliversToSubscribers(t *testing.T) {
+	s := NewStreamWithFactory(t.Context(), fakeReaderFactory)
+	defer s.Stop()
+
+	sub := s.Subscribe()
+
+	evt := Event{
+		Timestamp: 1710000000,
+		Type:      "rule_event",
+		RuleID:    100,
+		Action:    "icmp_echo_reply",
+		Path:      "userspace",
+		Result:    "sent",
+		IfIndex:   3,
+	}
+	s.Broadcast(evt)
+
+	select {
+	case got := <-sub.Events:
+		assert.Equal(t, evt, got)
+	case <-time.After(time.Second):
+		t.Fatal("Broadcast did not deliver event")
+	}
+}
+
+func TestBroadcastDropsForSlowSubscriber(t *testing.T) {
+	s := NewStreamWithFactory(t.Context(), fakeReaderFactory)
+	defer s.Stop()
+
+	// Subscribe with a full channel (buffer size 64).
+	sub := s.Subscribe()
+
+	// Fill the buffer.
+	for i := range 64 {
+		s.Broadcast(Event{RuleID: uint32(i)})
+	}
+
+	// This should not block.
+	s.Broadcast(Event{RuleID: 999})
+
+	// Drain and verify no deadlock.
+	close(sub.Events)
+	count := 0
+	for range sub.Events {
+		count++
+	}
+	assert.Equal(t, 64, count)
+}
+
+func TestNewResultEvent(t *testing.T) {
+	before := time.Now().Unix()
+	evt := NewResultEvent(1001, "icmp_echo_reply", 3, "sent")
+	after := time.Now().Unix()
+
+	assert.Equal(t, "rule_event", evt.Type)
+	assert.Equal(t, uint32(1001), evt.RuleID)
+	assert.Equal(t, "icmp_echo_reply", evt.Action)
+	assert.Equal(t, "userspace", evt.Path)
+	assert.Equal(t, "sent", evt.Result)
+	assert.Equal(t, uint32(3), evt.IfIndex)
+	assert.Equal(t, "", evt.Verdict)
+	assert.GreaterOrEqual(t, evt.Timestamp, before)
+	assert.LessOrEqual(t, evt.Timestamp, after)
+}
+
+func TestNewResultEventFailed(t *testing.T) {
+	evt := NewResultEvent(200, "tcp_syn_ack", 5, "failed")
+	assert.Equal(t, "failed", evt.Result)
+	assert.Equal(t, "", evt.Verdict)
+}
