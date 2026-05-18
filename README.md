@@ -130,6 +130,12 @@ python3 scripts/xdpass-cli.py ruleset-apply                  # 兼容短命令
 python3 scripts/xdpass-cli.py response-egress get
 python3 scripts/xdpass-cli.py dispatch get
 
+# events
+python3 scripts/xdpass-cli.py events stream                     # 实时 JSON 事件流
+python3 scripts/xdpass-cli.py events stream --raw-sse           # 原始 SSE 格式
+python3 scripts/xdpass-cli.py events stream --count 10          # 收到 10 条后退出
+python3 scripts/xdpass-cli.py events stream --timeout 30        # 30 秒后退出
+
 # smoke test
 python3 scripts/xdpass-cli.py smoke --ifname br-xdpass
 
