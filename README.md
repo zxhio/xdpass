@@ -47,18 +47,20 @@ sudo ./build/xdpass-agent --config /etc/xdpass/agent/config.yaml
 ## systemd 部署
 
 ```bash
-# 安装二进制
-sudo cp build/xdpass-agent /usr/local/bin/
+# 先构建 build/xdpass-agent
+make build
 
-# 安装配置
-sudo mkdir -p /etc/xdpass/agent
-sudo cp deploy/config/agent/config.yaml /etc/xdpass/agent/config.yaml
+# 打包 bin/xdpass-agent 和部署文件
+make pack VERSION=0.0.1
 
-# 安装 systemd unit
-sudo cp deploy/systemd/xdpass-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now xdpass-agent
+# 解包后安装 xdpass，并启用/启动服务
+tar -xzf build/xdpass-0.0.1-linux-amd64.tar.gz
+cd xdpass-0.0.1-linux-amd64
+sudo scripts/install-systemd.sh --enable --start
 ```
+
+脚本默认读取包根下的 `bin/xdpass-agent`、`deploy/config/agent/config.yaml` 和 `deploy/systemd/xdpass-agent.service`。
+默认不覆盖已有 `/etc/xdpass/agent/config.yaml`；需要覆盖时传 `--force`。
 
 日志默认写入 `/var/log/xdpass/agent.log`，systemd unit 通过 `LogsDirectory=xdpass` 自动创建目录。
 
