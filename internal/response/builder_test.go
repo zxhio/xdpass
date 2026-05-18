@@ -9,6 +9,8 @@ import (
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 var (
@@ -22,7 +24,7 @@ func TestBuildICMPEchoReply(t *testing.T) {
 	// Build a minimal ICMP echo request packet.
 	pkt := buildTestICMPEchoRequest(t)
 
-	builder := BuilderForAction(ActionICMPEchoReply)
+	builder := BuilderForAction(abi.ActionICMPEchoReply)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -41,7 +43,7 @@ func TestBuildICMPEchoReply(t *testing.T) {
 }
 
 func TestBuildICMPEchoReplyTooShort(t *testing.T) {
-	builder := BuilderForAction(ActionICMPEchoReply)
+	builder := BuilderForAction(abi.ActionICMPEchoReply)
 	_, err := builder([]byte{0x00, 0x01}, nil)
 	assert.ErrorIs(t, err, ErrInvalidPacket)
 }
@@ -50,7 +52,7 @@ func TestBuildICMPEchoReplyNotICMP(t *testing.T) {
 	pkt := buildTestICMPEchoRequest(t)
 	pkt[23] = 6 // Set protocol to TCP
 
-	builder := BuilderForAction(ActionICMPEchoReply)
+	builder := BuilderForAction(abi.ActionICMPEchoReply)
 	_, err := builder(pkt, nil)
 	assert.ErrorIs(t, err, ErrInvalidPacket)
 }
@@ -58,7 +60,7 @@ func TestBuildICMPEchoReplyNotICMP(t *testing.T) {
 func TestBuildUDPEchoReply(t *testing.T) {
 	pkt := buildTestUDPPacket(t)
 
-	builder := BuilderForAction(ActionUDPEchoReply)
+	builder := BuilderForAction(abi.ActionUDPEchoReply)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -81,7 +83,7 @@ func TestBuildUDPEchoReply(t *testing.T) {
 func TestBuildARPReply(t *testing.T) {
 	pkt := buildTestARPRequest(t)
 
-	builder := BuilderForAction(ActionARPReply)
+	builder := BuilderForAction(abi.ActionARPReply)
 	require.NotNil(t, builder)
 
 	replyHW := net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
@@ -109,7 +111,7 @@ func TestBuildARPReply(t *testing.T) {
 func TestBuildARPReplyMissingParams(t *testing.T) {
 	pkt := buildTestARPRequest(t)
 
-	builder := BuilderForAction(ActionARPReply)
+	builder := BuilderForAction(abi.ActionARPReply)
 	_, err := builder(pkt, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing required param")
@@ -118,7 +120,7 @@ func TestBuildARPReplyMissingParams(t *testing.T) {
 func TestBuildTCPSynAck(t *testing.T) {
 	pkt := buildTestTCPSYN(t)
 
-	builder := BuilderForAction(ActionTCPSynAck)
+	builder := BuilderForAction(abi.ActionTCPSynAck)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -156,7 +158,7 @@ func TestBuildTCPSynAck(t *testing.T) {
 func TestBuildTCPSynAckWithSeqParam(t *testing.T) {
 	pkt := buildTestTCPSYN(t)
 
-	builder := BuilderForAction(ActionTCPSynAck)
+	builder := BuilderForAction(abi.ActionTCPSynAck)
 	require.NotNil(t, builder)
 
 	params := map[string]any{"tcp_seq": float64(12345)}
@@ -172,7 +174,7 @@ func TestBuildTCPSynAckNotSYN(t *testing.T) {
 	pkt := buildTestTCPSYN(t)
 	pkt[34+13] = 0x10 // ACK only, no SYN
 
-	builder := BuilderForAction(ActionTCPSynAck)
+	builder := BuilderForAction(abi.ActionTCPSynAck)
 	_, err := builder(pkt, nil)
 	assert.ErrorIs(t, err, ErrInvalidPacket)
 }
@@ -180,7 +182,7 @@ func TestBuildTCPSynAckNotSYN(t *testing.T) {
 func TestBuildDNSRefused(t *testing.T) {
 	pkt := buildTestDNSRequest(t)
 
-	builder := BuilderForAction(ActionDNSRefused)
+	builder := BuilderForAction(abi.ActionDNSRefused)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -212,7 +214,7 @@ func TestBuildDNSRefused(t *testing.T) {
 func TestBuildDNSSinkhole(t *testing.T) {
 	pkt := buildTestDNSRequest(t)
 
-	builder := BuilderForAction(ActionDNSSinkhole)
+	builder := BuilderForAction(abi.ActionDNSSinkhole)
 	require.NotNil(t, builder)
 
 	params := map[string]any{
@@ -247,7 +249,7 @@ func TestBuildDNSSinkhole(t *testing.T) {
 func TestBuildDNSSinkholeNoAnswers(t *testing.T) {
 	pkt := buildTestDNSRequest(t)
 
-	builder := BuilderForAction(ActionDNSSinkhole)
+	builder := BuilderForAction(abi.ActionDNSSinkhole)
 	require.NotNil(t, builder)
 
 	params := map[string]any{
@@ -260,7 +262,7 @@ func TestBuildDNSSinkholeNoAnswers(t *testing.T) {
 func TestBuildICMPPortUnreachable(t *testing.T) {
 	pkt := buildTestUDPPacket(t)
 
-	builder := BuilderForAction(ActionICMPPortUnreachable)
+	builder := BuilderForAction(abi.ActionICMPPortUnreachable)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -293,7 +295,7 @@ func TestBuildICMPPortUnreachable(t *testing.T) {
 func TestBuildICMPHostUnreachable(t *testing.T) {
 	pkt := buildTestTCPSYN(t)
 
-	builder := BuilderForAction(ActionICMPHostUnreachable)
+	builder := BuilderForAction(abi.ActionICMPHostUnreachable)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -311,7 +313,7 @@ func TestBuildICMPHostUnreachable(t *testing.T) {
 func TestBuildICMPAdminProhibited(t *testing.T) {
 	pkt := buildTestUDPPacket(t)
 
-	builder := BuilderForAction(ActionICMPAdminProhibited)
+	builder := BuilderForAction(abi.ActionICMPAdminProhibited)
 	require.NotNil(t, builder)
 
 	reply, err := builder(pkt, nil)
@@ -323,7 +325,7 @@ func TestBuildICMPAdminProhibited(t *testing.T) {
 }
 
 func TestBuildICMPUnreachableTooShort(t *testing.T) {
-	builder := BuilderForAction(ActionICMPPortUnreachable)
+	builder := BuilderForAction(abi.ActionICMPPortUnreachable)
 	_, err := builder([]byte{0x00, 0x01}, nil)
 	assert.ErrorIs(t, err, ErrInvalidPacket)
 }
@@ -331,7 +333,7 @@ func TestBuildICMPUnreachableTooShort(t *testing.T) {
 func TestBuildICMPUnreachableNotIPv4(t *testing.T) {
 	pkt := buildTestARPRequest(t) // ARP, not IPv4
 
-	builder := BuilderForAction(ActionICMPPortUnreachable)
+	builder := BuilderForAction(abi.ActionICMPPortUnreachable)
 	_, err := builder(pkt, nil)
 	assert.ErrorIs(t, err, ErrInvalidPacket)
 }
@@ -348,7 +350,7 @@ func TestBuildICMPUnreachableShortPayload(t *testing.T) {
 	copy(pkt[26:30], net.ParseIP("10.0.0.1").To4())
 	copy(pkt[30:34], net.ParseIP("192.168.1.1").To4())
 
-	builder := BuilderForAction(ActionICMPPortUnreachable)
+	builder := BuilderForAction(abi.ActionICMPPortUnreachable)
 	reply, err := builder(pkt, nil)
 	require.NoError(t, err)
 
@@ -360,12 +362,12 @@ func TestBuildICMPUnreachableShortPayload(t *testing.T) {
 func TestDecodeXSKMeta(t *testing.T) {
 	meta := make([]byte, 8)
 	binary.LittleEndian.PutUint32(meta[0:4], 1001)
-	binary.LittleEndian.PutUint16(meta[4:6], 3) // ICMP_ECHO_REPLY
+	binary.LittleEndian.PutUint16(meta[4:6], abi.ActionICMPEchoReply)
 
 	m, err := DecodeXSKMeta(meta)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1001), m.RuleID)
-	assert.Equal(t, uint16(3), m.Action)
+	assert.Equal(t, abi.ActionICMPEchoReply, m.Action)
 }
 
 func TestDecodeXSKMetaTooShort(t *testing.T) {
@@ -377,7 +379,7 @@ func TestDecodeXSKMetaTooShort(t *testing.T) {
 
 func BenchmarkBuildICMPEchoReply(b *testing.B) {
 	pkt := buildTestICMPEchoRequestB(b)
-	builder := BuilderForAction(ActionICMPEchoReply)
+	builder := BuilderForAction(abi.ActionICMPEchoReply)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
@@ -387,7 +389,7 @@ func BenchmarkBuildICMPEchoReply(b *testing.B) {
 
 func BenchmarkBuildUDPEchoReply(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderForAction(ActionUDPEchoReply)
+	builder := BuilderForAction(abi.ActionUDPEchoReply)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
@@ -397,7 +399,7 @@ func BenchmarkBuildUDPEchoReply(b *testing.B) {
 
 func BenchmarkBuildARPReply(b *testing.B) {
 	pkt := buildTestARPRequestB(b)
-	builder := BuilderForAction(ActionARPReply)
+	builder := BuilderForAction(abi.ActionARPReply)
 	params := map[string]any{
 		"hardware_addr": "aa:bb:cc:dd:ee:ff",
 		"sender_ipv4":   "10.0.0.1",
@@ -411,7 +413,7 @@ func BenchmarkBuildARPReply(b *testing.B) {
 
 func BenchmarkBuildICMPPortUnreachable(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderForAction(ActionICMPPortUnreachable)
+	builder := BuilderForAction(abi.ActionICMPPortUnreachable)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
@@ -421,7 +423,7 @@ func BenchmarkBuildICMPPortUnreachable(b *testing.B) {
 
 func BenchmarkBuildICMPHostUnreachable(b *testing.B) {
 	pkt := buildTestTCPSYNB(b)
-	builder := BuilderForAction(ActionICMPHostUnreachable)
+	builder := BuilderForAction(abi.ActionICMPHostUnreachable)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
@@ -431,7 +433,7 @@ func BenchmarkBuildICMPHostUnreachable(b *testing.B) {
 
 func BenchmarkBuildICMPAdminProhibited(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderForAction(ActionICMPAdminProhibited)
+	builder := BuilderForAction(abi.ActionICMPAdminProhibited)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
@@ -445,7 +447,7 @@ const benchBufSize = 256
 
 func BenchmarkBuildIntoICMPEchoReply(b *testing.B) {
 	pkt := buildTestICMPEchoRequestB(b)
-	builder := BuilderIntoForAction(ActionICMPEchoReply)
+	builder := BuilderIntoForAction(abi.ActionICMPEchoReply)
 	out := make([]byte, benchBufSize)
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -456,7 +458,7 @@ func BenchmarkBuildIntoICMPEchoReply(b *testing.B) {
 
 func BenchmarkBuildIntoUDPEchoReply(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderIntoForAction(ActionUDPEchoReply)
+	builder := BuilderIntoForAction(abi.ActionUDPEchoReply)
 	out := make([]byte, benchBufSize)
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -467,7 +469,7 @@ func BenchmarkBuildIntoUDPEchoReply(b *testing.B) {
 
 func BenchmarkBuildIntoARPReply(b *testing.B) {
 	pkt := buildTestARPRequestB(b)
-	builder := BuilderIntoForAction(ActionARPReply)
+	builder := BuilderIntoForAction(abi.ActionARPReply)
 	params := map[string]any{
 		"hardware_addr": net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
 		"sender_ipv4":   net.ParseIP("10.0.0.1").To4(),
@@ -482,7 +484,7 @@ func BenchmarkBuildIntoARPReply(b *testing.B) {
 
 func BenchmarkBuildIntoICMPPortUnreachable(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderIntoForAction(ActionICMPPortUnreachable)
+	builder := BuilderIntoForAction(abi.ActionICMPPortUnreachable)
 	out := make([]byte, benchBufSize)
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -493,7 +495,7 @@ func BenchmarkBuildIntoICMPPortUnreachable(b *testing.B) {
 
 func BenchmarkBuildIntoICMPHostUnreachable(b *testing.B) {
 	pkt := buildTestTCPSYNB(b)
-	builder := BuilderIntoForAction(ActionICMPHostUnreachable)
+	builder := BuilderIntoForAction(abi.ActionICMPHostUnreachable)
 	out := make([]byte, benchBufSize)
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -504,7 +506,7 @@ func BenchmarkBuildIntoICMPHostUnreachable(b *testing.B) {
 
 func BenchmarkBuildIntoICMPAdminProhibited(b *testing.B) {
 	pkt := buildTestUDPPacketB(b)
-	builder := BuilderIntoForAction(ActionICMPAdminProhibited)
+	builder := BuilderIntoForAction(abi.ActionICMPAdminProhibited)
 	out := make([]byte, benchBufSize)
 	b.ResetTimer()
 	b.ReportAllocs()

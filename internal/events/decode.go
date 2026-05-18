@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 // BPF rule_event is 32 bytes, matching the layout in bpf-abi.md.
@@ -45,42 +47,42 @@ type Event struct {
 
 // actionName maps BPF action codes to API action names.
 var actionName = map[uint16]string{
-	0:  "none",
-	1:  "alert",
-	2:  "tcp_reset",
-	3:  "icmp_echo_reply",
-	4:  "arp_reply",
-	5:  "tcp_syn_ack",
-	6:  "icmp_port_unreachable",
-	7:  "udp_echo_reply",
-	8:  "dns_refused",
-	9:  "icmp_host_unreachable",
-	10: "icmp_admin_prohibited",
-	11: "dns_sinkhole",
+	abi.ActionNone:                "none",
+	abi.ActionAlert:               "alert",
+	abi.ActionTCPReset:            "tcp_reset",
+	abi.ActionICMPEchoReply:       "icmp_echo_reply",
+	abi.ActionARPReply:            "arp_reply",
+	abi.ActionTCPSynAck:           "tcp_syn_ack",
+	abi.ActionICMPPortUnreachable: "icmp_port_unreachable",
+	abi.ActionUDPEchoReply:        "udp_echo_reply",
+	abi.ActionDNSRefused:          "dns_refused",
+	abi.ActionICMPHostUnreachable: "icmp_host_unreachable",
+	abi.ActionICMPAdminProhibited: "icmp_admin_prohibited",
+	abi.ActionDNSSinkhole:         "dns_sinkhole",
 }
 
 // verdictName maps BPF verdict codes to API verdict names.
 var verdictName = map[uint8]string{
-	0: "observe",
-	1: "xdp_tx",
-	2: "xsk_redirect",
-	3: "redirect_tx",
+	abi.VerdictObserve:    "observe",
+	abi.VerdictTX:         "xdp_tx",
+	abi.VerdictXSK:        "xsk_redirect",
+	abi.VerdictRedirectTX: "redirect_tx",
 }
 
 // actionPath maps action codes to their execution path.
 var actionPath = map[uint16]string{
-	0:  "none",      // none
-	1:  "none",      // alert
-	2:  "kernel",    // tcp_reset
-	3:  "userspace", // icmp_echo_reply
-	4:  "userspace", // arp_reply
-	5:  "userspace", // tcp_syn_ack
-	6:  "userspace", // icmp_port_unreachable
-	7:  "userspace", // udp_echo_reply
-	8:  "userspace", // dns_refused
-	9:  "userspace", // icmp_host_unreachable
-	10: "userspace", // icmp_admin_prohibited
-	11: "userspace", // dns_sinkhole
+	abi.ActionNone:                "none",
+	abi.ActionAlert:               "none",
+	abi.ActionTCPReset:            "kernel",
+	abi.ActionICMPEchoReply:       "userspace",
+	abi.ActionARPReply:            "userspace",
+	abi.ActionTCPSynAck:           "userspace",
+	abi.ActionICMPPortUnreachable: "userspace",
+	abi.ActionUDPEchoReply:        "userspace",
+	abi.ActionDNSRefused:          "userspace",
+	abi.ActionICMPHostUnreachable: "userspace",
+	abi.ActionICMPAdminProhibited: "userspace",
+	abi.ActionDNSSinkhole:         "userspace",
 }
 
 // DecodeEvent decodes a 32-byte BPF rule_event into an API Event.
@@ -129,14 +131,14 @@ func deriveResult(action uint16, verdict uint8) string {
 	case "none":
 		return ""
 	case "kernel":
-		if verdict == 1 || verdict == 3 { // VERDICT_TX or VERDICT_REDIRECT_TX
+		if verdict == abi.VerdictTX || verdict == abi.VerdictRedirectTX {
 			return "sent"
 		}
 		return "failed"
 	case "userspace":
 		// BPF verdict=xsk_redirect means the packet entered XSK.
 		// The actual sent/failed result comes from the userspace response runtime.
-		if verdict == 2 { // VERDICT_XSK
+		if verdict == abi.VerdictXSK {
 			return ""
 		}
 		return "failed"

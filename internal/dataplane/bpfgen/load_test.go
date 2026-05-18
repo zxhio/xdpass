@@ -65,66 +65,6 @@ func loadObjects(t *testing.T) *XdpassObjects {
 
 // --- Test helpers ---
 
-// Shared ABI aliases for tests.
-const (
-	statIngressPackets             = abi.StatIngressPackets
-	statParseOkPackets             = abi.StatParseOkPackets
-	statParseErrorPackets          = abi.StatParseErrorPackets
-	statMatchHitPackets            = abi.StatMatchHitPackets
-	statMatchMissPackets           = abi.StatMatchMissPackets
-	statKernelResponsePackets      = abi.StatKernelResponsePackets
-	statKernelResponseXdpTxPackets = abi.StatKernelResponseXDPTXPackets
-	statKernelResponseRedirectPkts = abi.StatKernelResponseRedirectPkts
-	statKernelResponseErrorPackets = abi.StatKernelResponseErrorPackets
-	statXskRedirectPackets         = abi.StatXSKRedirectPackets
-	statXskRedirectErrorPackets    = abi.StatXSKRedirectErrorPackets
-	statEventDroppedPackets        = abi.StatEventDroppedPackets
-	statDiagRuleCandidates         = abi.StatDiagRuleCandidates
-	statDiagRedirectFailed         = abi.StatDiagRedirectFailed
-	statDiagFibLookupFailed        = abi.StatDiagFibLookupFailed
-	statDiagXskMetaFailed          = abi.StatDiagXskMetaFailed
-	statDiagXskMapRedirectFailed   = abi.StatDiagXskMapRedirectFailed
-)
-
-// condition bits from shared ABI.
-const (
-	condProtoTCP        = abi.CondProtoTCP
-	condProtoUDP        = abi.CondProtoUDP
-	condProtoICMP       = abi.CondProtoICMP
-	condProtoARP        = abi.CondProtoARP
-	condVLAN            = abi.CondVLAN
-	condSrcPrefix       = abi.CondSrcPrefix
-	condDstPrefix       = abi.CondDstPrefix
-	condSrcPort         = abi.CondSrcPort
-	condDstPort         = abi.CondDstPort
-	condTCPSyn          = abi.CondTCPSyn
-	condTCPAck          = abi.CondTCPAck
-	condTCPRst          = abi.CondTCPRst
-	condTCPFin          = abi.CondTCPFin
-	condTCPPsh          = abi.CondTCPPsh
-	condICMPEchoRequest = abi.CondICMPEchoRequest
-	condICMPEchoReply   = abi.CondICMPEchoReply
-	condARPRequest      = abi.CondARPRequest
-	condARPReply        = abi.CondARPReply
-	condL4Payload       = abi.CondL4Payload
-)
-
-// action codes from shared ABI.
-const (
-	actionNone                = abi.ActionNone
-	actionAlert               = abi.ActionAlert
-	actionTCPReset            = abi.ActionTCPReset
-	actionICMPEchoReply       = abi.ActionICMPEchoReply
-	actionARPReply            = abi.ActionARPReply
-	actionTCPSynAck           = abi.ActionTCPSynAck
-	actionICMPPortUnreachable = abi.ActionICMPPortUnreachable
-	actionUDPEchoReply        = abi.ActionUDPEchoReply
-	actionDNSRefused          = abi.ActionDNSRefused
-	actionICMPHostUnreachable = abi.ActionICMPHostUnreachable
-	actionICMPAdminProhibited = abi.ActionICMPAdminProhibited
-	actionDNSSinkhole         = abi.ActionDNSSinkhole
-)
-
 // assertStatsSum reads a PERCPU_ARRAY stat and asserts the sum across CPUs.
 func assertStatsSum(t *testing.T, objs *XdpassObjects, index uint32, expected uint64) {
 	t.Helper()
@@ -491,10 +431,10 @@ func TestEmptyRulesetMissVerdictPass(t *testing.T) {
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS (2) for empty ruleset with ingress_verdict=0")
 
 	// Stats: ingress=1, parse_ok=1, match_miss=1.
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
-	assertStatsSum(t, objs, statMatchHitPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 0)
 }
 
 func TestEmptyRulesetMissVerdictDrop(t *testing.T) {
@@ -514,10 +454,10 @@ func TestEmptyRulesetMissVerdictDrop(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), ret, "expected XDP_DROP (1) for empty ruleset with ingress_verdict=1")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
-	assertStatsSum(t, objs, statMatchHitPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 0)
 }
 
 func TestTcpResetXdpTx(t *testing.T) {
@@ -529,11 +469,11 @@ func TestTcpResetXdpTx(t *testing.T) {
 	// Wildcard rule: slot 0 active, all optional bits set.
 	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 
-	// Rule: slot 0 = tcp_reset (action code 2).
+	// Rule: slot 0 = tcp_reset.
 	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       100,
-		RequiredMask: 0x01, // COND_PROTO_TCP
-		Action:       2,    // ACTION_TCP_RESET
+		RequiredMask: abi.CondProtoTCP,
+		Action:       abi.ActionTCPReset,
 	})
 
 	pkt := testPacket()
@@ -578,12 +518,12 @@ func TestTcpResetXdpTx(t *testing.T) {
 	assert.True(t, tcp.ACK, "ACK flag should be set")
 
 	// Stats.
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 1)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseXDPTXPackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseErrorPackets, 0)
 }
 
 func TestTcpResetRedirectPreserve(t *testing.T) {
@@ -595,8 +535,8 @@ func TestTcpResetRedirectPreserve(t *testing.T) {
 	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       100,
-		RequiredMask: 0x01, // COND_PROTO_TCP
-		Action:       2,    // ACTION_TCP_RESET
+		RequiredMask: abi.CondProtoTCP,
+		Action:       abi.ActionTCPReset,
 	})
 
 	// tx_config: redirect mode, egress ifindex=1 (lo), vlan_mode=preserve.
@@ -638,10 +578,10 @@ func TestTcpResetRedirectPreserve(t *testing.T) {
 	assert.True(t, tcp.ACK, "ACK flag should be set")
 
 	// Stats: redirect success.
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 1)
-	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseRedirectPkts, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseXDPTXPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponseErrorPackets, 0)
 }
 
 func TestTcpResetRedirectAccessVlan(t *testing.T) {
@@ -653,8 +593,8 @@ func TestTcpResetRedirectAccessVlan(t *testing.T) {
 	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       100,
-		RequiredMask: 0x01, // COND_PROTO_TCP
-		Action:       2,    // ACTION_TCP_RESET
+		RequiredMask: abi.CondProtoTCP,
+		Action:       abi.ActionTCPReset,
 	})
 
 	// tx_config: redirect mode, egress ifindex=1, vlan_mode=access (strip VLAN).
@@ -701,10 +641,10 @@ func TestTcpResetRedirectAccessVlan(t *testing.T) {
 	assert.True(t, tcp.ACK, "ACK flag should be set")
 
 	// Stats: redirect success.
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 1)
-	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseRedirectPkts, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseXDPTXPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponseErrorPackets, 0)
 }
 
 func TestTcpResetRedirectNoIfindex(t *testing.T) {
@@ -716,8 +656,8 @@ func TestTcpResetRedirectNoIfindex(t *testing.T) {
 	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       100,
-		RequiredMask: 0x01, // COND_PROTO_TCP
-		Action:       2,    // ACTION_TCP_RESET
+		RequiredMask: abi.CondProtoTCP,
+		Action:       abi.ActionTCPReset,
 	})
 
 	// tx_config: redirect mode but egress ifindex=0 (not configured).
@@ -737,10 +677,10 @@ func TestTcpResetRedirectNoIfindex(t *testing.T) {
 	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for redirect with no egress ifindex")
 
 	// Stats: kernel response counted, error counted, no redirect success.
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseRedirectPkts, 0)
-	assertStatsSum(t, objs, statKernelResponseXdpTxPackets, 0)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponseRedirectPkts, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponseXDPTXPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponseErrorPackets, 1)
 }
 
 // --- Stage 1: ABI layout tests ---
@@ -778,9 +718,9 @@ func TestParseShortPacket(t *testing.T) {
 	// Short packet: parse fails, returns miss_verdict (pass=2 for ingress_verdict=0).
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for short packet")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 0)
 }
 
 func TestParseUnknownEthertype(t *testing.T) {
@@ -802,9 +742,9 @@ func TestParseUnknownEthertype(t *testing.T) {
 	// Unknown ethertype: parse fails, returns miss_verdict (pass).
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for unknown ethertype")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 0)
 }
 
 func TestParseIPv4TCP(t *testing.T) {
@@ -820,10 +760,10 @@ func TestParseIPv4TCP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 0)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
 }
 
 func TestParseIPv4UDP(t *testing.T) {
@@ -839,9 +779,9 @@ func TestParseIPv4UDP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 0)
 }
 
 func TestParseIPv4ICMP(t *testing.T) {
@@ -857,9 +797,9 @@ func TestParseIPv4ICMP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 0)
 }
 
 func TestParseARP(t *testing.T) {
@@ -875,9 +815,9 @@ func TestParseARP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 0)
 }
 
 func TestParseVLAN(t *testing.T) {
@@ -893,9 +833,9 @@ func TestParseVLAN(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 0)
 }
 
 func TestParseMalformedIPv4Short(t *testing.T) {
@@ -918,9 +858,9 @@ func TestParseMalformedIPv4Short(t *testing.T) {
 	// Malformed: parse fails, returns miss_verdict.
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for malformed IPv4")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
-	assertStatsSum(t, objs, statParseOkPackets, 0)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseOkPackets, 0)
 }
 
 func TestParseMalformedIPv4SmallIHL(t *testing.T) {
@@ -942,8 +882,8 @@ func TestParseMalformedIPv4SmallIHL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for small IHL")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
 }
 
 func TestParseMalformedTCPShort(t *testing.T) {
@@ -969,8 +909,8 @@ func TestParseMalformedTCPShort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for truncated TCP")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
 }
 
 func TestParseMalformedUDPShort(t *testing.T) {
@@ -995,8 +935,8 @@ func TestParseMalformedUDPShort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for truncated UDP")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
 }
 
 func TestParseMalformedICMPShort(t *testing.T) {
@@ -1021,8 +961,8 @@ func TestParseMalformedICMPShort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for truncated ICMP")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
 }
 
 func TestParseMalformedARPShort(t *testing.T) {
@@ -1043,8 +983,8 @@ func TestParseMalformedARPShort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for truncated ARP")
 
-	assertStatsSum(t, objs, statIngressPackets, 1)
-	assertStatsSum(t, objs, statParseErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
+	assertStatsSum(t, objs, abi.StatParseErrorPackets, 1)
 }
 
 // --- Stage 3: Ruleset match boundary tests ---
@@ -1063,7 +1003,7 @@ func TestMatchProtocolTCP(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for none action")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchProtocolTCPMiss(t *testing.T) {
@@ -1080,8 +1020,8 @@ func TestMatchProtocolTCPMiss(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for miss")
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
-	assertStatsSum(t, objs, statMatchHitPackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 0)
 }
 
 func TestMatchProtocolUDP(t *testing.T) {
@@ -1098,7 +1038,7 @@ func TestMatchProtocolUDP(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for alert action")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchProtocolICMP(t *testing.T) {
@@ -1115,7 +1055,7 @@ func TestMatchProtocolICMP(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchProtocolARP(t *testing.T) {
@@ -1132,7 +1072,7 @@ func TestMatchProtocolARP(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchDstPort(t *testing.T) {
@@ -1149,7 +1089,7 @@ func TestMatchDstPort(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchDstPortMiss(t *testing.T) {
@@ -1166,8 +1106,8 @@ func TestMatchDstPortMiss(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
-	assertStatsSum(t, objs, statMatchHitPackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 0)
 }
 
 func TestMatchSrcPort(t *testing.T) {
@@ -1184,7 +1124,7 @@ func TestMatchSrcPort(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchCIDRDstPrefix(t *testing.T) {
@@ -1201,7 +1141,7 @@ func TestMatchCIDRDstPrefix(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchCIDRDstPrefixMiss(t *testing.T) {
@@ -1218,7 +1158,7 @@ func TestMatchCIDRDstPrefixMiss(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
 }
 
 func TestMatchCIDRSrcPrefix(t *testing.T) {
@@ -1235,7 +1175,7 @@ func TestMatchCIDRSrcPrefix(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchVLAN(t *testing.T) {
@@ -1252,7 +1192,7 @@ func TestMatchVLAN(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchVLANMiss(t *testing.T) {
@@ -1269,7 +1209,7 @@ func TestMatchVLANMiss(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
 }
 
 func TestMatchTCPSynFlag(t *testing.T) {
@@ -1290,7 +1230,7 @@ func TestMatchTCPSynFlag(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchTCPSynFlagMiss(t *testing.T) {
@@ -1313,7 +1253,7 @@ func TestMatchTCPSynFlagMiss(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchMissPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchMissPackets, 1)
 }
 
 func TestMatchICMPEchoRequest(t *testing.T) {
@@ -1330,7 +1270,7 @@ func TestMatchICMPEchoRequest(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchARPRequest(t *testing.T) {
@@ -1347,7 +1287,7 @@ func TestMatchARPRequest(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchPrioritySlotOrder(t *testing.T) {
@@ -1367,7 +1307,7 @@ func TestMatchPrioritySlotOrder(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchWildcardRule(t *testing.T) {
@@ -1385,13 +1325,13 @@ func TestMatchWildcardRule(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 
 	pkt = testUDPPacket()
 	ret, _, err = objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 2)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 2)
 }
 
 func TestMatchOptionalBitmap(t *testing.T) {
@@ -1410,7 +1350,7 @@ func TestMatchOptionalBitmap(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestMatchWildcardProtocolWithPort(t *testing.T) {
@@ -1428,7 +1368,7 @@ func TestMatchWildcardProtocolWithPort(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret)
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 // --- Stage 4: Action path boundary tests ---
@@ -1448,8 +1388,8 @@ func TestActionNoneObserve(t *testing.T) {
 	require.NoError(t, err)
 	// none action: observe + miss_verdict (pass).
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for none action")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 0)
 }
 
 func TestActionAlertObserve(t *testing.T) {
@@ -1466,8 +1406,8 @@ func TestActionAlertObserve(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), ret, "expected XDP_PASS for alert action")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 0)
 }
 
 func TestActionNoneObserveDrop(t *testing.T) {
@@ -1485,7 +1425,7 @@ func TestActionNoneObserveDrop(t *testing.T) {
 	require.NoError(t, err)
 	// none action with ingress_verdict=drop: observe + miss_verdict (drop).
 	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for none action with drop verdict")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
 func TestActionICMPPortUnreachableXSKRedirect(t *testing.T) {
@@ -1507,10 +1447,10 @@ func TestActionICMPPortUnreachableXSKRedirect(t *testing.T) {
 	// registered, so bpf_redirect_map fails and returns response_failure_verdict
 	// (XDP_DROP). Stats go to xsk_redirect error, not kernel_response.
 	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP port unreachable XSK redirect failure")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectPackets, 0)
-	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 0)
 }
 
 func TestActionICMPHostUnreachableXSKRedirect(t *testing.T) {
@@ -1529,10 +1469,10 @@ func TestActionICMPHostUnreachableXSKRedirect(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP host unreachable XSK redirect failure")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectPackets, 0)
-	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 0)
 }
 
 func TestActionICMPAdminProhibitedXSKRedirect(t *testing.T) {
@@ -1551,10 +1491,10 @@ func TestActionICMPAdminProhibitedXSKRedirect(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP admin prohibited XSK redirect failure")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectPackets, 0)
-	assertStatsSum(t, objs, statKernelResponsePackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectPackets, 0)
+	assertStatsSum(t, objs, abi.StatKernelResponsePackets, 0)
 }
 
 func TestActionXSKNoSocket(t *testing.T) {
@@ -1574,9 +1514,9 @@ func TestActionXSKNoSocket(t *testing.T) {
 	// XSK redirect without socket: bpf_redirect_map returns != XDP_REDIRECT.
 	// Falls to response_failure_verdict() = XDP_DROP.
 	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for XSK response without socket")
-	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
-	assertStatsSum(t, objs, statXskRedirectPackets, 0)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectPackets, 0)
 }
 
 func TestActionARPReplyXSKNoSocket(t *testing.T) {
@@ -1593,7 +1533,7 @@ func TestActionARPReplyXSKNoSocket(t *testing.T) {
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
-	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, abi.StatXSKRedirectErrorPackets, 1)
 }
 
 func TestActionUnknownFallback(t *testing.T) {
@@ -1609,7 +1549,7 @@ func TestActionUnknownFallback(t *testing.T) {
 	// Overwrite slot 0 with an unknown action code (99).
 	setupRule(t, objs, 0, XdpassRuleMeta{
 		RuleId:       1,
-		RequiredMask: condProtoTCP,
+		RequiredMask: abi.CondProtoTCP,
 		Action:       99, // unknown
 	})
 

@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 // BuilderFunc is a function that builds a response packet.
@@ -16,23 +18,23 @@ type BuilderIntoFunc func(origPkt []byte, params map[string]any, out []byte) (in
 // BuilderForAction returns a builder for the given action, or nil if unimplemented.
 func BuilderForAction(action uint16) BuilderFunc {
 	switch action {
-	case ActionICMPEchoReply:
+	case abi.ActionICMPEchoReply:
 		return buildICMPEchoReply
-	case ActionUDPEchoReply:
+	case abi.ActionUDPEchoReply:
 		return buildUDPEchoReply
-	case ActionARPReply:
+	case abi.ActionARPReply:
 		return buildARPReply
-	case ActionTCPSynAck:
+	case abi.ActionTCPSynAck:
 		return buildTCPSynAck
-	case ActionDNSRefused:
+	case abi.ActionDNSRefused:
 		return buildDNSRefused
-	case ActionDNSSinkhole:
+	case abi.ActionDNSSinkhole:
 		return buildDNSSinkhole
-	case ActionICMPPortUnreachable:
+	case abi.ActionICMPPortUnreachable:
 		return buildICMPUnreachable(3)
-	case ActionICMPHostUnreachable:
+	case abi.ActionICMPHostUnreachable:
 		return buildICMPUnreachable(1)
-	case ActionICMPAdminProhibited:
+	case abi.ActionICMPAdminProhibited:
 		return buildICMPUnreachable(13)
 	default:
 		return nil
@@ -42,19 +44,19 @@ func BuilderForAction(action uint16) BuilderFunc {
 // BuilderIntoForAction returns a zero-alloc builder for the given action, or nil if unimplemented.
 func BuilderIntoForAction(action uint16) BuilderIntoFunc {
 	switch action {
-	case ActionICMPEchoReply:
+	case abi.ActionICMPEchoReply:
 		return buildIntoICMPEchoReply
-	case ActionUDPEchoReply:
+	case abi.ActionUDPEchoReply:
 		return buildIntoUDPEchoReply
-	case ActionARPReply:
+	case abi.ActionARPReply:
 		return buildIntoARPReply
-	case ActionTCPSynAck:
+	case abi.ActionTCPSynAck:
 		return buildIntoTCPSynAck
-	case ActionICMPPortUnreachable:
+	case abi.ActionICMPPortUnreachable:
 		return buildIntoICMPUnreachable(3)
-	case ActionICMPHostUnreachable:
+	case abi.ActionICMPHostUnreachable:
 		return buildIntoICMPUnreachable(1)
-	case ActionICMPAdminProhibited:
+	case abi.ActionICMPAdminProhibited:
 		return buildIntoICMPUnreachable(13)
 	default:
 		return nil

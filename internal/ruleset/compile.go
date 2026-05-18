@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"net"
 	"sort"
+
+	"xdpass/internal/dataplane/abi"
 )
 
 // Compile validates and compiles a ruleset into BPF-ready structures.
@@ -83,70 +85,70 @@ func compileRequiredMask(m Match) uint32 {
 	if m.Protocol != "" {
 		switch m.Protocol {
 		case "tcp":
-			mask |= CondProtoTCP
+			mask |= abi.CondProtoTCP
 		case "udp":
-			mask |= CondProtoUDP
+			mask |= abi.CondProtoUDP
 		case "icmp":
-			mask |= CondProtoICMP
+			mask |= abi.CondProtoICMP
 		case "arp":
-			mask |= CondProtoARP
+			mask |= abi.CondProtoARP
 		}
 	}
 
 	if len(m.VLANS) > 0 {
-		mask |= CondVLAN
+		mask |= abi.CondVLAN
 	}
 	if len(m.SrcCIDRs) > 0 {
-		mask |= CondSrcPrefix
+		mask |= abi.CondSrcPrefix
 	}
 	if len(m.DstCIDRs) > 0 {
-		mask |= CondDstPrefix
+		mask |= abi.CondDstPrefix
 	}
 	if len(m.SrcPorts) > 0 {
-		mask |= CondSrcPort
+		mask |= abi.CondSrcPort
 	}
 	if len(m.DstPorts) > 0 {
-		mask |= CondDstPort
+		mask |= abi.CondDstPort
 	}
 
 	if m.TCPFlags != nil {
 		if m.TCPFlags.SYN != nil && *m.TCPFlags.SYN {
-			mask |= CondTCPSyn
+			mask |= abi.CondTCPSyn
 		}
 		if m.TCPFlags.ACK != nil && *m.TCPFlags.ACK {
-			mask |= CondTCPAck
+			mask |= abi.CondTCPAck
 		}
 		if m.TCPFlags.RST != nil && *m.TCPFlags.RST {
-			mask |= CondTCPRst
+			mask |= abi.CondTCPRst
 		}
 		if m.TCPFlags.FIN != nil && *m.TCPFlags.FIN {
-			mask |= CondTCPFin
+			mask |= abi.CondTCPFin
 		}
 		if m.TCPFlags.PSH != nil && *m.TCPFlags.PSH {
-			mask |= CondTCPPsh
+			mask |= abi.CondTCPPsh
 		}
 	}
 
 	if m.ICMPType != "" {
 		switch m.ICMPType {
 		case "echo_request":
-			mask |= CondICMPEchoRequest
+			mask |= abi.CondICMPEchoRequest
 		case "echo_reply":
-			mask |= CondICMPEchoReply
+			mask |= abi.CondICMPEchoReply
 		}
 	}
 
 	if m.ARPOP != "" {
 		switch m.ARPOP {
 		case "request":
-			mask |= CondARPRequest
+			mask |= abi.CondARPRequest
 		case "reply":
-			mask |= CondARPReply
+			mask |= abi.CondARPReply
 		}
 	}
 
 	if m.HasL4Payload != nil && *m.HasL4Payload {
-		mask |= CondL4Payload
+		mask |= abi.CondL4Payload
 	}
 
 	return mask
