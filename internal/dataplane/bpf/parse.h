@@ -43,8 +43,8 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 		if (!ptr_ok(ip, data_end, ip->ihl * 4))
 			return -1;
 
-		pkt->sip = bpf_ntohl(ip->saddr);
-		pkt->dip = bpf_ntohl(ip->daddr);
+		pkt->sip = ip->saddr;
+		pkt->dip = ip->daddr;
 		pkt->ip_proto = ip->protocol;
 		offset += ip->ihl * 4;
 
@@ -102,6 +102,9 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 	if (h_proto == ETH_P_ARP) {
 		struct arphdr *arp = data + offset;
 		if (!ptr_ok(arp, data_end, sizeof(*arp)))
+			return -1;
+		__u64 arp_payload = 2 * (__u64)arp->ar_hln + 2 * (__u64)arp->ar_pln;
+		if (!ptr_ok(arp, data_end, sizeof(*arp) + arp_payload))
 			return -1;
 		pkt->pkt_conds |= COND_PROTO_ARP;
 		if (bpf_ntohs(arp->ar_op) == ARPOP_REQUEST)
