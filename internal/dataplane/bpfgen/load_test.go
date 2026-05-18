@@ -1627,7 +1627,7 @@ func TestActionNoneObserveDrop(t *testing.T) {
 	assertStatsSum(t, objs, statMatchHitPackets, 1)
 }
 
-func TestActionICMPPortUnreachableKernelFail(t *testing.T) {
+func TestActionICMPPortUnreachableXSKRedirect(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	objs := loadObjects(t)
@@ -1638,17 +1638,21 @@ func TestActionICMPPortUnreachableKernelFail(t *testing.T) {
 	compileAndWrite(t, objs, rules, "pass")
 
 	pkt := testPacket()
+	const xdpDrop = 1
+
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
-	// ICMP unreachable goes through kernel response path. Since BPF only implements
-	// TCP reset, non-TCP-reset kernel actions hit the error path: XDP_DROP.
-	assert.Equal(t, uint32(1), ret, "expected XDP_DROP for ICMP unreachable (not implemented in BPF)")
+	// ICMP port unreachable goes through XSK response path. No XSK socket
+	// registered, so bpf_redirect_map fails and returns response_failure_verdict
+	// (XDP_DROP). Stats go to xsk_redirect error, not kernel_response.
+	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP port unreachable XSK redirect failure")
 	assertStatsSum(t, objs, statMatchHitPackets, 1)
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectPackets, 0)
+	assertStatsSum(t, objs, statKernelResponsePackets, 0)
 }
 
-func TestActionICMPHostUnreachableKernelFail(t *testing.T) {
+func TestActionICMPHostUnreachableXSKRedirect(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	objs := loadObjects(t)
@@ -1659,14 +1663,18 @@ func TestActionICMPHostUnreachableKernelFail(t *testing.T) {
 	compileAndWrite(t, objs, rules, "pass")
 
 	pkt := testPacket()
+	const xdpDrop = 1
+
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
-	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP host unreachable XSK redirect failure")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectPackets, 0)
+	assertStatsSum(t, objs, statKernelResponsePackets, 0)
 }
 
-func TestActionICMPAdminProhibitedKernelFail(t *testing.T) {
+func TestActionICMPAdminProhibitedXSKRedirect(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	objs := loadObjects(t)
@@ -1677,11 +1685,15 @@ func TestActionICMPAdminProhibitedKernelFail(t *testing.T) {
 	compileAndWrite(t, objs, rules, "pass")
 
 	pkt := testPacket()
+	const xdpDrop = 1
+
 	ret, _, err := objs.XdpassProg.Test(pkt)
 	require.NoError(t, err)
-	assert.Equal(t, uint32(1), ret, "expected XDP_DROP")
-	assertStatsSum(t, objs, statKernelResponsePackets, 1)
-	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
+	assert.Equal(t, uint32(xdpDrop), ret, "expected XDP_DROP for ICMP admin prohibited XSK redirect failure")
+	assertStatsSum(t, objs, statMatchHitPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectErrorPackets, 1)
+	assertStatsSum(t, objs, statXskRedirectPackets, 0)
+	assertStatsSum(t, objs, statKernelResponsePackets, 0)
 }
 
 func TestActionXSKNoSocket(t *testing.T) {
