@@ -20,6 +20,7 @@ type Runtime struct {
 type workerState struct {
 	worker *Worker
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewRuntime creates a new response runtime.
@@ -54,13 +55,17 @@ func (rt *Runtime) StartWorker(ifIndex uint32, egressCfg EgressConfig, pktCh <-c
 	w.OnResponseSuccess = onResponseSuccess
 	wCtx, wCancel := context.WithCancel(rt.ctx)
 
-	rt.workers[ifIndex] = &workerState{
+	ws := &workerState{
 		worker: w,
 		cancel: wCancel,
 	}
+	ws.wg.Add(1)
+	rt.workers[ifIndex] = ws
 
-	go w.Run(wCtx, pktCh)
-	logrus.WithField("ifindex", ifIndex).Info("Response worker started")
+	go func() {
+		defer ws.wg.Done()
+		w.Run(wCtx, pktCh)
+	}()
 }
 
 // StopWorker stops the response worker for an attachment.
@@ -74,8 +79,8 @@ func (rt *Runtime) StopWorker(ifIndex uint32) {
 	}
 
 	ws.cancel()
+	ws.wg.Wait()
 	delete(rt.workers, ifIndex)
-	logrus.WithField("ifindex", ifIndex).Info("Response worker stopped")
 }
 
 // UpdateEgress updates the egress config for all running workers.
@@ -102,6 +107,7 @@ func (rt *Runtime) Stop() {
 
 	for ifIndex, ws := range rt.workers {
 		ws.cancel()
+		ws.wg.Wait()
 		delete(rt.workers, ifIndex)
 	}
 }

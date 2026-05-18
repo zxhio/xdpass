@@ -29,6 +29,7 @@ type Runtime struct {
 	sockets  map[uint32]map[uint32]*Socket // ifindex → queueID → socket
 	cancelFn map[uint32]context.CancelFunc // ifindex → cancel
 	channels map[uint32]chan RXEnvelope    // ifindex → packet channel
+	rxWG     map[uint32]*sync.WaitGroup    // ifindex → RX goroutines
 }
 
 // NewRuntime creates a new XSK runtime.
@@ -38,6 +39,7 @@ func NewRuntime(ctx context.Context) *Runtime {
 		sockets:  make(map[uint32]map[uint32]*Socket),
 		cancelFn: make(map[uint32]context.CancelFunc),
 		channels: make(map[uint32]chan RXEnvelope),
+		rxWG:     make(map[uint32]*sync.WaitGroup),
 	}
 }
 
@@ -59,26 +61,20 @@ func (rt *Runtime) Start(xsksMap *ebpf.Map, req StartRequest) (*StartResult, err
 	pktCh := make(chan RXEnvelope, 64)
 	sockets := make(map[uint32]*Socket, len(req.Queues))
 	ctx, cancel := context.WithCancel(rt.ctx)
+	rxWG := &sync.WaitGroup{}
 
 	var firstSocket *Socket
 	for _, queueID := range req.Queues {
 		sock, err := NewSocket(req.IfIndex, queueID, req.Options)
 		if err != nil {
-			// Rollback: close already-created sockets.
-			cancel()
-			for _, s := range sockets {
-				s.Close()
-			}
+			stopSockets(cancel, rxWG, pktCh, sockets)
 			return nil, fmt.Errorf("xsk: create socket queue %d: %w", queueID, err)
 		}
 
 		// Register in xsks_map.
 		if err := xsksMap.Put(queueID, sock.FD()); err != nil {
 			sock.Close()
-			cancel()
-			for _, s := range sockets {
-				s.Close()
-			}
+			stopSockets(cancel, rxWG, pktCh, sockets)
 			return nil, fmt.Errorf("xsk: register queue %d in xsks_map: %w", queueID, err)
 		}
 
@@ -92,12 +88,17 @@ func (rt *Runtime) Start(xsksMap *ebpf.Map, req StartRequest) (*StartResult, err
 			"ifindex":   req.IfIndex,
 			"queue":     queueID,
 		})
-		go sock.RunRX(ctx, req.IfIndex, pktCh, log)
+		rxWG.Add(1)
+		go func() {
+			defer rxWG.Done()
+			sock.RunRX(ctx, req.IfIndex, pktCh, log)
+		}()
 	}
 
 	rt.sockets[req.IfIndex] = sockets
 	rt.cancelFn[req.IfIndex] = cancel
 	rt.channels[req.IfIndex] = pktCh
+	rt.rxWG[req.IfIndex] = rxWG
 
 	logrus.WithFields(logrus.Fields{
 		"ifindex": req.IfIndex,
@@ -116,19 +117,28 @@ func (rt *Runtime) Stop(xsksMap *ebpf.Map, ifIndex uint32) {
 	if !ok {
 		return
 	}
-	cancel()
 
 	sockets := rt.sockets[ifIndex]
-	for queueID, sock := range sockets {
+	for queueID := range sockets {
 		if xsksMap != nil {
 			_ = xsksMap.Delete(queueID)
 		}
+	}
+	cancel()
+	if rxWG := rt.rxWG[ifIndex]; rxWG != nil {
+		rxWG.Wait()
+	}
+	if pktCh := rt.channels[ifIndex]; pktCh != nil {
+		close(pktCh)
+	}
+	for _, sock := range sockets {
 		sock.Close()
 	}
 
 	delete(rt.sockets, ifIndex)
 	delete(rt.cancelFn, ifIndex)
 	delete(rt.channels, ifIndex)
+	delete(rt.rxWG, ifIndex)
 
 	logrus.WithField("ifindex", ifIndex).Info("XSK stopped")
 }
@@ -140,6 +150,12 @@ func (rt *Runtime) StopAll() {
 
 	for ifIndex, cancel := range rt.cancelFn {
 		cancel()
+		if rxWG := rt.rxWG[ifIndex]; rxWG != nil {
+			rxWG.Wait()
+		}
+		if pktCh := rt.channels[ifIndex]; pktCh != nil {
+			close(pktCh)
+		}
 		for _, sock := range rt.sockets[ifIndex] {
 			sock.Close()
 		}
@@ -148,6 +164,7 @@ func (rt *Runtime) StopAll() {
 	rt.sockets = make(map[uint32]map[uint32]*Socket)
 	rt.cancelFn = make(map[uint32]context.CancelFunc)
 	rt.channels = make(map[uint32]chan RXEnvelope)
+	rt.rxWG = make(map[uint32]*sync.WaitGroup)
 }
 
 // Socket returns the first socket for an attachment (for TX), or nil.
@@ -168,4 +185,13 @@ func (rt *Runtime) Channel(ifIndex uint32) chan RXEnvelope {
 	defer rt.mu.Unlock()
 
 	return rt.channels[ifIndex]
+}
+
+func stopSockets(cancel context.CancelFunc, rxWG *sync.WaitGroup, pktCh chan RXEnvelope, sockets map[uint32]*Socket) {
+	cancel()
+	rxWG.Wait()
+	close(pktCh)
+	for _, sock := range sockets {
+		sock.Close()
+	}
 }
