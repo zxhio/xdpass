@@ -472,3 +472,168 @@ func TestRulesetLifecycleApply(t *testing.T) {
 		assert.Equal(t, gen, s.applyGeneration[3])
 	})
 }
+
+// issuesWithCode returns issues matching the given code.
+func issuesWithCode(issues []api.StatusIssue, code string) []api.StatusIssue {
+	var result []api.StatusIssue
+	for _, issue := range issues {
+		if issue.Code == code {
+			result = append(result, issue)
+		}
+	}
+	return result
+}
+
+func TestStatusDegradedHealth(t *testing.T) {
+	t.Run("running with no attachments and no ruleset", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "running", resp.Status)
+		assert.Nil(t, resp.Issues)
+		assert.Equal(t, 0, resp.Attachments)
+		assert.False(t, resp.RulesetLoaded)
+	})
+
+	t.Run("degraded with userspace action without xsk", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		// icmp_echo_reply is a userspace action.
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "icmp_echo_reply"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		// Create attachment without XSK.
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "degraded", resp.Status)
+		assert.NotEmpty(t, issuesWithCode(resp.Issues, "userspace_action_without_xsk"))
+	})
+
+	t.Run("degraded with ruleset not applied", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err = s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		// Manually clear generation to simulate not-applied state.
+		delete(s.applyGeneration, 3)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "degraded", resp.Status)
+
+		matches := issuesWithCode(resp.Issues, "ruleset_not_applied")
+		require.Len(t, matches, 1)
+		assert.Equal(t, uint32(3), matches[0].IfIndex)
+	})
+
+	t.Run("degraded with stale generation", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		// Replace ruleset again — generation advances.
+		apiRules2 := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+			{RuleID: 1002, Priority: 20, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err = s.ReplaceRuleset(ctx, apiRules2)
+		require.NoError(t, err)
+
+		// Reset attachment's generation to stale.
+		s.applyGeneration[3] = 1
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "degraded", resp.Status)
+		assert.NotEmpty(t, issuesWithCode(resp.Issues, "ruleset_not_applied"))
+	})
+
+	t.Run("running after disable clears issues", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "icmp_echo_reply"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		// Disable attachment — userspace_action_without_xsk should clear.
+		_, err = s.PatchAttachment(ctx, 3, false)
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "running", resp.Status)
+		assert.Nil(t, resp.Issues)
+	})
+
+	t.Run("no userspace_action issue for non-userspace action", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		// alert is not a userspace action.
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, issuesWithCode(resp.Issues, "userspace_action_without_xsk"))
+	})
+
+	t.Run("running when ruleset applied and no ruleset issues", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.True(t, resp.RulesetLoaded)
+		assert.Equal(t, 1, resp.Rules)
+		// No ruleset-specific issues.
+		assert.Empty(t, issuesWithCode(resp.Issues, "ruleset_not_applied"))
+		assert.Empty(t, issuesWithCode(resp.Issues, "userspace_action_without_xsk"))
+	})
+}
