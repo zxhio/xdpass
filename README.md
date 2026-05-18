@@ -169,6 +169,4 @@ sudo scripts/xdpass-netns.sh cleanup
 
 - `attach_mode` MVP 仅支持 `generic`。
 - XSK（AF_XDP）需要 root 权限和真实网卡（driver mode XDP）。
-- kernel response 完整构包未实现，当前走 BPF failure path。
-- dispatch 模块暂缓设计，未实现。
 - 运行态无持久化，重启后需重新下发配置。
