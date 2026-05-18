@@ -56,9 +56,12 @@ type Runtime struct {
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
 
-	afterCreate XSKAfterCreateFunc
-	afterPatch  XSKAfterPatchFunc
-	preDelete   XSKPreDeleteFunc
+	afterCreate      XSKAfterCreateFunc
+	afterPatch       XSKAfterPatchFunc
+	preDelete        XSKPreDeleteFunc
+	eventAfterCreate EventAfterCreateFunc
+	eventAfterPatch  EventAfterPatchFunc
+	eventPreDelete   EventPreDeleteFunc
 }
 
 // SetXSKCallbacks registers XSK lifecycle callbacks.
@@ -66,6 +69,13 @@ func (r *Runtime) SetXSKCallbacks(afterCreate XSKAfterCreateFunc, afterPatch XSK
 	r.afterCreate = afterCreate
 	r.afterPatch = afterPatch
 	r.preDelete = preDelete
+}
+
+// SetEventCallbacks registers event lifecycle callbacks.
+func (r *Runtime) SetEventCallbacks(afterCreate EventAfterCreateFunc, afterPatch EventAfterPatchFunc, preDelete EventPreDeleteFunc) {
+	r.eventAfterCreate = afterCreate
+	r.eventAfterPatch = afterPatch
+	r.eventPreDelete = preDelete
 }
 
 // New creates a new attachment runtime.
@@ -216,6 +226,14 @@ func (r *Runtime) Create(req *Request) (*Attachment, error) {
 		}
 	}
 
+	// Start event reader. Rollback on failure.
+	if r.eventAfterCreate != nil {
+		if err := r.eventAfterCreate(att, &collMapAccessor{maps: coll.Maps}); err != nil {
+			r.cleanup(req.IfIndex)
+			return nil, fmt.Errorf("event reader start: %w", err)
+		}
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"ifindex":     req.IfIndex,
 		"attach_mode": req.AttachMode,
@@ -286,8 +304,18 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 			}
 		}
 
+		// Start event reader on enable.
+		if r.eventAfterPatch != nil {
+			r.eventAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, true)
+		}
+
 		logrus.WithField("ifindex", ifIndex).Info("Attachment enabled")
 	} else {
+		// Stop event reader before disable.
+		if r.eventAfterPatch != nil {
+			r.eventAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
+		}
+
 		// Stop XSK before detaching if callback is set.
 		if att.XSK.Enabled && r.afterPatch != nil {
 			r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
@@ -311,6 +339,11 @@ func (r *Runtime) Delete(ifIndex uint32) error {
 	att, ok := r.attachments[ifIndex]
 	if !ok {
 		return &NotFoundError{IfIndex: ifIndex}
+	}
+
+	// Stop event reader before cleanup.
+	if r.eventPreDelete != nil {
+		r.eventPreDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 	}
 
 	// Stop XSK before cleanup if callback is set.
@@ -338,6 +371,9 @@ func (r *Runtime) Close() {
 
 	for ifIndex := range r.attachments {
 		att := r.attachments[ifIndex]
+		if r.eventPreDelete != nil {
+			r.eventPreDelete(ifIndex, r.mapAccessorLocked(ifIndex))
+		}
 		if att.XSK.Enabled && r.preDelete != nil {
 			r.preDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 		}

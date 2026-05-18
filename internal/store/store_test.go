@@ -44,6 +44,7 @@ func TestDeleteAttachmentWithCallbacksReturns(t *testing.T) {
 
 	s := New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
 	s.WireXSKCallbacks()
+	s.WireEventCallbacks()
 
 	_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
 	require.NoError(t, err)

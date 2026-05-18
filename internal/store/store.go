@@ -73,6 +73,19 @@ func (s *Store) WireXSKCallbacks() {
 	)
 }
 
+// WireEventCallbacks registers event lifecycle callbacks on the attachment runtime.
+// Must be called after New().
+func (s *Store) WireEventCallbacks() {
+	if s.eventStream == nil {
+		return
+	}
+	s.attachments.SetEventCallbacks(
+		s.eventAfterCreate,
+		s.eventAfterPatch,
+		s.eventPreDelete,
+	)
+}
+
 func (s *Store) xskAfterCreate(att *attachment.Attachment, maps attachment.MapAccessor) error {
 	xsksMap := maps.XsksMap()
 	if xsksMap == nil {
@@ -120,6 +133,35 @@ func (s *Store) xskPreDelete(ifIndex uint32, maps attachment.MapAccessor) {
 		xsksMap = maps.XsksMap()
 	}
 	s.xskRuntime.Stop(xsksMap, ifIndex)
+}
+
+// eventAfterCreate starts the event ringbuf reader after attachment creation.
+func (s *Store) eventAfterCreate(att *attachment.Attachment, maps attachment.MapAccessor) error {
+	ringbufMap := maps.EventRingbufMap()
+	if ringbufMap == nil {
+		return nil
+	}
+	return s.eventStream.StartReader(ringbufMap, att.IfIndex)
+}
+
+// eventAfterPatch starts or stops the event ringbuf reader on enable/disable.
+func (s *Store) eventAfterPatch(att *attachment.Attachment, maps attachment.MapAccessor, enabled bool) {
+	if enabled {
+		ringbufMap := maps.EventRingbufMap()
+		if ringbufMap == nil {
+			return
+		}
+		if err := s.eventStream.StartReader(ringbufMap, att.IfIndex); err != nil {
+			logrus.WithError(err).WithField("ifindex", att.IfIndex).Warn("Failed to restart event reader")
+		}
+		return
+	}
+	s.eventStream.StopReader(att.IfIndex)
+}
+
+// eventPreDelete stops the event ringbuf reader before attachment deletion.
+func (s *Store) eventPreDelete(ifIndex uint32, _ attachment.MapAccessor) {
+	s.eventStream.StopReader(ifIndex)
 }
 
 // dispatchEnqueue is called after a successful response to enqueue the original packet for dispatch.

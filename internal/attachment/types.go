@@ -18,6 +18,17 @@ type XSKAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool) err
 // XSKPreDeleteFunc is called before an attachment is deleted.
 type XSKPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
 
+// EventAfterCreateFunc is called after an attachment is created.
+// It should start the event ringbuf reader. Return an error to rollback.
+type EventAfterCreateFunc func(att *Attachment, maps MapAccessor) error
+
+// EventAfterPatchFunc is called after PatchEnabled toggles an attachment.
+// enabled=true means the attachment was just enabled; false means disabled.
+type EventAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool)
+
+// EventPreDeleteFunc is called before an attachment is deleted.
+type EventPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
+
 // Request holds the attachment creation parameters.
 type Request struct {
 	IfIndex     uint32
