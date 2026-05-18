@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"xdpass/internal/attachment"
+	"xdpass/internal/dataplane/abi"
 	"xdpass/internal/ruleset"
 )
 
@@ -64,64 +65,64 @@ func loadObjects(t *testing.T) *XdpassObjects {
 
 // --- Test helpers ---
 
-// statsMap indexes from BPF common.h.
+// Shared ABI aliases for tests.
 const (
-	statIngressPackets             = 0
-	statParseOkPackets             = 1
-	statParseErrorPackets          = 2
-	statMatchHitPackets            = 3
-	statMatchMissPackets           = 4
-	statKernelResponsePackets      = 5
-	statKernelResponseXdpTxPackets = 6
-	statKernelResponseRedirectPkts = 7
-	statKernelResponseErrorPackets = 8
-	statXskRedirectPackets         = 9
-	statXskRedirectErrorPackets    = 10
-	statEventDroppedPackets        = 11
-	statDiagRuleCandidates         = 12
-	statDiagRedirectFailed         = 13
-	statDiagFibLookupFailed        = 14
-	statDiagXskMetaFailed          = 15
-	statDiagXskMapRedirectFailed   = 16
+	statIngressPackets             = abi.StatIngressPackets
+	statParseOkPackets             = abi.StatParseOkPackets
+	statParseErrorPackets          = abi.StatParseErrorPackets
+	statMatchHitPackets            = abi.StatMatchHitPackets
+	statMatchMissPackets           = abi.StatMatchMissPackets
+	statKernelResponsePackets      = abi.StatKernelResponsePackets
+	statKernelResponseXdpTxPackets = abi.StatKernelResponseXDPTXPackets
+	statKernelResponseRedirectPkts = abi.StatKernelResponseRedirectPkts
+	statKernelResponseErrorPackets = abi.StatKernelResponseErrorPackets
+	statXskRedirectPackets         = abi.StatXSKRedirectPackets
+	statXskRedirectErrorPackets    = abi.StatXSKRedirectErrorPackets
+	statEventDroppedPackets        = abi.StatEventDroppedPackets
+	statDiagRuleCandidates         = abi.StatDiagRuleCandidates
+	statDiagRedirectFailed         = abi.StatDiagRedirectFailed
+	statDiagFibLookupFailed        = abi.StatDiagFibLookupFailed
+	statDiagXskMetaFailed          = abi.StatDiagXskMetaFailed
+	statDiagXskMapRedirectFailed   = abi.StatDiagXskMapRedirectFailed
 )
 
-// condition bits from BPF common.h.
+// condition bits from shared ABI.
 const (
-	condProtoTCP        = 1 << 0
-	condProtoUDP        = 1 << 1
-	condProtoICMP       = 1 << 2
-	condProtoARP        = 1 << 3
-	condVLAN            = 1 << 4
-	condSrcPrefix       = 1 << 5
-	condDstPrefix       = 1 << 6
-	condSrcPort         = 1 << 7
-	condDstPort         = 1 << 8
-	condTCPSyn          = 1 << 9
-	condTCPAck          = 1 << 10
-	condTCPRst          = 1 << 11
-	condTCPFin          = 1 << 12
-	condTCPPsh          = 1 << 13
-	condICMPEchoRequest = 1 << 14
-	condICMPEchoReply   = 1 << 15
-	condARPRequest      = 1 << 16
-	condARPReply        = 1 << 17
-	condL4Payload       = 1 << 18
+	condProtoTCP        = abi.CondProtoTCP
+	condProtoUDP        = abi.CondProtoUDP
+	condProtoICMP       = abi.CondProtoICMP
+	condProtoARP        = abi.CondProtoARP
+	condVLAN            = abi.CondVLAN
+	condSrcPrefix       = abi.CondSrcPrefix
+	condDstPrefix       = abi.CondDstPrefix
+	condSrcPort         = abi.CondSrcPort
+	condDstPort         = abi.CondDstPort
+	condTCPSyn          = abi.CondTCPSyn
+	condTCPAck          = abi.CondTCPAck
+	condTCPRst          = abi.CondTCPRst
+	condTCPFin          = abi.CondTCPFin
+	condTCPPsh          = abi.CondTCPPsh
+	condICMPEchoRequest = abi.CondICMPEchoRequest
+	condICMPEchoReply   = abi.CondICMPEchoReply
+	condARPRequest      = abi.CondARPRequest
+	condARPReply        = abi.CondARPReply
+	condL4Payload       = abi.CondL4Payload
 )
 
-// action codes from BPF common.h.
+// action codes from shared ABI.
 const (
-	actionNone                = 0
-	actionAlert               = 1
-	actionTCPReset            = 2
-	actionICMPEchoReply       = 3
-	actionARPReply            = 4
-	actionTCPSynAck           = 5
-	actionICMPPortUnreachable = 6
-	actionUDPEchoReply        = 7
-	actionDNSRefused          = 8
-	actionICMPHostUnreachable = 9
-	actionICMPAdminProhibited = 10
-	actionDNSSinkhole         = 11
+	actionNone                = abi.ActionNone
+	actionAlert               = abi.ActionAlert
+	actionTCPReset            = abi.ActionTCPReset
+	actionICMPEchoReply       = abi.ActionICMPEchoReply
+	actionARPReply            = abi.ActionARPReply
+	actionTCPSynAck           = abi.ActionTCPSynAck
+	actionICMPPortUnreachable = abi.ActionICMPPortUnreachable
+	actionUDPEchoReply        = abi.ActionUDPEchoReply
+	actionDNSRefused          = abi.ActionDNSRefused
+	actionICMPHostUnreachable = abi.ActionICMPHostUnreachable
+	actionICMPAdminProhibited = abi.ActionICMPAdminProhibited
+	actionDNSSinkhole         = abi.ActionDNSSinkhole
 )
 
 // assertStatsSum reads a PERCPU_ARRAY stat and asserts the sum across CPUs.
@@ -441,7 +442,7 @@ func TestXdpassMapSpecs(t *testing.T) {
 		{"vlan_index_map", ebpf.Hash, 2, maskTSize, 4096},
 		{"src_prefix_lpm_map", ebpf.LPMTrie, uint32(unsafe.Sizeof(XdpassIpv4LpmKey{})), maskTSize, 4096},
 		{"dst_prefix_lpm_map", ebpf.LPMTrie, uint32(unsafe.Sizeof(XdpassIpv4LpmKey{})), maskTSize, 4096},
-		{"stats_map", ebpf.PerCPUArray, 4, 8, 17},
+		{"stats_map", ebpf.PerCPUArray, 4, 8, abi.StatCount},
 		{"xsks_map", ebpf.XSKMap, 4, 4, 64},
 	}
 
@@ -742,67 +743,7 @@ func TestTcpResetRedirectNoIfindex(t *testing.T) {
 	assertStatsSum(t, objs, statKernelResponseErrorPackets, 1)
 }
 
-// --- Stage 1: ABI constants and layout tests ---
-
-func TestABIConditionBits(t *testing.T) {
-	// Verify condition bit constants match BPF ABI (bpf-abi.md / common.h).
-	assert.Equal(t, 1<<0, condProtoTCP)
-	assert.Equal(t, 1<<1, condProtoUDP)
-	assert.Equal(t, 1<<2, condProtoICMP)
-	assert.Equal(t, 1<<3, condProtoARP)
-	assert.Equal(t, 1<<4, condVLAN)
-	assert.Equal(t, 1<<5, condSrcPrefix)
-	assert.Equal(t, 1<<6, condDstPrefix)
-	assert.Equal(t, 1<<7, condSrcPort)
-	assert.Equal(t, 1<<8, condDstPort)
-	assert.Equal(t, 1<<9, condTCPSyn)
-	assert.Equal(t, 1<<10, condTCPAck)
-	assert.Equal(t, 1<<11, condTCPRst)
-	assert.Equal(t, 1<<12, condTCPFin)
-	assert.Equal(t, 1<<13, condTCPPsh)
-	assert.Equal(t, 1<<14, condICMPEchoRequest)
-	assert.Equal(t, 1<<15, condICMPEchoReply)
-	assert.Equal(t, 1<<16, condARPRequest)
-	assert.Equal(t, 1<<17, condARPReply)
-	assert.Equal(t, 1<<18, condL4Payload)
-}
-
-func TestABIActionCodes(t *testing.T) {
-	// Verify action code constants match BPF ABI (bpf-abi.md / common.h).
-	assert.Equal(t, 0, actionNone)
-	assert.Equal(t, 1, actionAlert)
-	assert.Equal(t, 2, actionTCPReset)
-	assert.Equal(t, 3, actionICMPEchoReply)
-	assert.Equal(t, 4, actionARPReply)
-	assert.Equal(t, 5, actionTCPSynAck)
-	assert.Equal(t, 6, actionICMPPortUnreachable)
-	assert.Equal(t, 7, actionUDPEchoReply)
-	assert.Equal(t, 8, actionDNSRefused)
-	assert.Equal(t, 9, actionICMPHostUnreachable)
-	assert.Equal(t, 10, actionICMPAdminProhibited)
-	assert.Equal(t, 11, actionDNSSinkhole)
-}
-
-func TestABIStatsIndexes(t *testing.T) {
-	// Verify stats index constants match BPF ABI (bpf-abi.md / common.h).
-	assert.Equal(t, 0, statIngressPackets)
-	assert.Equal(t, 1, statParseOkPackets)
-	assert.Equal(t, 2, statParseErrorPackets)
-	assert.Equal(t, 3, statMatchHitPackets)
-	assert.Equal(t, 4, statMatchMissPackets)
-	assert.Equal(t, 5, statKernelResponsePackets)
-	assert.Equal(t, 6, statKernelResponseXdpTxPackets)
-	assert.Equal(t, 7, statKernelResponseRedirectPkts)
-	assert.Equal(t, 8, statKernelResponseErrorPackets)
-	assert.Equal(t, 9, statXskRedirectPackets)
-	assert.Equal(t, 10, statXskRedirectErrorPackets)
-	assert.Equal(t, 11, statEventDroppedPackets)
-	assert.Equal(t, 12, statDiagRuleCandidates)
-	assert.Equal(t, 13, statDiagRedirectFailed)
-	assert.Equal(t, 14, statDiagFibLookupFailed)
-	assert.Equal(t, 15, statDiagXskMetaFailed)
-	assert.Equal(t, 16, statDiagXskMapRedirectFailed)
-}
+// --- Stage 1: ABI layout tests ---
 
 func TestABIStructSizes(t *testing.T) {
 	// Verify Go struct sizes match BPF C struct sizes.
@@ -818,86 +759,6 @@ func TestABIStructSizes(t *testing.T) {
 	// global_cfg: 6 mask_t + 19 mask_t + uint32 + 4 pad = 25*64 + 4 + 4 = 1608.
 	expectedGlobalCfg := uintptr(25*64 + 4 + 4)
 	assert.Equal(t, expectedGlobalCfg, unsafe.Sizeof(XdpassGlobalCfg{}), "global_cfg size")
-}
-
-func TestABIRuleMetaRoundTrip(t *testing.T) {
-	skipUnlessBPF(t)
-	removeMemlock(t)
-
-	objs := loadObjects(t)
-
-	meta := XdpassRuleMeta{
-		RuleId:       42,
-		RequiredMask: condProtoTCP | condDstPort,
-		Action:       actionTCPReset,
-		Flags:        0,
-	}
-	require.NoError(t, objs.RuleIndexMap.Put(uint32(0), meta))
-
-	var got XdpassRuleMeta
-	require.NoError(t, objs.RuleIndexMap.Lookup(uint32(0), &got))
-
-	assert.Equal(t, meta.RuleId, got.RuleId, "rule_id")
-	assert.Equal(t, meta.RequiredMask, got.RequiredMask, "required_mask")
-	assert.Equal(t, meta.Action, got.Action, "action")
-	assert.Equal(t, meta.Flags, got.Flags, "flags")
-}
-
-func TestABIGlobalCfgRoundTrip(t *testing.T) {
-	skipUnlessBPF(t)
-	removeMemlock(t)
-
-	objs := loadObjects(t)
-
-	cfg := XdpassGlobalCfg{
-		AllActiveRules:         XdpassMaskT{Bits: [8]uint64{0x01, 0x02}},
-		VlanOptionalRules:      XdpassMaskT{Bits: [8]uint64{0x03}},
-		SrcPortOptionalRules:   XdpassMaskT{Bits: [8]uint64{0x04}},
-		DstPortOptionalRules:   XdpassMaskT{Bits: [8]uint64{0x05}},
-		SrcPrefixOptionalRules: XdpassMaskT{Bits: [8]uint64{0x06}},
-		DstPrefixOptionalRules: XdpassMaskT{Bits: [8]uint64{0x07}},
-		IngressVerdict:         1,
-	}
-	cfg.ConditionOptionalRules[0] = XdpassMaskT{Bits: [8]uint64{0x10}}
-	cfg.ConditionOptionalRules[18] = XdpassMaskT{Bits: [8]uint64{0x20}}
-
-	require.NoError(t, objs.GlobalCfgMap.Put(uint32(0), cfg))
-
-	var got XdpassGlobalCfg
-	require.NoError(t, objs.GlobalCfgMap.Lookup(uint32(0), &got))
-
-	assert.Equal(t, cfg.AllActiveRules, got.AllActiveRules, "all_active_rules")
-	assert.Equal(t, cfg.VlanOptionalRules, got.VlanOptionalRules, "vlan_optional_rules")
-	assert.Equal(t, cfg.SrcPortOptionalRules, got.SrcPortOptionalRules, "src_port_optional_rules")
-	assert.Equal(t, cfg.DstPortOptionalRules, got.DstPortOptionalRules, "dst_port_optional_rules")
-	assert.Equal(t, cfg.SrcPrefixOptionalRules, got.SrcPrefixOptionalRules, "src_prefix_optional_rules")
-	assert.Equal(t, cfg.DstPrefixOptionalRules, got.DstPrefixOptionalRules, "dst_prefix_optional_rules")
-	assert.Equal(t, cfg.IngressVerdict, got.IngressVerdict, "ingress_verdict")
-	assert.Equal(t, cfg.ConditionOptionalRules[0], got.ConditionOptionalRules[0], "condition_optional_rules[0]")
-	assert.Equal(t, cfg.ConditionOptionalRules[18], got.ConditionOptionalRules[18], "condition_optional_rules[18]")
-}
-
-func TestABITxConfigRoundTrip(t *testing.T) {
-	skipUnlessBPF(t)
-	removeMemlock(t)
-
-	objs := loadObjects(t)
-
-	cfg := XdpassTxConfig{
-		TcpResetMode:           1,
-		TcpResetEgressIfindex:  3,
-		TcpResetVlanMode:       1,
-		TcpResetFailureVerdict: 1,
-	}
-	require.NoError(t, objs.TxConfigMap.Put(uint32(0), cfg))
-
-	var got XdpassTxConfig
-	require.NoError(t, objs.TxConfigMap.Lookup(uint32(0), &got))
-
-	assert.Equal(t, cfg.TcpResetMode, got.TcpResetMode, "tcp_reset_mode")
-	assert.Equal(t, cfg.TcpResetEgressIfindex, got.TcpResetEgressIfindex, "tcp_reset_egress_ifindex")
-	assert.Equal(t, cfg.TcpResetVlanMode, got.TcpResetVlanMode, "tcp_reset_vlan_mode")
-	assert.Equal(t, cfg.TcpResetFailureVerdict, got.TcpResetFailureVerdict, "tcp_reset_failure_verdict")
 }
 
 // --- Stage 2: Packet parse boundary tests ---

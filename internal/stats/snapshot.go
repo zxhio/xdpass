@@ -2,26 +2,9 @@
 package stats
 
 import (
-	"encoding/binary"
-
 	"github.com/cilium/ebpf"
-)
 
-// BPF stats map counter indexes from bpf-abi.md.
-const (
-	statIngressPackets             = 0
-	statParseOkPackets             = 1
-	statParseErrorPackets          = 2
-	statMatchHitPackets            = 3
-	statMatchMissPackets           = 4
-	statKernelResponsePackets      = 5
-	statKernelResponseXDPTXPackets = 6
-	statKernelResponseRedirectPkts = 7
-	statKernelResponseErrorPackets = 8
-	statXSKRedirectPackets         = 9
-	statXSKRedirectErrorPackets    = 10
-	statEventDroppedPackets        = 11
-	statCount                      = 17
+	"xdpass/internal/dataplane/abi"
 )
 
 // Response is the stats API response.
@@ -86,7 +69,7 @@ type ErrorsStats struct {
 
 // Snapshot reads and aggregates stats from multiple BPF stats maps.
 func Snapshot(maps []*ebpf.Map, us *UserspaceResponseStats, ds *DispatchStats) Response {
-	var totals [statCount]uint64
+	var totals [abi.StatCount]uint64
 	for _, m := range maps {
 		if m == nil {
 			continue
@@ -106,39 +89,39 @@ func Snapshot(maps []*ebpf.Map, us *UserspaceResponseStats, ds *DispatchStats) R
 
 	return Response{
 		Ingress: IngressStats{
-			Packets: totals[statIngressPackets],
+			Packets: totals[abi.StatIngressPackets],
 		},
 		Parse: ParseStats{
-			OKPackets:    totals[statParseOkPackets],
-			ErrorPackets: totals[statParseErrorPackets],
+			OKPackets:    totals[abi.StatParseOkPackets],
+			ErrorPackets: totals[abi.StatParseErrorPackets],
 		},
 		Match: MatchStats{
-			HitPackets:  totals[statMatchHitPackets],
-			MissPackets: totals[statMatchMissPackets],
+			HitPackets:  totals[abi.StatMatchHitPackets],
+			MissPackets: totals[abi.StatMatchMissPackets],
 		},
 		KernelResponse: KernelResponseStats{
-			Packets:         totals[statKernelResponsePackets],
-			XDPTXPackets:    totals[statKernelResponseXDPTXPackets],
-			RedirectPackets: totals[statKernelResponseRedirectPkts],
-			ErrorPackets:    totals[statKernelResponseErrorPackets],
+			Packets:         totals[abi.StatKernelResponsePackets],
+			XDPTXPackets:    totals[abi.StatKernelResponseXDPTXPackets],
+			RedirectPackets: totals[abi.StatKernelResponseRedirectPkts],
+			ErrorPackets:    totals[abi.StatKernelResponseErrorPackets],
 		},
 		XSKRedirect: XSKRedirectStats{
-			Packets:      totals[statXSKRedirectPackets],
-			ErrorPackets: totals[statXSKRedirectErrorPackets],
+			Packets:      totals[abi.StatXSKRedirectPackets],
+			ErrorPackets: totals[abi.StatXSKRedirectErrorPackets],
 		},
 		UserspaceResponse: usResp,
 		Dispatch:          dsResp,
 		Errors: ErrorsStats{
-			XDPPackets: totals[statKernelResponseErrorPackets] + totals[statXSKRedirectErrorPackets],
+			XDPPackets: totals[abi.StatKernelResponseErrorPackets] + totals[abi.StatXSKRedirectErrorPackets],
 			XSKPackets: usResp.ErrorPackets,
 		},
 	}
 }
 
 // aggregateMap reads a PERCPU_ARRAY stats map and sums values into totals.
-func aggregateMap(m *ebpf.Map, totals *[statCount]uint64) {
+func aggregateMap(m *ebpf.Map, totals *[abi.StatCount]uint64) {
 	var key uint32
-	for i := range statCount {
+	for i := range abi.StatCount {
 		key = uint32(i)
 		var perCPU []uint64
 		if err := m.Lookup(&key, &perCPU); err != nil {
@@ -148,11 +131,6 @@ func aggregateMap(m *ebpf.Map, totals *[statCount]uint64) {
 			totals[i] += v
 		}
 	}
-}
-
-// ZeroResponse returns a zeroed stats response.
-func ZeroResponse() Response {
-	return Response{}
 }
 
 // SnapshotFromReaders aggregates stats from attachment StatsReaders.
@@ -170,11 +148,4 @@ func SnapshotFromReaders(readers []StatsReader, us *UserspaceResponseStats, ds *
 // StatsReader provides access to an attachment's BPF stats map.
 type StatsReader interface {
 	StatsMap() *ebpf.Map
-}
-
-// EncodeCounter encodes a uint64 into little-endian bytes (for testing).
-func EncodeCounter(v uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, v)
-	return b
 }
