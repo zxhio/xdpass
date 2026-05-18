@@ -111,16 +111,16 @@
 ### `sip`
 
 - 源 IPv4 地址
-- 外部 API 使用字符串表示
+- 外部 API 使用 dotted-decimal 字符串表示
 - 不存在时为空字符串
-- BPF ringbuf 内部使用 `uint32`
+- BPF ringbuf 内部使用 host-order `uint32`（parse.h 中 `bpf_ntohl` 转换）
 
 ### `dip`
 
 - 目的 IPv4 地址
-- 外部 API 使用字符串表示
+- 外部 API 使用 dotted-decimal 字符串表示
 - 不存在时为空字符串
-- BPF ringbuf 内部使用 `uint32`
+- BPF ringbuf 内部使用 host-order `uint32`（parse.h 中 `bpf_ntohl` 转换）
 
 ### `sport`
 
