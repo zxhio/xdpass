@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"golang.org/x/sys/unix"
+
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
 	"xdpass/internal/dispatch"
@@ -185,4 +187,288 @@ func TestEventReaderDeleteStopsReader(t *testing.T) {
 	err = s.eventStream.StartReader(nil, 3)
 	assert.NoError(t, err)
 	s.eventStream.StopReader(3)
+}
+
+// --- Ruleset lifecycle apply tests ---
+
+// mockStoreLoadBPFWithRulesetMaps creates a BPF collection with all maps needed by ruleset.WriteMaps.
+func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
+	ruleIndexMap, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.Array,
+		KeySize:    4,
+		ValueSize:  12, // sizeof(bpfRuleMeta)
+		MaxEntries: 512,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	globalCfgMap, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.Array,
+		KeySize:    4,
+		ValueSize:  1608, // sizeof(bpfGlobalCfg)
+		MaxEntries: 1,
+	})
+	if err != nil {
+		ruleIndexMap.Close()
+		return nil, err
+	}
+
+	newHashMap := func() (*ebpf.Map, error) {
+		return ebpf.NewMap(&ebpf.MapSpec{
+			Type:       ebpf.Hash,
+			KeySize:    2,
+			ValueSize:  64,
+			MaxEntries: 256,
+		})
+	}
+
+	srcPortMap, err := newHashMap()
+	if err != nil {
+		ruleIndexMap.Close()
+		globalCfgMap.Close()
+		return nil, err
+	}
+
+	dstPortMap, err := newHashMap()
+	if err != nil {
+		ruleIndexMap.Close()
+		globalCfgMap.Close()
+		srcPortMap.Close()
+		return nil, err
+	}
+
+	vlanMap, err := newHashMap()
+	if err != nil {
+		ruleIndexMap.Close()
+		globalCfgMap.Close()
+		srcPortMap.Close()
+		dstPortMap.Close()
+		return nil, err
+	}
+
+	newLpmMap := func() (*ebpf.Map, error) {
+		return ebpf.NewMap(&ebpf.MapSpec{
+			Type:       ebpf.LPMTrie,
+			KeySize:    8,
+			ValueSize:  64,
+			MaxEntries: 256,
+			Flags:      unix.BPF_F_NO_PREALLOC,
+		})
+	}
+
+	srcLpmMap, err := newLpmMap()
+	if err != nil {
+		ruleIndexMap.Close()
+		globalCfgMap.Close()
+		srcPortMap.Close()
+		dstPortMap.Close()
+		vlanMap.Close()
+		return nil, err
+	}
+
+	dstLpmMap, err := newLpmMap()
+	if err != nil {
+		ruleIndexMap.Close()
+		globalCfgMap.Close()
+		srcPortMap.Close()
+		dstPortMap.Close()
+		vlanMap.Close()
+		srcLpmMap.Close()
+		return nil, err
+	}
+
+	return &ebpf.Collection{
+		Programs: map[string]*ebpf.Program{},
+		Maps: map[string]*ebpf.Map{
+			"rule_index_map":     ruleIndexMap,
+			"global_cfg_map":     globalCfgMap,
+			"src_port_index_map": srcPortMap,
+			"dst_port_index_map": dstPortMap,
+			"vlan_index_map":     vlanMap,
+			"src_prefix_lpm_map": srcLpmMap,
+			"dst_prefix_lpm_map": dstLpmMap,
+		},
+	}, nil
+}
+
+// newTestStoreWithRulesetMaps creates a store with BPF maps that support ruleset writes.
+func newTestStoreWithRulesetMaps(t *testing.T) *Store {
+	t.Helper()
+	ctx := t.Context()
+	attRuntime := attachment.New(mockStoreLoadBPFWithRulesetMaps, mockStoreAttachXDP)
+	eventStream := events.NewStream(ctx)
+	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
+	xskRuntime := xsk.NewRuntime(ctx)
+	dispatchRuntime := dispatch.NewRuntime(ctx)
+	t.Cleanup(responseRuntime.Stop)
+	t.Cleanup(xskRuntime.StopAll)
+	t.Cleanup(dispatchRuntime.Stop)
+	t.Cleanup(eventStream.Stop)
+
+	s := New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
+	s.WireXSKCallbacks()
+	s.WireEventCallbacks()
+	s.WireRulesetCallbacks()
+	return s
+}
+
+func TestRulesetLifecycleApply(t *testing.T) {
+	t.Run("create with ruleset applies", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		_, gen := s.rulesetRuntime.CurrentCompiled()
+		assert.Equal(t, gen, s.applyGeneration[3])
+	})
+
+	t.Run("create without ruleset skips apply", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		_, exists := s.applyGeneration[3]
+		assert.False(t, exists)
+	})
+
+	t.Run("enable applies ruleset", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+		_, err = s.PatchAttachment(ctx, 3, false)
+		require.NoError(t, err)
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err = s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.PatchAttachment(ctx, 3, true)
+		require.NoError(t, err)
+
+		_, gen := s.rulesetRuntime.CurrentCompiled()
+		assert.Equal(t, gen, s.applyGeneration[3])
+	})
+
+	t.Run("create failure rolls back attachment", func(t *testing.T) {
+		ctx := t.Context()
+		attRuntime := attachment.New(mockStoreLoadBPF, mockStoreAttachXDP)
+		eventStream := events.NewStream(ctx)
+		responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
+		xskRuntime := xsk.NewRuntime(ctx)
+		dispatchRuntime := dispatch.NewRuntime(ctx)
+		t.Cleanup(responseRuntime.Stop)
+		t.Cleanup(xskRuntime.StopAll)
+		t.Cleanup(dispatchRuntime.Stop)
+		t.Cleanup(eventStream.Stop)
+
+		s := New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
+		s.WireXSKCallbacks()
+		s.WireEventCallbacks()
+		s.WireRulesetCallbacks()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "ruleset apply")
+
+		_, err = s.GetAttachment(ctx, 3)
+		assert.Error(t, err)
+	})
+
+	t.Run("disable and delete clear generation", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		// Create two attachments.
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 4})
+		require.NoError(t, err)
+		assert.Equal(t, uint64(1), s.applyGeneration[3])
+		assert.Equal(t, uint64(1), s.applyGeneration[4])
+
+		// Disable clears generation for that attachment.
+		_, err = s.PatchAttachment(ctx, 3, false)
+		require.NoError(t, err)
+		_, exists := s.applyGeneration[3]
+		assert.False(t, exists)
+		assert.Equal(t, uint64(1), s.applyGeneration[4]) // other unaffected
+
+		// Delete clears generation for that attachment.
+		err = s.DeleteAttachment(ctx, 4)
+		require.NoError(t, err)
+		_, exists = s.applyGeneration[4]
+		assert.False(t, exists)
+	})
+
+	t.Run("ruleset delete clears all generations", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err := s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+		_, err = s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 4})
+		require.NoError(t, err)
+
+		err = s.DeleteRuleset(ctx)
+		require.NoError(t, err)
+
+		_, exists3 := s.applyGeneration[3]
+		_, exists4 := s.applyGeneration[4]
+		assert.False(t, exists3)
+		assert.False(t, exists4)
+	})
+
+	t.Run("ruleset replace updates existing attachments", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		// Create attachment before any ruleset.
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+		_, exists := s.applyGeneration[3]
+		assert.False(t, exists)
+
+		// ReplaceRuleset should update generation for existing enabled attachments.
+		apiRules := []api.RuleResponse{
+			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "alert"}},
+		}
+		_, err = s.ReplaceRuleset(ctx, apiRules)
+		require.NoError(t, err)
+
+		_, gen := s.rulesetRuntime.CurrentCompiled()
+		assert.Equal(t, gen, s.applyGeneration[3])
+	})
 }

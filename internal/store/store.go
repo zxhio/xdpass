@@ -190,6 +190,9 @@ func (s *Store) rulesetAfterCreate(att *attachment.Attachment, maps attachment.M
 	if compiled == nil {
 		return nil
 	}
+	if maps == nil || maps.RuleIndexMap() == nil {
+		return fmt.Errorf("write ruleset maps: maps not available")
+	}
 	if err := ruleset.WriteMaps(maps, compiled); err != nil {
 		return fmt.Errorf("write ruleset maps: %w", err)
 	}
@@ -207,6 +210,9 @@ func (s *Store) rulesetAfterPatch(att *attachment.Attachment, maps attachment.Ma
 	compiled, gen := s.rulesetRuntime.CurrentCompiled()
 	if compiled == nil {
 		return nil
+	}
+	if maps == nil || maps.RuleIndexMap() == nil {
+		return fmt.Errorf("write ruleset maps: maps not available")
 	}
 	if err := ruleset.WriteMaps(maps, compiled); err != nil {
 		return fmt.Errorf("write ruleset maps: %w", err)
