@@ -17,14 +17,20 @@ type Subscriber struct {
 	Done   chan struct{}
 }
 
+// readerEntry tracks a ringbuf reader and its goroutine.
+type readerEntry struct {
+	reader *ringbuf.Reader
+	wg     sync.WaitGroup
+}
+
 // Stream manages ringbuf readers and SSE subscribers.
 type Stream struct {
 	mu             sync.RWMutex
 	bootTimeOffset int64
 	subscribers    map[*Subscriber]struct{}
+	readers        map[uint32]*readerEntry
 	ctx            context.Context
 	cancel         context.CancelFunc
-	wg             sync.WaitGroup
 }
 
 // NewStream creates a new event stream.
@@ -33,6 +39,7 @@ func NewStream(ctx context.Context) *Stream {
 	return &Stream{
 		bootTimeOffset: BootTimeOffset(),
 		subscribers:    make(map[*Subscriber]struct{}),
+		readers:        make(map[uint32]*readerEntry),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -60,16 +67,26 @@ func (s *Stream) Unsubscribe(sub *Subscriber) {
 
 // StartReader starts a ringbuf reader for an attachment.
 // It reads events from the ringbuf and broadcasts them to subscribers.
+// Returns an error if a reader for the same ifindex is already running.
 func (s *Stream) StartReader(ringbufMap *ebpf.Map, ifIndex uint32) error {
-	reader, err := ringbuf.NewReader(ringbufMap)
-	if err != nil {
-		return fmt.Errorf("create ringbuf reader: %w", err)
+	s.mu.Lock()
+	if _, exists := s.readers[ifIndex]; exists {
+		s.mu.Unlock()
+		return fmt.Errorf("reader already started for ifindex %d", ifIndex)
 	}
 
-	s.wg.Add(1)
+	reader, err := ringbuf.NewReader(ringbufMap)
+	if err != nil {
+		s.mu.Unlock()
+		return fmt.Errorf("create ringbuf reader: %w", err)
+	}
+	entry := &readerEntry{reader: reader}
+	entry.wg.Add(1)
+	s.readers[ifIndex] = entry
+	s.mu.Unlock()
+
 	go func() {
-		defer s.wg.Done()
-		defer reader.Close()
+		defer entry.wg.Done()
 
 		logrus.WithField("ifindex", ifIndex).Info("Event ringbuf reader started")
 		defer logrus.WithField("ifindex", ifIndex).Info("Event ringbuf reader stopped")
@@ -77,11 +94,8 @@ func (s *Stream) StartReader(ringbufMap *ebpf.Map, ifIndex uint32) error {
 		for {
 			record, err := reader.Read()
 			if err != nil {
-				if s.ctx.Err() != nil {
-					return
-				}
-				logrus.WithError(err).Warn("Ringbuf read error")
-				continue
+				// reader.Close() was called or context cancelled.
+				return
 			}
 
 			if len(record.RawSample) < ruleEventSize {
@@ -104,6 +118,21 @@ func (s *Stream) StartReader(ringbufMap *ebpf.Map, ifIndex uint32) error {
 	return nil
 }
 
+// StopReader stops the ringbuf reader for a specific ifindex.
+func (s *Stream) StopReader(ifIndex uint32) {
+	s.mu.Lock()
+	entry, ok := s.readers[ifIndex]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.readers, ifIndex)
+	s.mu.Unlock()
+
+	entry.reader.Close()
+	entry.wg.Wait()
+}
+
 // broadcast sends an event to all subscribers, dropping for slow clients.
 func (s *Stream) broadcast(event Event) {
 	s.mu.RLock()
@@ -118,10 +147,24 @@ func (s *Stream) broadcast(event Event) {
 	}
 }
 
-// Stop stops all ringbuf readers and waits for them to finish.
+// Stop closes all ringbuf readers and waits for them to finish.
 func (s *Stream) Stop() {
 	s.cancel()
-	s.wg.Wait()
+
+	s.mu.Lock()
+	entries := make([]*readerEntry, 0, len(s.readers))
+	for ifIndex, entry := range s.readers {
+		entries = append(entries, entry)
+		delete(s.readers, ifIndex)
+	}
+	s.mu.Unlock()
+
+	for _, entry := range entries {
+		entry.reader.Close()
+	}
+	for _, entry := range entries {
+		entry.wg.Wait()
+	}
 }
 
 // SSEWriter is an io.Writer with Flush support for SSE.
