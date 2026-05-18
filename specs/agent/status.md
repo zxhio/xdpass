@@ -74,3 +74,38 @@
 ### `dispatch_configured`
 
 - 是否已配置 dispatch
+
+### `issues`
+
+- 可选
+- `degraded` 时包含诊断条目
+- `running` 时省略或为空数组
+
+---
+
+## issues 语义
+
+每个 issue 描述一个运行态不一致。存在任何 issue 时 `status=degraded`。
+
+不算 degraded 的情况：
+
+- 未配置 response egress
+- 未配置 dispatch
+- 未启用 XSK
+- 无 SSE 客户端连接
+- 未加载 ruleset
+
+### issue codes
+
+| component | code | 条件 |
+|---|---|---|
+| `attachment` | `attachment_resources_missing` | attachment `enabled=true`，但 BPF resources 不存在 |
+| `attachment` | `attachment_link_missing` | attachment `enabled=true`，但 XDP link 不存在 |
+| `attachment` | `attachment_map_missing` | attachment `enabled=true`，但必要 BPF map 缺失 |
+| `events` | `event_reader_missing` | attachment `enabled=true` 且有 `event_ringbuf`，但 event reader 未运行 |
+| `xsk` | `xsk_not_running` | attachment `enabled=true` 且 `xsk.enabled=true`，但 XSK socket 未运行 |
+| `response` | `response_worker_missing` | attachment `enabled=true` 且 `xsk.enabled=true`，但 response worker 未运行 |
+| `ruleset` | `userspace_action_without_xsk` | 当前 ruleset 包含 userspace response action，但某个 enabled attachment 未启用 XSK |
+| `ruleset` | `ruleset_not_applied` | 当前 ruleset loaded，但某个 enabled attachment 未应用当前 ruleset generation |
+| `dispatch` | `dispatch_worker_missing` | dispatch 已配置且 enabled，但 dispatch worker 未运行 |
+| `dispatch` | `dispatch_sender_missing` | dispatch 已配置且 enabled，但 sender 缺失 |
