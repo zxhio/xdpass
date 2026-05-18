@@ -12,9 +12,10 @@ type MapAccessorFunc func() []attachment.MapAccessor
 
 // Runtime manages the current ruleset and coordinates apply/delete.
 type Runtime struct {
-	mu       sync.RWMutex
-	rules    []Rule
-	compiled *CompiledRuleset
+	mu         sync.RWMutex
+	rules      []Rule
+	compiled   *CompiledRuleset
+	generation uint64
 }
 
 // NewRuntime creates a new ruleset runtime.
@@ -30,6 +31,14 @@ func (rt *Runtime) GetRuleset() []Rule {
 	rules := make([]Rule, len(rt.rules))
 	copy(rules, rt.rules)
 	return rules
+}
+
+// CurrentCompiled returns the current compiled ruleset and its generation.
+// Returns nil, 0 if no ruleset is loaded.
+func (rt *Runtime) CurrentCompiled() (*CompiledRuleset, uint64) {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.compiled, rt.generation
 }
 
 // ReplaceRuleset validates, compiles, and applies a new ruleset.
@@ -57,6 +66,7 @@ func (rt *Runtime) ReplaceRuleset(rules []Rule, ingressVerdict string, getMaps M
 	rt.rules = make([]Rule, len(rules))
 	copy(rt.rules, rules)
 	rt.compiled = compiled
+	rt.generation++
 	rt.mu.Unlock()
 
 	return nil
@@ -74,6 +84,7 @@ func (rt *Runtime) DeleteRuleset(getMaps MapAccessorFunc) error {
 	rt.mu.Lock()
 	rt.rules = nil
 	rt.compiled = nil
+	rt.generation = 0
 	rt.mu.Unlock()
 
 	return nil
