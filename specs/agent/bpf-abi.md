@@ -105,6 +105,7 @@ struct rule_meta {
 - `dst_port_index_map` key 是 TCP/UDP 目的端口。
 - `src_prefix_lpm_map` 和 `dst_prefix_lpm_map` value 是累计候选 bitmap。
 - LPM lookup 使用 `/32` key 查找，userspace 必须生成和 BPF lookup 一致的 key 字节布局。
+- `ipv4_lpm_key.addr` 的内存字节必须是 IPv4 network-order bytes；在 bpfel Go 结构里该字段是 `uint32`，因此 userspace 写入的数值以“落到内存后的 4 字节”为准，而不是 dotted IP 的 big-endian 数值。
 - 索引命中时 BPF 使用 `indexed | optional`，确保字段 wildcard 规则仍可命中。
 - BPF 先通过倒排索引和字段 optional bitmap 缩小候选规则，再通过
   `condition_optional_rules` 过滤非索引条件，最后取候选 bitmap 中 slot 最小的规则。

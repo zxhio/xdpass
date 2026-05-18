@@ -1,6 +1,8 @@
 package ruleset
 
 import (
+	"encoding/binary"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -352,7 +354,19 @@ func TestCompileCIDRLPMIndex(t *testing.T) {
 
 	require.Len(t, compiled.Indexes.SrcPrefixLPM, 1)
 	assert.Equal(t, uint32(8), compiled.Indexes.SrcPrefixLPM[0].Prefixlen)
+	assert.Equal(t, binary.LittleEndian.Uint32(net.IP{10, 0, 0, 0}.To4()), compiled.Indexes.SrcPrefixLPM[0].Addr)
 	assert.Equal(t, slotBit(0), compiled.Indexes.SrcPrefixLPM[0].Mask)
+}
+
+func TestCompileCIDRLPMIndexCanonicalizesNetworkAddress(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Match: Match{SrcCIDRs: []string{"10.1.2.3/8"}}, Response: Response{Action: "alert"}},
+	}
+	compiled, err := Compile(rules, "pass")
+	require.NoError(t, err)
+
+	require.Len(t, compiled.Indexes.SrcPrefixLPM, 1)
+	assert.Equal(t, binary.LittleEndian.Uint32(net.IP{10, 0, 0, 0}.To4()), compiled.Indexes.SrcPrefixLPM[0].Addr)
 }
 
 func TestCompileOptionalBitmaps(t *testing.T) {

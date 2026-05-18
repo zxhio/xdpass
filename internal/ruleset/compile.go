@@ -181,17 +181,22 @@ func compileIndexes(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRulese
 
 // compileCIDR converts a CIDR string to LPM entries with the given bit mask.
 func compileCIDR(cidr string, bit [8]uint64) []LPMEntry {
-	ip, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil || ip.To4() == nil {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil || ipNet.IP.To4() == nil {
 		return nil
 	}
 	prefixLen, _ := ipNet.Mask.Size()
-	addr := binary.BigEndian.Uint32(ip.To4())
 	return []LPMEntry{{
 		Prefixlen: uint32(prefixLen),
-		Addr:      addr,
+		Addr:      ipv4LPMAddr(ipNet.IP),
 		Mask:      bit,
 	}}
+}
+
+// ipv4LPMAddr returns the uint32 value whose little-endian in-memory bytes
+// match the IPv4 network-order bytes used by BPF LPM trie lookup.
+func ipv4LPMAddr(ip net.IP) uint32 {
+	return binary.LittleEndian.Uint32(ip.To4())
 }
 
 // compileOptionalBitmaps populates optional bitmaps for rules missing condition fields.
