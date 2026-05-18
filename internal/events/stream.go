@@ -11,6 +11,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// RingbufReader is the subset of ringbuf.Reader used by Stream.
+type RingbufReader interface {
+	Read() (ringbuf.Record, error)
+	Close() error
+}
+
+// RingbufReaderFactory creates a RingbufReader from an ebpf.Map.
+type RingbufReaderFactory func(ringbufMap *ebpf.Map) (RingbufReader, error)
+
+func defaultReaderFactory(ringbufMap *ebpf.Map) (RingbufReader, error) {
+	return ringbuf.NewReader(ringbufMap)
+}
+
 // Subscriber receives events from the stream.
 type Subscriber struct {
 	Events chan Event
@@ -19,7 +32,7 @@ type Subscriber struct {
 
 // readerEntry tracks a ringbuf reader and its goroutine.
 type readerEntry struct {
-	reader *ringbuf.Reader
+	reader RingbufReader
 	wg     sync.WaitGroup
 }
 
@@ -29,17 +42,25 @@ type Stream struct {
 	bootTimeOffset int64
 	subscribers    map[*Subscriber]struct{}
 	readers        map[uint32]*readerEntry
+	newReader      RingbufReaderFactory
 	ctx            context.Context
 	cancel         context.CancelFunc
 }
 
 // NewStream creates a new event stream.
 func NewStream(ctx context.Context) *Stream {
+	return NewStreamWithFactory(ctx, defaultReaderFactory)
+}
+
+// NewStreamWithFactory creates a new event stream with a custom reader factory.
+// Intended for testing.
+func NewStreamWithFactory(ctx context.Context, factory RingbufReaderFactory) *Stream {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Stream{
 		bootTimeOffset: BootTimeOffset(),
 		subscribers:    make(map[*Subscriber]struct{}),
 		readers:        make(map[uint32]*readerEntry),
+		newReader:      factory,
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -75,7 +96,7 @@ func (s *Stream) StartReader(ringbufMap *ebpf.Map, ifIndex uint32) error {
 		return fmt.Errorf("reader already started for ifindex %d", ifIndex)
 	}
 
-	reader, err := ringbuf.NewReader(ringbufMap)
+	reader, err := s.newReader(ringbufMap)
 	if err != nil {
 		s.mu.Unlock()
 		return fmt.Errorf("create ringbuf reader: %w", err)
