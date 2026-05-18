@@ -15,10 +15,10 @@ static __always_inline int apply_action(struct xdp_md *ctx, const struct packet_
 		emit_rule_event(pkt, rule, VERDICT_OBSERVE);
 		return miss_verdict();
 	case ACTION_TCP_RESET:
+		return apply_kernel_response(ctx, pkt, rule);
 	case ACTION_ICMP_PORT_UNREACHABLE:
 	case ACTION_ICMP_HOST_UNREACHABLE:
 	case ACTION_ICMP_ADMIN_PROHIBITED:
-		return apply_kernel_response(ctx, pkt, rule);
 	case ACTION_ICMP_ECHO_REPLY:
 	case ACTION_ARP_REPLY:
 	case ACTION_TCP_SYN_ACK:
