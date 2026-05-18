@@ -216,8 +216,8 @@ BPF ABI，语义按 response failure verdict 处理，不只适用于 TCP reset�
 | 0 | 8 | `timestamp_ns` | monotonic nanoseconds |
 | 8 | 4 | `rule_id` | host order |
 | 12 | 4 | `pkt_conds` | condition bitmask |
-| 16 | 4 | `sip` | host order IPv4 |
-| 20 | 4 | `dip` | host order IPv4 |
+| 16 | 4 | `sip` | network order (big-endian) IPv4 |
+| 20 | 4 | `dip` | network order (big-endian) IPv4 |
 | 24 | 2 | `action` | action code |
 | 26 | 2 | `sport` | host order |
 | 28 | 2 | `dport` | host order |

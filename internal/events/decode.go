@@ -95,8 +95,8 @@ func DecodeEvent(raw [ruleEventSize]byte, ifIndex uint32, bootTimeOffset int64) 
 		TimestampNs: binary.LittleEndian.Uint64(raw[0:8]),
 		RuleID:      binary.LittleEndian.Uint32(raw[8:12]),
 		PktConds:    binary.LittleEndian.Uint32(raw[12:16]),
-		SIP:         binary.LittleEndian.Uint32(raw[16:20]),
-		DIP:         binary.LittleEndian.Uint32(raw[20:24]),
+		SIP:         binary.BigEndian.Uint32(raw[16:20]),
+		DIP:         binary.BigEndian.Uint32(raw[20:24]),
 		Action:      binary.LittleEndian.Uint16(raw[24:26]),
 		Sport:       binary.LittleEndian.Uint16(raw[26:28]),
 		Dport:       binary.LittleEndian.Uint16(raw[28:30]),
@@ -145,7 +145,7 @@ func deriveResult(action uint16, verdict uint8) string {
 }
 
 // ipv4ToString converts a uint32 IPv4 address to dotted-decimal string.
-// The address is in network byte order (big-endian) as stored by BPF.
+// The address is in network byte order (big-endian).
 func ipv4ToString(addr uint32) string {
 	if addr == 0 {
 		return ""

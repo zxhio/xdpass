@@ -13,9 +13,9 @@ func makeEventRaw(ruleID uint32, action uint16, verdict uint8, sip, dip uint32, 
 	binary.LittleEndian.PutUint64(raw[0:8], tsNs)
 	binary.LittleEndian.PutUint32(raw[8:12], ruleID)
 	binary.LittleEndian.PutUint32(raw[12:16], 0) // pkt_conds
-	// IPv4 addresses are stored in host byte order by BPF (bpf_ntohl applied in parse.h).
-	binary.LittleEndian.PutUint32(raw[16:20], sip)
-	binary.LittleEndian.PutUint32(raw[20:24], dip)
+	// IPv4 addresses are stored in network byte order (big-endian) by BPF.
+	binary.BigEndian.PutUint32(raw[16:20], sip)
+	binary.BigEndian.PutUint32(raw[20:24], dip)
 	binary.LittleEndian.PutUint16(raw[24:26], action)
 	binary.LittleEndian.PutUint16(raw[26:28], sport)
 	binary.LittleEndian.PutUint16(raw[28:30], dport)
@@ -44,8 +44,7 @@ func TestDecodeEventBasic(t *testing.T) {
 }
 
 func TestDecodeEventIPv4ByteOrder(t *testing.T) {
-	// 10.0.1.2 and 10.0.1.5 expose byte-order reversal bugs.
-	// Host-order uint32: 10.0.1.2 = 0x0A000102, 10.0.1.5 = 0x0A000105
+	// 10.0.1.2 and 10.0.1.5 in network byte order (big-endian).
 	raw := makeEventRaw(1, 0, 0, 0x0A000102, 0x0A000105, 0, 0, 0, 0)
 	event, err := DecodeEvent(raw, 1, 0)
 	require.NoError(t, err)
