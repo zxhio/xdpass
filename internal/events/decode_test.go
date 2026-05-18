@@ -80,11 +80,11 @@ func TestDecodeEventActionPaths(t *testing.T) {
 		{3, "userspace"},
 		{4, "userspace"},
 		{5, "userspace"},
-		{6, "kernel"},
+		{6, "userspace"},
 		{7, "userspace"},
 		{8, "userspace"},
-		{9, "kernel"},
-		{10, "kernel"},
+		{9, "userspace"},
+		{10, "userspace"},
 		{11, "userspace"},
 	}
 	for _, tc := range cases {

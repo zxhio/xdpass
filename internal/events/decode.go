@@ -75,11 +75,11 @@ var actionPath = map[uint16]string{
 	3:  "userspace", // icmp_echo_reply
 	4:  "userspace", // arp_reply
 	5:  "userspace", // tcp_syn_ack
-	6:  "kernel",    // icmp_port_unreachable
+	6:  "userspace", // icmp_port_unreachable
 	7:  "userspace", // udp_echo_reply
 	8:  "userspace", // dns_refused
-	9:  "kernel",    // icmp_host_unreachable
-	10: "kernel",    // icmp_admin_prohibited
+	9:  "userspace", // icmp_host_unreachable
+	10: "userspace", // icmp_admin_prohibited
 	11: "userspace", // dns_sinkhole
 }
 
