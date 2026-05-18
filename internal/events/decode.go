@@ -122,11 +122,12 @@ func DecodeEvent(raw [ruleEventSize]byte, ifIndex uint32, bootTimeOffset int64) 
 }
 
 // deriveResult derives the event result from action and verdict.
+// Only "sent" and "failed" are meaningful; "matched" is omitted as low-value.
 func deriveResult(action uint16, verdict uint8) string {
 	path := actionPath[action]
 	switch path {
 	case "none":
-		return "matched"
+		return ""
 	case "kernel":
 		if verdict == 1 || verdict == 3 { // VERDICT_TX or VERDICT_REDIRECT_TX
 			return "sent"
@@ -136,7 +137,7 @@ func deriveResult(action uint16, verdict uint8) string {
 		// BPF verdict=xsk_redirect means the packet entered XSK.
 		// The actual sent/failed result comes from the userspace response runtime.
 		if verdict == 2 { // VERDICT_XSK
-			return "matched"
+			return ""
 		}
 		return "failed"
 	}

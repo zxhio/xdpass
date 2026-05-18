@@ -94,10 +94,12 @@
 
 - 可选
 - 执行结果
-- 可选值：`matched` / `sent` / `failed`
+- 可选值：`sent` / `failed`
 - BPF ringbuf 原始事件不携带该字段
 - kernel response 成功可由 BPF verdict 派生为 `sent`
-- userspace response 成功或失败来自 response 执行结果
+- kernel response 失败派生为 `failed`
+- userspace response 结果来自 response 执行结果
+- 无响应执行路径（`none` / `alert`）或结果未知时不输出
 
 ### `ifindex`
 
@@ -182,12 +184,6 @@
 ---
 
 ## result 语义
-
-### `matched`
-
-- 规则已命中
-- 不表示响应包已经发送
-- 常用于 `none` / `alert`
 
 ### `sent`
 

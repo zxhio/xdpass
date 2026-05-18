@@ -104,8 +104,8 @@ func TestDecodeEventVerdictNames(t *testing.T) {
 }
 
 func TestDeriveResultNoneAction(t *testing.T) {
-	assert.Equal(t, "matched", deriveResult(0, 0)) // none action
-	assert.Equal(t, "matched", deriveResult(1, 0)) // alert action
+	assert.Equal(t, "", deriveResult(0, 0)) // none action
+	assert.Equal(t, "", deriveResult(1, 0)) // alert action
 }
 
 func TestDeriveResultKernelSuccess(t *testing.T) {
@@ -120,9 +120,9 @@ func TestDeriveResultKernelFailure(t *testing.T) {
 
 func TestDeriveResultUserspaceXSKRedirect(t *testing.T) {
 	// icmp_echo_reply (action=3) with VERDICT_XSK (verdict=2)
-	assert.Equal(t, "matched", deriveResult(3, 2))
+	assert.Equal(t, "", deriveResult(3, 2))
 	// arp_reply (action=4) with VERDICT_XSK
-	assert.Equal(t, "matched", deriveResult(4, 2))
+	assert.Equal(t, "", deriveResult(4, 2))
 }
 
 func TestDeriveResultUserspaceFailure(t *testing.T) {
