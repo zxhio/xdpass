@@ -8,12 +8,20 @@ type healthResponse struct {
 
 // StatusResponse is the GET /api/v1/status response.
 type StatusResponse struct {
-	Status                   string `json:"status"`
-	Attachments              int    `json:"attachments"`
-	RulesetLoaded            bool   `json:"ruleset_loaded"`
-	Rules                    int    `json:"rules"`
-	ResponseEgressConfigured bool   `json:"response_egress_configured"`
-	DispatchConfigured       bool   `json:"dispatch_configured"`
+	Status                   string        `json:"status"`
+	Attachments              int           `json:"attachments"`
+	RulesetLoaded            bool          `json:"ruleset_loaded"`
+	Rules                    int           `json:"rules"`
+	ResponseEgressConfigured bool          `json:"response_egress_configured"`
+	DispatchConfigured       bool          `json:"dispatch_configured"`
+	Issues                   []StatusIssue `json:"issues,omitempty"`
+}
+
+// StatusIssue describes a single degraded health issue.
+type StatusIssue struct {
+	Component string `json:"component"`
+	Code      string `json:"code"`
+	IfIndex   uint32 `json:"ifindex,omitempty"`
 }
 
 // --- Attachments ---
