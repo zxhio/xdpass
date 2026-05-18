@@ -409,7 +409,6 @@ def cmd_events_stream(addr, args):
 
     received = 0
     start = time.monotonic()
-    buf = ""
 
     try:
         while True:
@@ -418,29 +417,25 @@ def cmd_events_stream(addr, args):
             if count is not None and received >= count:
                 break
 
-            chunk = resp.read(4096)
-            if not chunk:
+            line = resp.readline()
+            if not line:
                 break
 
-            buf += chunk.decode("utf-8", errors="replace")
+            line = line.decode("utf-8", errors="replace").rstrip("\r\n")
 
-            while "\n" in buf:
-                line, buf = buf.split("\n", 1)
-                line = line.rstrip("\r")
+            if raw_sse:
+                print(line, flush=True)
+                continue
 
-                if raw_sse:
-                    print(line, flush=True)
-                    continue
-
-                # In JSON mode, only print the data payload.
-                if line.startswith("data: "):
-                    payload = line[6:]
-                    try:
-                        json.loads(payload)  # validate
-                        print(payload, flush=True)
-                        received += 1
-                    except json.JSONDecodeError:
-                        print(f"warning: non-JSON data: {payload}", file=sys.stderr)
+            # In JSON mode, only print the data payload.
+            if line.startswith("data: "):
+                payload = line[6:]
+                try:
+                    json.loads(payload)  # validate
+                    print(payload, flush=True)
+                    received += 1
+                except json.JSONDecodeError:
+                    print(f"warning: non-JSON data: {payload}", file=sys.stderr)
 
     except KeyboardInterrupt:
         pass
