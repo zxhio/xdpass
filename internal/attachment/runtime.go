@@ -56,12 +56,15 @@ type Runtime struct {
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
 
-	afterCreate      XSKAfterCreateFunc
-	afterPatch       XSKAfterPatchFunc
-	preDelete        XSKPreDeleteFunc
-	eventAfterCreate EventAfterCreateFunc
-	eventAfterPatch  EventAfterPatchFunc
-	eventPreDelete   EventPreDeleteFunc
+	afterCreate        XSKAfterCreateFunc
+	afterPatch         XSKAfterPatchFunc
+	preDelete          XSKPreDeleteFunc
+	eventAfterCreate   EventAfterCreateFunc
+	eventAfterPatch    EventAfterPatchFunc
+	eventPreDelete     EventPreDeleteFunc
+	rulesetAfterCreate RulesetAfterCreateFunc
+	rulesetAfterPatch  RulesetAfterPatchFunc
+	rulesetPreDelete   RulesetPreDeleteFunc
 }
 
 // SetXSKCallbacks registers XSK lifecycle callbacks.
@@ -76,6 +79,13 @@ func (r *Runtime) SetEventCallbacks(afterCreate EventAfterCreateFunc, afterPatch
 	r.eventAfterCreate = afterCreate
 	r.eventAfterPatch = afterPatch
 	r.eventPreDelete = preDelete
+}
+
+// SetRulesetCallbacks registers ruleset lifecycle callbacks.
+func (r *Runtime) SetRulesetCallbacks(afterCreate RulesetAfterCreateFunc, afterPatch RulesetAfterPatchFunc, preDelete RulesetPreDeleteFunc) {
+	r.rulesetAfterCreate = afterCreate
+	r.rulesetAfterPatch = afterPatch
+	r.rulesetPreDelete = preDelete
 }
 
 // New creates a new attachment runtime.
@@ -234,6 +244,14 @@ func (r *Runtime) Create(req *Request) (*Attachment, error) {
 		}
 	}
 
+	// Apply current ruleset to the new attachment's maps.
+	if r.rulesetAfterCreate != nil {
+		if err := r.rulesetAfterCreate(att, &collMapAccessor{maps: coll.Maps}); err != nil {
+			r.cleanup(req.IfIndex)
+			return nil, fmt.Errorf("ruleset apply: %w", err)
+		}
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"ifindex":     req.IfIndex,
 		"attach_mode": req.AttachMode,
@@ -309,8 +327,26 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 			r.eventAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, true)
 		}
 
+		// Apply current ruleset on enable. Rollback on failure.
+		if r.rulesetAfterPatch != nil {
+			if err := r.rulesetAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, true); err != nil {
+				r.eventAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
+				if att.XSK.Enabled && r.afterPatch != nil {
+					r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
+				}
+				res.closeLink()
+				att.Enabled = false
+				return nil, fmt.Errorf("ruleset apply: %w", err)
+			}
+		}
+
 		logrus.WithField("ifindex", ifIndex).Info("Attachment enabled")
 	} else {
+		// Notify ruleset lifecycle before disable.
+		if r.rulesetAfterPatch != nil {
+			r.rulesetAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
+		}
+
 		// Stop event reader before disable.
 		if r.eventAfterPatch != nil {
 			r.eventAfterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
@@ -339,6 +375,11 @@ func (r *Runtime) Delete(ifIndex uint32) error {
 	att, ok := r.attachments[ifIndex]
 	if !ok {
 		return &NotFoundError{IfIndex: ifIndex}
+	}
+
+	// Notify ruleset lifecycle before cleanup.
+	if r.rulesetPreDelete != nil {
+		r.rulesetPreDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 	}
 
 	// Stop event reader before cleanup.
@@ -371,6 +412,9 @@ func (r *Runtime) Close() {
 
 	for ifIndex := range r.attachments {
 		att := r.attachments[ifIndex]
+		if r.rulesetPreDelete != nil {
+			r.rulesetPreDelete(ifIndex, r.mapAccessorLocked(ifIndex))
+		}
 		if r.eventPreDelete != nil {
 			r.eventPreDelete(ifIndex, r.mapAccessorLocked(ifIndex))
 		}

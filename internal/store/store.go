@@ -40,6 +40,7 @@ type Store struct {
 	dispatchIfIndex   uint32
 	dispatchIfName    string
 	dispatchQueueSize int
+	applyGeneration   map[uint32]uint64 // ifindex -> applied ruleset generation
 }
 
 // New creates a new in-memory store.
@@ -57,6 +58,7 @@ func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRu
 		xskRuntime:      xskRuntime,
 		dispatchRuntime: dispatchRuntime,
 		egressVLANMode:  "preserve",
+		applyGeneration: make(map[uint32]uint64),
 	}
 }
 
@@ -83,6 +85,16 @@ func (s *Store) WireEventCallbacks() {
 		s.eventAfterCreate,
 		s.eventAfterPatch,
 		s.eventPreDelete,
+	)
+}
+
+// WireRulesetCallbacks registers ruleset lifecycle callbacks on the attachment runtime.
+// Must be called after New().
+func (s *Store) WireRulesetCallbacks() {
+	s.attachments.SetRulesetCallbacks(
+		s.rulesetAfterCreate,
+		s.rulesetAfterPatch,
+		s.rulesetPreDelete,
 	)
 }
 
@@ -170,6 +182,42 @@ func (s *Store) emitResponseResult(ifIndex, ruleID uint32, action, result string
 		return
 	}
 	s.eventStream.Broadcast(events.NewResultEvent(ruleID, action, ifIndex, result))
+}
+
+// rulesetAfterCreate applies the current ruleset to a newly created attachment.
+func (s *Store) rulesetAfterCreate(att *attachment.Attachment, maps attachment.MapAccessor) error {
+	compiled, gen := s.rulesetRuntime.CurrentCompiled()
+	if compiled == nil {
+		return nil
+	}
+	if err := ruleset.WriteMaps(maps, compiled); err != nil {
+		return fmt.Errorf("write ruleset maps: %w", err)
+	}
+	s.applyGeneration[att.IfIndex] = gen
+	return nil
+}
+
+// rulesetAfterPatch applies the current ruleset when an attachment is enabled,
+// or clears the apply generation when disabled.
+func (s *Store) rulesetAfterPatch(att *attachment.Attachment, maps attachment.MapAccessor, enabled bool) error {
+	if !enabled {
+		delete(s.applyGeneration, att.IfIndex)
+		return nil
+	}
+	compiled, gen := s.rulesetRuntime.CurrentCompiled()
+	if compiled == nil {
+		return nil
+	}
+	if err := ruleset.WriteMaps(maps, compiled); err != nil {
+		return fmt.Errorf("write ruleset maps: %w", err)
+	}
+	s.applyGeneration[att.IfIndex] = gen
+	return nil
+}
+
+// rulesetPreDelete cleans up the apply generation record before attachment deletion.
+func (s *Store) rulesetPreDelete(ifIndex uint32, _ attachment.MapAccessor) {
+	delete(s.applyGeneration, ifIndex)
 }
 
 // dispatchEnqueue is called after a successful response to enqueue the original packet for dispatch.
@@ -303,6 +351,12 @@ func (s *Store) ReplaceRuleset(_ context.Context, apiRules []api.RuleResponse) (
 		return api.RulesetResponse{}, err
 	}
 
+	// Update apply generation for all enabled attachments.
+	_, gen := s.rulesetRuntime.CurrentCompiled()
+	for _, ea := range s.attachments.EnabledAttachments() {
+		s.applyGeneration[ea.IfIndex] = gen
+	}
+
 	// Update response worker rule lookup.
 	s.updateResponseRules(apiRules)
 
@@ -338,6 +392,10 @@ func (s *Store) DeleteRuleset(_ context.Context) error {
 
 	// Clear response worker rule lookup.
 	s.updateResponseRules(nil)
+
+	// Clear all apply generation records.
+	s.applyGeneration = make(map[uint32]uint64)
+
 	logrus.WithFields(logrus.Fields{
 		"attachments": attachments,
 	}).Info("Deleted ruleset")

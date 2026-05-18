@@ -29,6 +29,19 @@ type EventAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool)
 // EventPreDeleteFunc is called before an attachment is deleted.
 type EventPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
 
+// RulesetAfterCreateFunc is called after an attachment is created.
+// It should apply the current ruleset to the attachment's maps.
+// Return an error to rollback the creation.
+type RulesetAfterCreateFunc func(att *Attachment, maps MapAccessor) error
+
+// RulesetAfterPatchFunc is called after PatchEnabled toggles an attachment.
+// It should apply the current ruleset when enabled=true.
+// Return an error to rollback the enable.
+type RulesetAfterPatchFunc func(att *Attachment, maps MapAccessor, enabled bool) error
+
+// RulesetPreDeleteFunc is called before an attachment is deleted.
+type RulesetPreDeleteFunc func(ifIndex uint32, maps MapAccessor)
+
 // Request holds the attachment creation parameters.
 type Request struct {
 	IfIndex     uint32
