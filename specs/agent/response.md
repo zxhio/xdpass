@@ -135,7 +135,7 @@
 
 - 不构造响应包
 - `alert` 只产生事件
-- 事件 `path=none`，`verdict=observe`，`result=matched`
+- 事件 `path=none`，`verdict=observe`，省略 `result`
 
 ### kernel response
 
@@ -367,9 +367,10 @@ response 执行结果通过 `events` 上报。
 
 常见结果：
 
-- `matched`：规则命中，但没有响应包发送
 - `sent`：响应包已发送
 - `failed`：响应执行失败
+
+无响应执行路径（`none` / `alert`）或结果未知时不输出 `result`。
 
 response 失败后的原始包处置见 `dataplane.md` 的 response failure verdict。
 
