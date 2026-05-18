@@ -132,6 +132,32 @@ def parse_queues(raw):
     return queues
 
 
+def parse_rx_queue_count(raw):
+    """Parse enabled RX queue count."""
+    try:
+        value = int(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid RX queue count '{raw}'")
+    if value < 0:
+        raise argparse.ArgumentTypeError("RX queue count must be >= 0")
+    return value
+
+
+def load_json_file(path):
+    """Load JSON from a file path, or stdin when path is '-'."""
+    try:
+        if path == "-":
+            return json.load(sys.stdin)
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except OSError as e:
+        print(f"error: cannot read JSON file '{path}': {e}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"error: invalid JSON in '{path}': {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # Command handlers (stubs -- filled in Phase 2-4)
 # ---------------------------------------------------------------------------
@@ -183,6 +209,8 @@ def cmd_attachments_create(addr, args):
     body = {"ifindex": ifindex, "attach_mode": args.mode}
     if args.miss_verdict:
         body["miss_verdict"] = args.miss_verdict
+    if getattr(args, "rx_queues", None) is not None:
+        body["channels"] = {"rx_queue_count": args.rx_queues}
     queues = parse_queues(getattr(args, "xsk_queues", None))
     xsk_enabled = bool(getattr(args, "xsk", False))
     if queues is not None:
@@ -240,25 +268,33 @@ def cmd_ruleset_get(addr, _args):
 
 
 def cmd_ruleset_put(addr, args):
-    rules = [
-        {
-            "rule_id": 1,
-            "priority": 100,
-            "match": {"protocol": "icmp"},
-            "response": {"action": "alert"},
-        },
-        {
-            "rule_id": 2,
-            "priority": 200,
-            "match": {"protocol": "arp", "arp_op": "request"},
-            "response": {"action": "arp_reply"},
-        },
-    ]
+    if getattr(args, "file", None):
+        req = load_json_file(args.file)
+        if not isinstance(req, dict) or "rules" not in req:
+            print("error: ruleset file must be a JSON object with a 'rules' field", file=sys.stderr)
+            return 1
+    else:
+        req = {
+            "rules": [
+                {
+                    "rule_id": 1,
+                    "priority": 100,
+                    "match": {"protocol": "icmp"},
+                    "response": {"action": "alert"},
+                },
+                {
+                    "rule_id": 2,
+                    "priority": 200,
+                    "match": {"protocol": "arp", "arp_op": "request"},
+                    "response": {"action": "arp_reply"},
+                },
+            ]
+        }
     path = "/api/v1/ruleset"
     if args.dry_run:
         path += "?dry_run=true"
     method = "PUT"
-    status, body = api_request(addr, method, path, {"rules": rules})
+    status, body = api_request(addr, method, path, req)
     if is_success(status):
         print_response(method, "/api/v1/ruleset", status, body)
         return 0
@@ -493,6 +529,7 @@ def _smoke_attach(addr, args, ifname):
     args.mode = "generic"
     args.dry_run = False
     args.miss_verdict = None
+    args.rx_queues = None
     args.xsk = True
     args.xsk_queues = None
     return cmd_attachments_create(addr, args)
@@ -500,6 +537,7 @@ def _smoke_attach(addr, args, ifname):
 
 def _smoke_ruleset(addr, args):
     args.dry_run = False
+    args.file = None
     return cmd_ruleset_put(addr, args)
 
 
@@ -543,6 +581,8 @@ def build_parser():
                               help="attach mode: generic/native/driver (default: generic)")
     p_att_create.add_argument("--miss-verdict", dest="miss_verdict",
                               choices=["pass", "drop"], help="miss verdict (default: pass)")
+    p_att_create.add_argument("--rx-queues", dest="rx_queues", type=parse_rx_queue_count,
+                              help="enabled RX queue count")
     p_att_create.add_argument("--xsk", dest="xsk", action="store_true",
                               help="enable XSK for userspace response actions")
     p_att_create.add_argument("--xsk-queues", dest="xsk_queues",
@@ -574,6 +614,8 @@ def build_parser():
                           help="dry-run mode")
     p_attach.add_argument("--miss-verdict", dest="miss_verdict",
                           choices=["pass", "drop"], help="miss verdict")
+    p_attach.add_argument("--rx-queues", dest="rx_queues", type=parse_rx_queue_count,
+                          help="enabled RX queue count")
     p_attach.add_argument("--xsk", dest="xsk", action="store_true",
                           help="enable XSK (default for attach)")
     p_attach.add_argument("--no-xsk", dest="xsk", action="store_false",
@@ -595,6 +637,8 @@ def build_parser():
     rs_sub.add_parser("get", help="GET /api/v1/ruleset")
 
     p_rs_put = rs_sub.add_parser("put", help="PUT /api/v1/ruleset")
+    p_rs_put.add_argument("--file", "-f", dest="file",
+                          help="ruleset JSON file, or '-' for stdin")
     p_rs_put.add_argument("--dry-run", dest="dry_run", action="store_true",
                           help="PUT /api/v1/ruleset?dry_run=true")
 
@@ -603,6 +647,8 @@ def build_parser():
     # -- compatible alias: ruleset-apply --
     p_rs_apply = sub.add_parser("ruleset-apply",
                                 help="(alias) PUT /api/v1/ruleset")
+    p_rs_apply.add_argument("--file", "-f", dest="file",
+                            help="ruleset JSON file, or '-' for stdin")
     p_rs_apply.add_argument("--dry-run", dest="dry_run", action="store_true",
                             help="dry-run mode")
 
