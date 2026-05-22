@@ -1,12 +1,40 @@
 package ruleset
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math/bits"
+	"net/netip"
+	"strings"
 
 	"github.com/cilium/ebpf"
+	"github.com/sirupsen/logrus"
 
 	"xdpass/internal/attachment"
+	"xdpass/internal/dataplane/abi"
 )
+
+var conditionLogNames = []struct {
+	mask uint32
+	name string
+}{
+	{mask: abi.CondProtoTCP, name: "proto_tcp"},
+	{mask: abi.CondProtoUDP, name: "proto_udp"},
+	{mask: abi.CondProtoICMP, name: "proto_icmp"},
+	{mask: abi.CondProtoARP, name: "proto_arp"},
+	{mask: abi.CondVLAN, name: "vlan"},
+	{mask: abi.CondSrcPrefix, name: "src_prefix"},
+	{mask: abi.CondDstPrefix, name: "dst_prefix"},
+	{mask: abi.CondSrcPort, name: "src_port"},
+	{mask: abi.CondDstPort, name: "dst_port"},
+	{mask: abi.CondTCPSyn, name: "tcp_syn"},
+	{mask: abi.CondTCPAck, name: "tcp_ack"},
+	{mask: abi.CondTCPRst, name: "tcp_rst"},
+	{mask: abi.CondTCPFin, name: "tcp_fin"},
+	{mask: abi.CondTCPPsh, name: "tcp_psh"},
+	{mask: abi.CondICMPEchoRequest, name: "icmp_echo_request"},
+	{mask: abi.CondARPRequest, name: "arp_request"},
+}
 
 // WriteMaps writes a compiled ruleset to an attachment's BPF maps.
 func WriteMaps(maps attachment.MapAccessor, compiled *CompiledRuleset) error {
@@ -16,19 +44,19 @@ func WriteMaps(maps attachment.MapAccessor, compiled *CompiledRuleset) error {
 	if err := writeGlobalCfgMap(maps.GlobalCfgMap(), &compiled.GlobalCfg); err != nil {
 		return fmt.Errorf("write global_cfg_map: %w", err)
 	}
-	if err := writePortIndexMap(maps.SrcPortIndexMap(), compiled.Indexes.SrcPortIndex); err != nil {
+	if err := writePortIndexMap("src_port_index_map", maps.SrcPortIndexMap(), compiled.Indexes.SrcPortIndex); err != nil {
 		return fmt.Errorf("write src_port_index_map: %w", err)
 	}
-	if err := writePortIndexMap(maps.DstPortIndexMap(), compiled.Indexes.DstPortIndex); err != nil {
+	if err := writePortIndexMap("dst_port_index_map", maps.DstPortIndexMap(), compiled.Indexes.DstPortIndex); err != nil {
 		return fmt.Errorf("write dst_port_index_map: %w", err)
 	}
 	if err := writeVlanIndexMap(maps.VlanIndexMap(), compiled.Indexes.VlanIndex); err != nil {
 		return fmt.Errorf("write vlan_index_map: %w", err)
 	}
-	if err := writeLpmMap(maps.SrcPrefixLpmMap(), compiled.Indexes.SrcPrefixLPM); err != nil {
+	if err := writeLpmMap("src_prefix_lpm_map", maps.SrcPrefixLpmMap(), compiled.Indexes.SrcPrefixLPM); err != nil {
 		return fmt.Errorf("write src_prefix_lpm_map: %w", err)
 	}
-	if err := writeLpmMap(maps.DstPrefixLpmMap(), compiled.Indexes.DstPrefixLPM); err != nil {
+	if err := writeLpmMap("dst_prefix_lpm_map", maps.DstPrefixLpmMap(), compiled.Indexes.DstPrefixLPM); err != nil {
 		return fmt.Errorf("write dst_prefix_lpm_map: %w", err)
 	}
 	return nil
@@ -42,19 +70,19 @@ func ClearMaps(maps attachment.MapAccessor) error {
 	if err := clearGlobalCfgMap(maps.GlobalCfgMap()); err != nil {
 		return fmt.Errorf("clear global_cfg_map: %w", err)
 	}
-	if err := clearHashMap(maps.SrcPortIndexMap()); err != nil {
+	if err := clearHashMap("src_port_index_map", maps.SrcPortIndexMap()); err != nil {
 		return fmt.Errorf("clear src_port_index_map: %w", err)
 	}
-	if err := clearHashMap(maps.DstPortIndexMap()); err != nil {
+	if err := clearHashMap("dst_port_index_map", maps.DstPortIndexMap()); err != nil {
 		return fmt.Errorf("clear dst_port_index_map: %w", err)
 	}
-	if err := clearHashMap(maps.VlanIndexMap()); err != nil {
+	if err := clearHashMap("vlan_index_map", maps.VlanIndexMap()); err != nil {
 		return fmt.Errorf("clear vlan_index_map: %w", err)
 	}
-	if err := clearLpmMap(maps.SrcPrefixLpmMap()); err != nil {
+	if err := clearLpmMap("src_prefix_lpm_map", maps.SrcPrefixLpmMap()); err != nil {
 		return fmt.Errorf("clear src_prefix_lpm_map: %w", err)
 	}
-	if err := clearLpmMap(maps.DstPrefixLpmMap()); err != nil {
+	if err := clearLpmMap("dst_prefix_lpm_map", maps.DstPrefixLpmMap()); err != nil {
 		return fmt.Errorf("clear dst_prefix_lpm_map: %w", err)
 	}
 	return nil
@@ -89,6 +117,12 @@ type bpfIpv4LpmKey struct {
 
 func writeRuleIndexMap(m *ebpf.Map, rules []CompiledRule) error {
 	zero := bpfRuleMeta{}
+	logrus.WithFields(logrus.Fields{
+		"map":        "rule_index_map",
+		"slot_start": 0,
+		"slot_end":   511,
+		"slots":      512,
+	}).Debug("Clear BPF rules")
 	for i := range 512 {
 		if err := m.Put(uint32(i), zero); err != nil {
 			return err
@@ -101,11 +135,44 @@ func writeRuleIndexMap(m *ebpf.Map, rules []CompiledRule) error {
 			Action:       rule.Meta.Action,
 			Flags:        rule.Meta.Flags,
 		}
+		logrus.WithFields(logrus.Fields{
+			"map":           "rule_index_map",
+			"slot":          rule.Slot,
+			"rule_id":       meta.RuleID,
+			"required_mask": requiredMaskLogValue(meta.RequiredMask),
+			"action":        actionLogValue(meta.Action),
+			"flags":         meta.Flags,
+		}).Debug("Write BPF rule")
 		if err := m.Put(rule.Slot, meta); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func actionLogValue(code uint16) string {
+	for name, value := range actionCodeMap {
+		if value == code {
+			return fmt.Sprintf("%s(%d)", name, code)
+		}
+	}
+	return fmt.Sprintf("unknown(%d)", code)
+}
+
+func requiredMaskLogValue(mask uint32) string {
+	if mask == 0 {
+		return "wildcard(0x0)"
+	}
+	parts := make([]string, 0, len(conditionLogNames))
+	for _, condition := range conditionLogNames {
+		if mask&condition.mask != 0 {
+			parts = append(parts, condition.name)
+		}
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("unknown(0x%x)", mask)
+	}
+	return fmt.Sprintf("%s(0x%x)", strings.Join(parts, "|"), mask)
 }
 
 func writeGlobalCfgMap(m *ebpf.Map, cfg *GlobalCfgData) error {
@@ -119,18 +186,68 @@ func writeGlobalCfgMap(m *ebpf.Map, cfg *GlobalCfgData) error {
 		ConditionOptionalRules: cfg.ConditionOptionalRules,
 		IngressVerdict:         cfg.IngressVerdict,
 	}
+	logBPFGlobalCfg(val)
 	return m.Put(uint32(0), val)
 }
 
+func logBPFGlobalCfg(cfg bpfGlobalCfg) {
+	logGlobalCfgMask("Write BPF active rules", "all_active_rules", cfg.AllActiveRules, true)
+	logGlobalCfgMask("Write BPF optional rules", "vlan_optional_rules", cfg.VlanOptionalRules, false)
+	logGlobalCfgMask("Write BPF optional rules", "src_port_optional_rules", cfg.SrcPortOptionalRules, false)
+	logGlobalCfgMask("Write BPF optional rules", "dst_port_optional_rules", cfg.DstPortOptionalRules, false)
+	logGlobalCfgMask("Write BPF optional rules", "src_prefix_optional_rules", cfg.SrcPrefixOptionalRules, false)
+	logGlobalCfgMask("Write BPF optional rules", "dst_prefix_optional_rules", cfg.DstPrefixOptionalRules, false)
+
+	for i, mask := range cfg.ConditionOptionalRules {
+		if maskEmpty(mask) {
+			continue
+		}
+		condition := fmt.Sprintf("condition_%d", i)
+		if i < len(conditionLogNames) {
+			condition = conditionLogNames[i].name
+		}
+		logrus.WithFields(logrus.Fields{
+			"map":       "global_cfg_map",
+			"condition": condition,
+			"slots":     maskSlots(mask),
+		}).Debug("Write BPF condition optional rules")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"map":             "global_cfg_map",
+		"ingress_verdict": ingressVerdictLogValue(cfg.IngressVerdict),
+	}).Debug("Write BPF ingress verdict")
+}
+
+func logGlobalCfgMask(message, field string, mask [8]uint64, logEmpty bool) {
+	if !logEmpty && maskEmpty(mask) {
+		return
+	}
+	logrus.WithFields(logrus.Fields{
+		"map":   "global_cfg_map",
+		"field": field,
+		"slots": maskSlots(mask),
+	}).Debug(message)
+}
+
 func clearGlobalCfgMap(m *ebpf.Map) error {
+	logrus.WithFields(logrus.Fields{
+		"map": "global_cfg_map",
+		"key": 0,
+	}).Debug("Clear BPF config")
 	return m.Put(uint32(0), bpfGlobalCfg{})
 }
 
-func writePortIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
-	if err := clearHashMap(m); err != nil {
+func writePortIndexMap(name string, m *ebpf.Map, index map[uint16][8]uint64) error {
+	if err := clearHashMap(name, m); err != nil {
 		return fmt.Errorf("clear: %w", err)
 	}
 	for port, mask := range index {
+		logrus.WithFields(logrus.Fields{
+			"map":   name,
+			"port":  port,
+			"slots": maskSlots(mask),
+		}).Debug("Write BPF port index")
 		if err := m.Put(port, mask); err != nil {
 			return err
 		}
@@ -139,10 +256,15 @@ func writePortIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
 }
 
 func writeVlanIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
-	if err := clearHashMap(m); err != nil {
+	if err := clearHashMap("vlan_index_map", m); err != nil {
 		return fmt.Errorf("clear: %w", err)
 	}
 	for vlan, mask := range index {
+		logrus.WithFields(logrus.Fields{
+			"map":   "vlan_index_map",
+			"vlan":  vlan,
+			"slots": maskSlots(mask),
+		}).Debug("Write BPF VLAN index")
 		if err := m.Put(vlan, mask); err != nil {
 			return err
 		}
@@ -150,12 +272,17 @@ func writeVlanIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
 	return nil
 }
 
-func writeLpmMap(m *ebpf.Map, entries []LPMEntry) error {
-	if err := clearLpmMap(m); err != nil {
+func writeLpmMap(name string, m *ebpf.Map, entries []LPMEntry) error {
+	if err := clearLpmMap(name, m); err != nil {
 		return fmt.Errorf("clear: %w", err)
 	}
 	for _, e := range entries {
 		key := bpfIpv4LpmKey{Prefixlen: e.Prefixlen, Addr: e.Addr}
+		logrus.WithFields(logrus.Fields{
+			"map":    name,
+			"prefix": ipv4PrefixLogValue(key.Addr, key.Prefixlen),
+			"slots":  maskSlots(e.Mask),
+		}).Debug("Write BPF LPM index")
 		if err := m.Put(key, e.Mask); err != nil {
 			return err
 		}
@@ -165,6 +292,12 @@ func writeLpmMap(m *ebpf.Map, entries []LPMEntry) error {
 
 func clearArrayMap(m *ebpf.Map, size int) error {
 	zero := bpfRuleMeta{}
+	logrus.WithFields(logrus.Fields{
+		"map":        "rule_index_map",
+		"slot_start": 0,
+		"slot_end":   size - 1,
+		"slots":      size,
+	}).Debug("Clear BPF rules")
 	for i := range size {
 		if err := m.Put(uint32(i), zero); err != nil {
 			return err
@@ -173,7 +306,7 @@ func clearArrayMap(m *ebpf.Map, size int) error {
 	return nil
 }
 
-func clearHashMap(m *ebpf.Map) error {
+func clearHashMap(name string, m *ebpf.Map) error {
 	var keys []uint16
 	var key uint16
 	iter := m.Iterate()
@@ -184,6 +317,10 @@ func clearHashMap(m *ebpf.Map) error {
 		return err
 	}
 	for _, k := range keys {
+		logrus.WithFields(logrus.Fields{
+			"map": name,
+			"key": k,
+		}).Debug("Delete BPF index")
 		if err := m.Delete(k); err != nil {
 			return err
 		}
@@ -191,7 +328,7 @@ func clearHashMap(m *ebpf.Map) error {
 	return nil
 }
 
-func clearLpmMap(m *ebpf.Map) error {
+func clearLpmMap(name string, m *ebpf.Map) error {
 	var keys []bpfIpv4LpmKey
 	var key bpfIpv4LpmKey
 	iter := m.Iterate()
@@ -202,9 +339,55 @@ func clearLpmMap(m *ebpf.Map) error {
 		return err
 	}
 	for _, k := range keys {
+		logrus.WithFields(logrus.Fields{
+			"map":    name,
+			"prefix": ipv4PrefixLogValue(k.Addr, k.Prefixlen),
+		}).Debug("Delete BPF LPM index")
 		if err := m.Delete(k); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func ipv4PrefixLogValue(addr uint32, prefixLen uint32) string {
+	var bytes [4]byte
+	binary.LittleEndian.PutUint32(bytes[:], addr)
+	return fmt.Sprintf("%s/%d", netip.AddrFrom4(bytes), prefixLen)
+}
+
+func ingressVerdictLogValue(verdict uint32) string {
+	switch verdict {
+	case 0:
+		return "pass(0)"
+	case 1:
+		return "drop(1)"
+	default:
+		return fmt.Sprintf("unknown(%d)", verdict)
+	}
+}
+
+func maskEmpty(mask [8]uint64) bool {
+	for _, group := range mask {
+		if group != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func maskSlots(mask [8]uint64) []uint32 {
+	count := 0
+	for _, group := range mask {
+		count += bits.OnesCount64(group)
+	}
+	slots := make([]uint32, 0, count)
+	for group, groupMask := range mask {
+		for bit := range 64 {
+			if groupMask&(uint64(1)<<bit) != 0 {
+				slots = append(slots, uint32(group*64+bit))
+			}
+		}
+	}
+	return slots
 }
