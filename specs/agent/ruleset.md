@@ -22,14 +22,65 @@
       "priority": 10,
       "match": {
         "protocol": "tcp",
+        "src_cidrs": ["10.0.0.0/8"],
+        "dst_cidrs": ["192.168.1.10/32"],
+        "src_ports": [1024, 1025],
         "dst_ports": [80, 8080],
-        "tcp_flags": {
-          "syn": true
+        "tcp": {
+          "flags": {
+            "syn": true
+          }
         }
       },
       "response": {
-        "action": "tcp_reset",
-        "params": {}
+        "action": "tcp_reset"
+      }
+    },
+    {
+      "rule_id": 1002,
+      "priority": 20,
+      "match": {
+        "protocol": "icmp",
+        "dst_cidrs": ["192.168.1.20/32"],
+        "icmp": {
+          "type": "echo_request"
+        }
+      },
+      "response": {
+        "action": "icmp_echo_reply"
+      }
+    },
+    {
+      "rule_id": 1003,
+      "priority": 30,
+      "match": {
+        "protocol": "arp",
+        "arp": {
+          "op": "request"
+        }
+      },
+      "response": {
+        "action": "arp_reply",
+        "params": {
+          "hardware_addr": "02:00:00:00:00:20",
+          "sender_ipv4": "192.168.1.20"
+        }
+      }
+    },
+    {
+      "rule_id": 1004,
+      "priority": 40,
+      "match": {
+        "protocol": "udp",
+        "dst_ports": [53]
+      },
+      "response": {
+        "action": "dns_sinkhole",
+        "params": {
+          "family": "ipv4",
+          "answers_v4": ["192.0.2.10"],
+          "ttl": 60
+        }
       }
     }
   ]
@@ -112,13 +163,17 @@
   "dst_cidrs": ["192.168.1.0/24"],
   "src_ports": [1024],
   "dst_ports": [80, 8080],
-  "tcp_flags": {
-    "syn": true,
-    "ack": false
+  "tcp": {
+    "flags": {
+      "syn": true
+    }
   },
-  "icmp_type": "echo_request",
-  "arp_op": "request",
-  "has_l4_payload": true
+  "icmp": {
+    "type": "echo_request"
+  },
+  "arp": {
+    "op": "request"
+  }
 }
 ```
 
@@ -130,10 +185,9 @@
 - `dst_cidrs`：可选，目的 IPv4 CIDR 数组
 - `src_ports`：可选，TCP/UDP 源端口数组
 - `dst_ports`：可选，TCP/UDP 目的端口数组
-- `tcp_flags`：可选，TCP flags 正向匹配条件
-- `icmp_type`：可选，枚举 `echo_request` / `echo_reply`
-- `arp_op`：可选，枚举 `request` / `reply`
-- `has_l4_payload`：可选，要求 L4 payload 长度大于 `0`
+- `tcp.flags`：可选，对象字段，支持 `syn` / `ack` / `rst` / `fin` / `psh`，只接受 `true`
+- `icmp.type`：可选，枚举 `echo_request`
+- `arp.op`：可选，枚举 `request`
 
 基础匹配语义：
 
@@ -142,9 +196,10 @@
 - 未配置字段是 wildcard
 - 不支持否定条件
 - `src_ports` / `dst_ports` 只对 TCP/UDP 有效
-- `tcp_flags` 只对 TCP 有效
-- `icmp_type` 只对 ICMP 有效
-- `arp_op` 只对 ARP 有效
+- `tcp.flags` 只对 TCP 有效
+- `icmp.type` 只对 ICMP 有效
+- `arp.op` 只对 ARP 有效
+- `tcp.flags` 中显式写入 `false` 视为无效输入
 
 ---
 
@@ -158,7 +213,7 @@
 - `icmp_echo_reply` 只兼容 ICMP echo request。
 - `icmp_port_unreachable` 主要用于 UDP 包。
 - `icmp_host_unreachable` / `icmp_admin_prohibited` 兼容 IPv4 TCP / UDP / ICMP。
-- `udp_echo_reply` 只兼容 UDP 包，并且要求 `has_l4_payload=true`。
+- `udp_echo_reply` 只兼容 UDP 包。
 - `dns_sinkhole` / `dns_refused` 只兼容 UDP DNS 请求，通常要求 `dst_ports` 包含 `53`。
 - `arp_reply` 只兼容 ARP request。
 - `none` / `alert` 不要求特定协议。

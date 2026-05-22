@@ -93,7 +93,7 @@ struct rule_meta {
 | `dst_port_optional_rules` | `mask_t` | 未配置目的端口条件的规则 |
 | `src_prefix_optional_rules` | `mask_t` | 未配置源前缀条件的规则 |
 | `dst_prefix_optional_rules` | `mask_t` | 未配置目的前缀条件的规则 |
-| `condition_optional_rules[19]` | `mask_t[]` | 未要求对应 condition bit 的规则 |
+| `condition_optional_rules[16]` | `mask_t[]` | 未要求对应 condition bit 的规则 |
 | `ingress_verdict` | `uint32` | `attachment.miss_verdict` 的编译值，`0=pass`，`1=drop` |
 
 ---
@@ -138,10 +138,7 @@ sentinel：
 | 12 | `COND_TCP_FIN` | TCP FIN |
 | 13 | `COND_TCP_PSH` | TCP PSH |
 | 14 | `COND_ICMP_ECHO_REQUEST` | ICMP echo request |
-| 15 | `COND_ICMP_ECHO_REPLY` | ICMP echo reply |
-| 16 | `COND_ARP_REQUEST` | ARP request |
-| 17 | `COND_ARP_REPLY` | ARP reply |
-| 18 | `COND_L4_PAYLOAD` | L4 payload 长度大于 0 |
+| 15 | `COND_ARP_REQUEST` | ARP request |
 
 ---
 

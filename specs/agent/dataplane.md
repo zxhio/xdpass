@@ -196,6 +196,8 @@ BPF 运行时匹配：
 - BPF 不逐条读取规则执行 `(pkt_conds & required_mask) == required_mask`
 - `required_mask` 语义由 userspace 编译出的索引 bitmap、optional bitmap 和
   `condition_optional_rules` 共同表达
+- `tcp.flags`、`icmp.type`、`arp.op` 这类协议子字段会被编译成对应的
+  `required_mask` bit 和 `condition_optional_rules` 条目，不进入 `rule_meta.flags`
 
 ---
 

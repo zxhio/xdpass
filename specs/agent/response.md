@@ -281,9 +281,9 @@ userspace response builder 只根据原始包、`ruleset.response.params` 和 re
 
 ### `udp_echo_reply`
 
-- 输入必须是 UDP 包，并且 L4 payload 长度大于 `0`。
+- 输入必须是 UDP 包。
 - 交换 Ethernet MAC、IPv4 源/目的地址和 UDP 源/目的端口。
-- UDP payload 原样回显。
+- UDP payload 原样保留。
 - 重新计算 IPv4 和 UDP checksum。
 
 ### `arp_reply`
