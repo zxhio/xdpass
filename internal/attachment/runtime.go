@@ -52,9 +52,11 @@ type Runtime struct {
 	loadBPF     LoadFunc
 	attachXDP   AttachXDPFunc
 	queueProbe  QueueProbeFunc
+	openPromisc PromiscuousOpenFunc
 	mu          sync.Mutex
 	attachments map[uint32]*Attachment
 	resources   map[uint32]*bpfResources
+	promisc     map[uint32]PromiscuousHandle
 
 	afterCreate        XSKAfterCreateFunc
 	afterPatch         XSKAfterPatchFunc
@@ -94,14 +96,21 @@ func New(loadBPF LoadFunc, attachXDP AttachXDPFunc) *Runtime {
 		loadBPF:     loadBPF,
 		attachXDP:   attachXDP,
 		queueProbe:  probeMaxRXQueues,
+		openPromisc: openPromiscuous,
 		attachments: make(map[uint32]*Attachment),
 		resources:   make(map[uint32]*bpfResources),
+		promisc:     make(map[uint32]PromiscuousHandle),
 	}
 }
 
 // SetQueueProbe overrides the RX queue probe. It is intended for tests.
 func (r *Runtime) SetQueueProbe(fn QueueProbeFunc) {
 	r.queueProbe = fn
+}
+
+// SetPromiscuousOpen overrides the promiscuous mode opener. It is intended for tests.
+func (r *Runtime) SetPromiscuousOpen(fn PromiscuousOpenFunc) {
+	r.openPromisc = fn
 }
 
 var validAttachModes = map[string]bool{"generic": true, "native": true, "driver": true}
@@ -226,6 +235,10 @@ func (r *Runtime) Create(req *Request) (*Attachment, error) {
 	att := r.buildAttachment(req, programID, fmt.Sprintf("ifindex-%d", req.IfIndex))
 	r.attachments[req.IfIndex] = att
 	r.resources[req.IfIndex] = &bpfResources{coll: coll, link: xdpLink}
+	if err := r.enablePromiscuous(req.IfIndex); err != nil {
+		r.cleanup(req.IfIndex)
+		return nil, fmt.Errorf("enable promiscuous mode: %w", err)
+	}
 
 	// Start XSK if enabled and callback is set.
 	if att.XSK.Enabled && r.afterCreate != nil {
@@ -310,6 +323,10 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 			return nil, fmt.Errorf("attach xdp: %w", err)
 		}
 		res.link = xdpLink
+		if err := r.enablePromiscuous(ifIndex); err != nil {
+			res.closeLink()
+			return nil, fmt.Errorf("enable promiscuous mode: %w", err)
+		}
 		att.Enabled = true
 		att.ProgramID = programID(prog)
 
@@ -317,6 +334,7 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 		if att.XSK.Enabled && r.afterPatch != nil {
 			if err := r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, true); err != nil {
 				res.closeLink()
+				r.releasePromiscuous(ifIndex)
 				att.Enabled = false
 				return nil, fmt.Errorf("xsk start: %w", err)
 			}
@@ -335,6 +353,7 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 					r.afterPatch(att, &collMapAccessor{maps: res.coll.Maps}, false)
 				}
 				res.closeLink()
+				r.releasePromiscuous(ifIndex)
 				att.Enabled = false
 				return nil, fmt.Errorf("ruleset apply: %w", err)
 			}
@@ -359,6 +378,7 @@ func (r *Runtime) PatchEnabled(ifIndex uint32, enabled bool) (*Attachment, error
 
 		// Detach XDP, keep BPF object loaded for potential re-enable.
 		res.closeLink()
+		r.releasePromiscuous(ifIndex)
 		att.Enabled = false
 		att.ProgramID = 0
 		logrus.WithField("ifindex", ifIndex).Info("Attachment disabled")
@@ -402,7 +422,34 @@ func (r *Runtime) cleanup(ifIndex uint32) {
 		res.closeAll()
 		delete(r.resources, ifIndex)
 	}
+	r.releasePromiscuous(ifIndex)
 	delete(r.attachments, ifIndex)
+}
+
+func (r *Runtime) enablePromiscuous(ifIndex uint32) error {
+	if r.promisc[ifIndex] != nil {
+		return nil
+	}
+	handle, err := r.openPromisc(ifIndex)
+	if err != nil {
+		return err
+	}
+	r.promisc[ifIndex] = handle
+	logrus.WithField("ifindex", ifIndex).Debug("Requested promiscuous mode")
+	return nil
+}
+
+func (r *Runtime) releasePromiscuous(ifIndex uint32) {
+	handle := r.promisc[ifIndex]
+	if handle == nil {
+		return
+	}
+	if err := handle.Close(); err != nil {
+		logrus.WithError(err).WithField("ifindex", ifIndex).Warn("Fail to release promiscuous mode")
+	} else {
+		logrus.WithField("ifindex", ifIndex).Debug("Released promiscuous mode")
+	}
+	delete(r.promisc, ifIndex)
 }
 
 // Close releases all BPF resources.

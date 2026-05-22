@@ -70,6 +70,7 @@
 - 只能通过 `PATCH` 修改
 - `true`：XDP 已挂载；如果 `xsk.enabled=true`，XSK 已启动
 - `false`：attachment 保留在内存状态中，但 XDP 未挂载，XSK 未启动
+- `true` 时 `agent` 默认为该网卡申请混杂接收，以便目的 MAC 不是本机地址的流量也能进入 XDP
 
 ### `miss_verdict`
 
@@ -200,6 +201,7 @@
 - 请求中使用 `ifindex` 标识网卡
 - 同一 `ifindex` 已存在时返回 `409 conflict`
 - 创建成功后执行 XDP attach
+- 创建成功后默认为该网卡申请混杂接收
 - 如果 `xsk.enabled=true`，同时启动 XSK
 - 任一步失败时回滚已完成的运行态操作
 - 成功后写入内存状态并返回规范化后的 attachment
@@ -216,8 +218,8 @@
 }
 ```
 
-- `false -> true`：挂载 XDP，并按 `xsk.enabled` 决定是否启动 XSK
-- `true -> false`：停止 XSK，卸载 XDP，保留内存状态
+- `false -> true`：挂载 XDP，申请混杂接收，并按 `xsk.enabled` 决定是否启动 XSK
+- `true -> false`：停止 XSK，卸载 XDP，释放 `agent` 申请的混杂接收，保留内存状态
 - 不允许修改 queues、UMEM、attach mode、miss verdict
 - 资源不存在时返回 `404 not_found`
 
@@ -227,6 +229,7 @@
 
 - 如果 XSK 正在运行，先停止 XSK
 - 如果 XDP 已挂载，再卸载 XDP
+- 释放 `agent` 为该 attachment 申请的混杂接收；如果网卡此前已经处于混杂模式，不改变原有混杂状态
 - 删除内存中的 attachment 配置
 - 资源不存在时返回 `404 not_found`
 - 成功时返回 `204`

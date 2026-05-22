@@ -23,9 +23,16 @@ func mockAttachXDP(_ *ebpf.Program, _ int, _ string) (link.Link, error) {
 	return nil, nil
 }
 
+type noopPromiscuousHandle struct{}
+
+func (noopPromiscuousHandle) Close() error { return nil }
+
 func newTestRuntime() *Runtime {
 	rt := New(mockLoadBPF, mockAttachXDP)
 	rt.SetQueueProbe(func(uint32) (uint32, error) { return 2, nil })
+	rt.SetPromiscuousOpen(func(uint32) (PromiscuousHandle, error) {
+		return noopPromiscuousHandle{}, nil
+	})
 	return rt
 }
 
@@ -138,6 +145,9 @@ func TestLoadBPFFailureRollback(t *testing.T) {
 	rt := New(func() (*ebpf.Collection, error) {
 		return nil, errors.New("bpf load failed")
 	}, mockAttachXDP)
+	rt.SetPromiscuousOpen(func(uint32) (PromiscuousHandle, error) {
+		return noopPromiscuousHandle{}, nil
+	})
 
 	_, err := rt.Create(&Request{IfIndex: 3})
 	require.Error(t, err)

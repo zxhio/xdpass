@@ -46,11 +46,22 @@ func mockStoreAttachXDP(_ *ebpf.Program, _ int, _ string) (link.Link, error) {
 	return nil, nil
 }
 
+type noopPromiscuousHandle struct{}
+
+func (noopPromiscuousHandle) Close() error { return nil }
+
+func disableTestPromiscuous(rt *attachment.Runtime) {
+	rt.SetPromiscuousOpen(func(uint32) (attachment.PromiscuousHandle, error) {
+		return noopPromiscuousHandle{}, nil
+	})
+}
+
 func TestDeleteAttachmentWithCallbacksReturns(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	attRuntime := attachment.New(mockStoreLoadBPF, mockStoreAttachXDP)
+	disableTestPromiscuous(attRuntime)
 	eventStream := events.NewStream(ctx)
 	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 	xskRuntime := xsk.NewRuntime(ctx)
@@ -115,6 +126,7 @@ func newTestStoreWithEventFactory(t *testing.T, loadBPF attachment.LoadFunc, fac
 	t.Helper()
 	ctx := t.Context()
 	attRuntime := attachment.New(loadBPF, mockStoreAttachXDP)
+	disableTestPromiscuous(attRuntime)
 	eventStream := events.NewStreamWithFactory(ctx, factory)
 	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 	xskRuntime := xsk.NewRuntime(ctx)
@@ -297,6 +309,7 @@ func newTestStoreWithRulesetMaps(t *testing.T) *Store {
 	t.Helper()
 	ctx := t.Context()
 	attRuntime := attachment.New(mockStoreLoadBPFWithRulesetMaps, mockStoreAttachXDP)
+	disableTestPromiscuous(attRuntime)
 	eventStream := events.NewStream(ctx)
 	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 	xskRuntime := xsk.NewRuntime(ctx)
@@ -367,6 +380,7 @@ func TestRulesetLifecycleApply(t *testing.T) {
 	t.Run("create failure rolls back attachment", func(t *testing.T) {
 		ctx := t.Context()
 		attRuntime := attachment.New(mockStoreLoadBPF, mockStoreAttachXDP)
+		disableTestPromiscuous(attRuntime)
 		eventStream := events.NewStream(ctx)
 		responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
 		xskRuntime := xsk.NewRuntime(ctx)
