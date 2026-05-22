@@ -11,8 +11,6 @@ import (
 	"xdpass/internal/dataplane/abi"
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 // --- Validation tests ---
 
 func TestValidateEmptyRuleset(t *testing.T) {
@@ -103,22 +101,33 @@ func TestValidateInvalidCIDR(t *testing.T) {
 
 func TestValidateInvalidICMPType(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{ICMPType: "invalid"}, Response: Response{Action: "alert"}},
+		{RuleID: 1, Match: Match{ICMP: &ICMPMatch{Type: "echo_reply"}}, Response: Response{Action: "alert"}},
 	}
 	err := Validate(rules)
 	var ve *ValidationError
 	require.ErrorAs(t, err, &ve)
-	assert.Contains(t, ve.Detail, "icmp_type")
+	assert.Contains(t, ve.Detail, "icmp.type")
 }
 
 func TestValidateInvalidARPOp(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{ARPOP: "invalid"}, Response: Response{Action: "alert"}},
+		{RuleID: 1, Match: Match{ARP: &ARPMatch{Op: "invalid"}}, Response: Response{Action: "alert"}},
 	}
 	err := Validate(rules)
 	var ve *ValidationError
 	require.ErrorAs(t, err, &ve)
-	assert.Contains(t, ve.Detail, "arp_op")
+	assert.Contains(t, ve.Detail, "arp.op")
+}
+
+func TestValidateFalseTCPFlag(t *testing.T) {
+	syn := false
+	rules := []Rule{
+		{RuleID: 1, Match: Match{TCP: &TCPMatch{Flags: &TCPFlags{SYN: &syn}}}, Response: Response{Action: "alert"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "tcp.flags")
 }
 
 // --- Match/Action compatibility tests ---
@@ -142,7 +151,7 @@ func TestCompatTCPResetWithUDP(t *testing.T) {
 
 func TestCompatICMPEchoReplyWithICMP(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{Protocol: "icmp", ICMPType: "echo_request"}, Response: Response{Action: "icmp_echo_reply"}},
+		{RuleID: 1, Match: Match{Protocol: "icmp", ICMP: &ICMPMatch{Type: "echo_request"}}, Response: Response{Action: "icmp_echo_reply"}},
 	}
 	assert.NoError(t, Validate(rules))
 }
@@ -159,19 +168,19 @@ func TestCompatICMPEchoReplyWithTCP(t *testing.T) {
 
 func TestCompatARPReplyWithARPRequest(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{Protocol: "arp", ARPOP: "request"}, Response: Response{Action: "arp_reply"}},
+		{RuleID: 1, Match: Match{Protocol: "arp", ARP: &ARPMatch{Op: "request"}}, Response: Response{Action: "arp_reply"}},
 	}
 	assert.NoError(t, Validate(rules))
 }
 
 func TestCompatARPReplyWithARPReply(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{Protocol: "arp", ARPOP: "reply"}, Response: Response{Action: "arp_reply"}},
+		{RuleID: 1, Match: Match{Protocol: "arp", ARP: &ARPMatch{Op: "reply"}}, Response: Response{Action: "arp_reply"}},
 	}
 	err := Validate(rules)
 	var ve *ValidationError
 	require.ErrorAs(t, err, &ve)
-	assert.Contains(t, ve.Detail, "arp_op")
+	assert.Contains(t, ve.Detail, "arp.op")
 }
 
 func TestCompatDNSRefusedWithUDP(t *testing.T) {
@@ -246,7 +255,7 @@ func TestCompileRuleMeta(t *testing.T) {
 		{
 			RuleID:   100,
 			Priority: 10,
-			Match:    Match{Protocol: "tcp", DstPorts: []uint16{80}, TCPFlags: &TCPFlags{SYN: &syn}},
+			Match:    Match{Protocol: "tcp", DstPorts: []uint16{80}, TCP: &TCPMatch{Flags: &TCPFlags{SYN: &syn}}},
 			Response: Response{Action: "tcp_reset"},
 		},
 	}

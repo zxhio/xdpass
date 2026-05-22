@@ -12,16 +12,20 @@ type Rule struct {
 // Match holds rule match conditions.
 // Empty/nil fields are wildcards.
 type Match struct {
-	Protocol     string // tcp, udp, icmp, arp, or empty
-	VLANS        []uint16
-	SrcCIDRs     []string
-	DstCIDRs     []string
-	SrcPorts     []uint16
-	DstPorts     []uint16
-	TCPFlags     *TCPFlags
-	ICMPType     string // echo_request, echo_reply
-	ARPOP        string // request, reply
-	HasL4Payload *bool
+	Protocol string // tcp, udp, icmp, arp, or empty
+	VLANS    []uint16
+	SrcCIDRs []string
+	DstCIDRs []string
+	SrcPorts []uint16
+	DstPorts []uint16
+	TCP      *TCPMatch
+	ICMP     *ICMPMatch
+	ARP      *ARPMatch
+}
+
+// TCPMatch holds TCP-specific match conditions.
+type TCPMatch struct {
+	Flags *TCPFlags
 }
 
 // TCPFlags holds TCP flag match conditions.
@@ -31,6 +35,16 @@ type TCPFlags struct {
 	RST *bool
 	FIN *bool
 	PSH *bool
+}
+
+// ICMPMatch holds ICMP-specific match conditions.
+type ICMPMatch struct {
+	Type string // echo_request
+}
+
+// ARPMatch holds ARP-specific match conditions.
+type ARPMatch struct {
+	Op string // request
 }
 
 // Response holds rule response action.
@@ -69,7 +83,7 @@ type GlobalCfgData struct {
 	DstPortOptionalRules   [8]uint64
 	SrcPrefixOptionalRules [8]uint64
 	DstPrefixOptionalRules [8]uint64
-	ConditionOptionalRules [19][8]uint64
+	ConditionOptionalRules [16][8]uint64
 	IngressVerdict         uint32
 }
 

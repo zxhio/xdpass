@@ -839,26 +839,38 @@ func apiToRules(apiRules []api.RuleResponse) []ruleset.Rule {
 
 func apiToMatch(m *api.MatchResponse) ruleset.Match {
 	match := ruleset.Match{
-		Protocol:     m.Protocol,
-		VLANS:        m.VLANS,
-		SrcCIDRs:     m.SrcCIDRs,
-		DstCIDRs:     m.DstCIDRs,
-		SrcPorts:     m.SrcPorts,
-		DstPorts:     m.DstPorts,
-		ICMPType:     m.ICMPType,
-		ARPOP:        m.ARPOP,
-		HasL4Payload: m.HasL4Payload,
+		Protocol: m.Protocol,
+		VLANS:    m.VLANS,
+		SrcCIDRs: m.SrcCIDRs,
+		DstCIDRs: m.DstCIDRs,
+		SrcPorts: m.SrcPorts,
+		DstPorts: m.DstPorts,
 	}
-	if m.TCPFlags != nil {
-		match.TCPFlags = &ruleset.TCPFlags{
-			SYN: m.TCPFlags.SYN,
-			ACK: m.TCPFlags.ACK,
-			RST: m.TCPFlags.RST,
-			FIN: m.TCPFlags.FIN,
-			PSH: m.TCPFlags.PSH,
+	if m.TCP != nil {
+		match.TCP = &ruleset.TCPMatch{
+			Flags: apiToTCPFlags(m.TCP.Flags),
 		}
 	}
+	if m.ICMP != nil {
+		match.ICMP = &ruleset.ICMPMatch{Type: m.ICMP.Type}
+	}
+	if m.ARP != nil {
+		match.ARP = &ruleset.ARPMatch{Op: m.ARP.Op}
+	}
 	return match
+}
+
+func apiToTCPFlags(flags *api.TCPFlags) *ruleset.TCPFlags {
+	if flags == nil {
+		return nil
+	}
+	return &ruleset.TCPFlags{
+		SYN: copyBoolPtr(flags.SYN),
+		ACK: copyBoolPtr(flags.ACK),
+		RST: copyBoolPtr(flags.RST),
+		FIN: copyBoolPtr(flags.FIN),
+		PSH: copyBoolPtr(flags.PSH),
+	}
 }
 
 func rulesToAPI(rules []ruleset.Rule) []api.RuleResponse {
@@ -882,31 +894,51 @@ func rulesToAPI(rules []ruleset.Rule) []api.RuleResponse {
 func hasMatch(m ruleset.Match) bool {
 	return m.Protocol != "" || len(m.VLANS) > 0 || len(m.SrcCIDRs) > 0 ||
 		len(m.DstCIDRs) > 0 || len(m.SrcPorts) > 0 || len(m.DstPorts) > 0 ||
-		m.TCPFlags != nil || m.ICMPType != "" || m.ARPOP != "" || m.HasL4Payload != nil
+		m.TCP != nil || m.ICMP != nil || m.ARP != nil
 }
 
 func matchToAPI(m ruleset.Match) *api.MatchResponse {
 	resp := &api.MatchResponse{
-		Protocol:     m.Protocol,
-		VLANS:        m.VLANS,
-		SrcCIDRs:     m.SrcCIDRs,
-		DstCIDRs:     m.DstCIDRs,
-		SrcPorts:     m.SrcPorts,
-		DstPorts:     m.DstPorts,
-		ICMPType:     m.ICMPType,
-		ARPOP:        m.ARPOP,
-		HasL4Payload: m.HasL4Payload,
+		Protocol: m.Protocol,
+		VLANS:    m.VLANS,
+		SrcCIDRs: m.SrcCIDRs,
+		DstCIDRs: m.DstCIDRs,
+		SrcPorts: m.SrcPorts,
+		DstPorts: m.DstPorts,
 	}
-	if m.TCPFlags != nil {
-		resp.TCPFlags = &api.TCPFlags{
-			SYN: m.TCPFlags.SYN,
-			ACK: m.TCPFlags.ACK,
-			RST: m.TCPFlags.RST,
-			FIN: m.TCPFlags.FIN,
-			PSH: m.TCPFlags.PSH,
+	if m.TCP != nil {
+		resp.TCP = &api.TCPMatch{
+			Flags: tcpFlagsToAPI(m.TCP.Flags),
 		}
 	}
+	if m.ICMP != nil {
+		resp.ICMP = &api.ICMPMatch{Type: m.ICMP.Type}
+	}
+	if m.ARP != nil {
+		resp.ARP = &api.ARPMatch{Op: m.ARP.Op}
+	}
 	return resp
+}
+
+func tcpFlagsToAPI(flags *ruleset.TCPFlags) *api.TCPFlags {
+	if flags == nil {
+		return nil
+	}
+	return &api.TCPFlags{
+		SYN: copyBoolPtr(flags.SYN),
+		ACK: copyBoolPtr(flags.ACK),
+		RST: copyBoolPtr(flags.RST),
+		FIN: copyBoolPtr(flags.FIN),
+		PSH: copyBoolPtr(flags.PSH),
+	}
+}
+
+func copyBoolPtr(v *bool) *bool {
+	if v == nil {
+		return nil
+	}
+	value := *v
+	return &value
 }
 
 func apiToRequest(req api.AttachmentRequest) *attachment.Request {

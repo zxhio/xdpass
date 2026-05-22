@@ -164,8 +164,10 @@ func handleGetRuleset(svc RulesetService) http.HandlerFunc {
 func handlePutRuleset(svc RulesetService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req RulesetResponse
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeBadRequest(w, "invalid JSON body")
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeBadRequest(w, fmt.Sprintf("invalid JSON body: %s", err))
 			return
 		}
 

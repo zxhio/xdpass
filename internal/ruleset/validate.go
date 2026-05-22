@@ -12,11 +12,11 @@ var validProtocols = map[string]bool{
 }
 
 var validICMPTypes = map[string]bool{
-	"echo_request": true, "echo_reply": true,
+	"echo_request": true,
 }
 
 var validARPOps = map[string]bool{
-	"request": true, "reply": true,
+	"request": true,
 }
 
 var actionCodeMap = map[string]uint16{
@@ -83,11 +83,29 @@ func validateMatch(m Match) error {
 	if m.Protocol != "" && !validProtocols[m.Protocol] {
 		return fmt.Errorf("invalid protocol: %s", m.Protocol)
 	}
-	if m.ICMPType != "" && !validICMPTypes[m.ICMPType] {
-		return fmt.Errorf("invalid icmp_type: %s", m.ICMPType)
+	if m.TCP != nil {
+		if m.Protocol != "" && m.Protocol != "tcp" {
+			return fmt.Errorf("tcp match requires protocol tcp")
+		}
+		if err := validateTCPFlags(m.TCP.Flags); err != nil {
+			return err
+		}
 	}
-	if m.ARPOP != "" && !validARPOps[m.ARPOP] {
-		return fmt.Errorf("invalid arp_op: %s", m.ARPOP)
+	if m.ICMP != nil {
+		if m.Protocol != "" && m.Protocol != "icmp" {
+			return fmt.Errorf("icmp match requires protocol icmp")
+		}
+		if m.ICMP.Type != "" && !validICMPTypes[m.ICMP.Type] {
+			return fmt.Errorf("invalid icmp.type: %s", m.ICMP.Type)
+		}
+	}
+	if m.ARP != nil {
+		if m.Protocol != "" && m.Protocol != "arp" {
+			return fmt.Errorf("arp match requires protocol arp")
+		}
+		if m.ARP.Op != "" && !validARPOps[m.ARP.Op] {
+			return fmt.Errorf("invalid arp.op: %s", m.ARP.Op)
+		}
 	}
 	for _, cidr := range m.SrcCIDRs {
 		if err := validateCIDR(cidr); err != nil {
@@ -97,6 +115,27 @@ func validateMatch(m Match) error {
 	for _, cidr := range m.DstCIDRs {
 		if err := validateCIDR(cidr); err != nil {
 			return fmt.Errorf("invalid dst_cidr %q: %w", cidr, err)
+		}
+	}
+	return nil
+}
+
+func validateTCPFlags(flags *TCPFlags) error {
+	if flags == nil {
+		return nil
+	}
+	for _, flag := range []struct {
+		name  string
+		value *bool
+	}{
+		{name: "syn", value: flags.SYN},
+		{name: "ack", value: flags.ACK},
+		{name: "rst", value: flags.RST},
+		{name: "fin", value: flags.FIN},
+		{name: "psh", value: flags.PSH},
+	} {
+		if flag.value != nil && !*flag.value {
+			return fmt.Errorf("tcp.flags.%s must be true when set", flag.name)
 		}
 	}
 	return nil
@@ -131,8 +170,8 @@ func validateCompatibility(m Match, r Response) error {
 		if m.Protocol != "" && m.Protocol != "icmp" {
 			return fmt.Errorf("action icmp_echo_reply requires protocol icmp")
 		}
-		if m.ICMPType != "" && m.ICMPType != "echo_request" {
-			return fmt.Errorf("action icmp_echo_reply requires icmp_type echo_request")
+		if m.ICMP != nil && m.ICMP.Type != "" && m.ICMP.Type != "echo_request" {
+			return fmt.Errorf("action icmp_echo_reply requires icmp.type echo_request")
 		}
 	case "icmp_port_unreachable":
 		// Primarily for UDP, but no strict protocol requirement.
@@ -150,8 +189,8 @@ func validateCompatibility(m Match, r Response) error {
 		if m.Protocol != "" && m.Protocol != "arp" {
 			return fmt.Errorf("action arp_reply requires protocol arp")
 		}
-		if m.ARPOP != "" && m.ARPOP != "request" {
-			return fmt.Errorf("action arp_reply requires arp_op request")
+		if m.ARP != nil && m.ARP.Op != "" && m.ARP.Op != "request" {
+			return fmt.Errorf("action arp_reply requires arp.op request")
 		}
 	case "none", "alert":
 		// No protocol requirements.

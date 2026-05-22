@@ -206,7 +206,7 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 	globalCfgMap, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.Array,
 		KeySize:    4,
-		ValueSize:  1608, // sizeof(bpfGlobalCfg)
+		ValueSize:  1416, // sizeof(bpfGlobalCfg)
 		MaxEntries: 1,
 	})
 	if err != nil {

@@ -21,7 +21,7 @@ type XdpassGlobalCfg struct {
 	DstPortOptionalRules   XdpassMaskT
 	SrcPrefixOptionalRules XdpassMaskT
 	DstPrefixOptionalRules XdpassMaskT
-	ConditionOptionalRules [19]XdpassMaskT
+	ConditionOptionalRules [16]XdpassMaskT
 	IngressVerdict         uint32
 	_                      [4]byte
 }

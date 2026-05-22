@@ -5,7 +5,7 @@ const (
 	RuleGroups    = 8
 	RulesPerGroup = 64
 	MaxRuleSlots  = 512
-	ConditionBits = 19
+	ConditionBits = 16
 	StatCount     = 17
 )
 
@@ -25,10 +25,7 @@ const (
 	CondTCPFin          uint32 = 1 << 12
 	CondTCPPsh          uint32 = 1 << 13
 	CondICMPEchoRequest uint32 = 1 << 14
-	CondICMPEchoReply   uint32 = 1 << 15
-	CondARPRequest      uint32 = 1 << 16
-	CondARPReply        uint32 = 1 << 17
-	CondL4Payload       uint32 = 1 << 18
+	CondARPRequest      uint32 = 1 << 15
 )
 
 const (

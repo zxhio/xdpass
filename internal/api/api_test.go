@@ -25,6 +25,8 @@ func newMockStore() *mockStore {
 	return &mockStore{attachments: make(map[uint32]AttachmentResponse)}
 }
 
+func boolPtr(v bool) *bool { return &v }
+
 func (m *mockStore) Status(_ context.Context) (StatusResponse, error) {
 	return StatusResponse{Status: "running", Attachments: len(m.attachments)}, nil
 }
@@ -281,7 +283,16 @@ func TestRulesetCRUD(t *testing.T) {
 
 	// PUT
 	w2 := doRequest(router, "PUT", "/api/v1/ruleset", RulesetResponse{
-		Rules: []RuleResponse{{RuleID: 1, Response: ResponseResponse{Action: "alert"}}},
+		Rules: []RuleResponse{{
+			RuleID: 1,
+			Match: &MatchResponse{
+				Protocol: "tcp",
+				TCP: &TCPMatch{
+					Flags: &TCPFlags{SYN: boolPtr(true)},
+				},
+			},
+			Response: ResponseResponse{Action: "alert"},
+		}},
 	})
 	require.Equal(t, http.StatusOK, w2.Code)
 
@@ -292,10 +303,42 @@ func TestRulesetCRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w3.Body.Bytes(), &getResp2))
 	require.Len(t, getResp2.Rules, 1)
 	assert.Equal(t, uint32(1), getResp2.Rules[0].RuleID)
+	require.NotNil(t, getResp2.Rules[0].Match)
+	require.NotNil(t, getResp2.Rules[0].Match.TCP)
+	require.NotNil(t, getResp2.Rules[0].Match.TCP.Flags)
+	assert.True(t, *getResp2.Rules[0].Match.TCP.Flags.SYN)
 
 	// DELETE
 	w4 := doRequest(router, "DELETE", "/api/v1/ruleset", nil)
 	assert.Equal(t, http.StatusNoContent, w4.Code)
+}
+
+func TestPutRulesetRejectsLegacyMatchFields(t *testing.T) {
+	router := newTestRouter()
+
+	tests := []struct {
+		name  string
+		match map[string]any
+	}{
+		{name: "tcp_flags", match: map[string]any{"protocol": "tcp", "tcp_flags": map[string]any{"syn": true}}},
+		{name: "icmp_type", match: map[string]any{"protocol": "icmp", "icmp_type": "echo_request"}},
+		{name: "arp_op", match: map[string]any{"protocol": "arp", "arp_op": "request"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := doRequest(router, "PUT", "/api/v1/ruleset", map[string]any{
+				"rules": []map[string]any{
+					{
+						"rule_id":  1,
+						"match":    tt.match,
+						"response": map[string]any{"action": "alert"},
+					},
+				},
+			})
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
 }
 
 func TestEventsStreamSSE(t *testing.T) {

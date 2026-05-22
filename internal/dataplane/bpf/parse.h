@@ -67,8 +67,6 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 				pkt->pkt_conds |= COND_TCP_FIN;
 			if (tcp->psh)
 				pkt->pkt_conds |= COND_TCP_PSH;
-			if ((void *)tcp + tcp->doff * 4 < data_end)
-				pkt->pkt_conds |= COND_L4_PAYLOAD;
 			return 0;
 		}
 
@@ -79,8 +77,6 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 			pkt->sport = bpf_ntohs(udp->source);
 			pkt->dport = bpf_ntohs(udp->dest);
 			pkt->pkt_conds |= COND_PROTO_UDP | COND_SRC_PORT | COND_DST_PORT;
-			if ((void *)(udp + 1) < data_end)
-				pkt->pkt_conds |= COND_L4_PAYLOAD;
 			return 0;
 		}
 
@@ -91,8 +87,6 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 			pkt->pkt_conds |= COND_PROTO_ICMP;
 			if (icmp->type == ICMP_ECHO)
 				pkt->pkt_conds |= COND_ICMP_ECHO_REQUEST;
-			if (icmp->type == ICMP_ECHOREPLY)
-				pkt->pkt_conds |= COND_ICMP_ECHO_REPLY;
 			return 0;
 		}
 
@@ -111,8 +105,6 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 		pkt->pkt_conds |= COND_PROTO_ARP;
 		if (bpf_ntohs(arp->ar_op) == ARPOP_REQUEST)
 			pkt->pkt_conds |= COND_ARP_REQUEST;
-		if (bpf_ntohs(arp->ar_op) == ARPOP_REPLY)
-			pkt->pkt_conds |= COND_ARP_REPLY;
 		return 0;
 	}
 

@@ -12,14 +12,12 @@
 #define ETH_P_8021Q   0x8100
 #define ETH_P_8021AD  0x88A8
 #define ICMP_ECHO     8
-#define ICMP_ECHOREPLY 0
 #define ARPOP_REQUEST 1
-#define ARPOP_REPLY   2
 
 #define RULE_GROUPS 8
 #define RULES_PER_GROUP 64
 #define MAX_RULE_SLOTS 512
-#define CONDITION_BITS 19
+#define CONDITION_BITS 16
 
 #define XDPASS_IPPROTO_ICMP 1
 #define XDPASS_IPPROTO_TCP 6
@@ -102,10 +100,7 @@ enum condition_bits {
 	COND_TCP_FIN = 1 << 12,
 	COND_TCP_PSH = 1 << 13,
 	COND_ICMP_ECHO_REQUEST = 1 << 14,
-	COND_ICMP_ECHO_REPLY = 1 << 15,
-	COND_ARP_REQUEST = 1 << 16,
-	COND_ARP_REPLY = 1 << 17,
-	COND_L4_PAYLOAD = 1 << 18,
+	COND_ARP_REQUEST = 1 << 15,
 };
 
 enum action_codes {

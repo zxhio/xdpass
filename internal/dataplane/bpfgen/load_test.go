@@ -696,8 +696,8 @@ func TestABIStructSizes(t *testing.T) {
 	// ipv4_lpm_key: uint32 + uint32 = 8 bytes.
 	assert.Equal(t, uintptr(8), unsafe.Sizeof(XdpassIpv4LpmKey{}), "ipv4_lpm_key size")
 
-	// global_cfg: 6 mask_t + 19 mask_t + uint32 + 4 pad = 25*64 + 4 + 4 = 1608.
-	expectedGlobalCfg := uintptr(25*64 + 4 + 4)
+	// global_cfg: 6 mask_t + 16 mask_t + uint32 + 4 pad = 22*64 + 4 + 4 = 1416.
+	expectedGlobalCfg := uintptr(22*64 + 4 + 4)
 	assert.Equal(t, expectedGlobalCfg, unsafe.Sizeof(XdpassGlobalCfg{}), "global_cfg size")
 }
 
@@ -1221,7 +1221,7 @@ func TestMatchTCPSynFlag(t *testing.T) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{
 			Protocol: "tcp",
-			TCPFlags: &ruleset.TCPFlags{SYN: &synTrue},
+			TCP:      &ruleset.TCPMatch{Flags: &ruleset.TCPFlags{SYN: &synTrue}},
 		}, Response: ruleset.Response{Action: "alert"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
@@ -1242,7 +1242,7 @@ func TestMatchTCPSynFlagMiss(t *testing.T) {
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{
 			Protocol: "tcp",
-			TCPFlags: &ruleset.TCPFlags{SYN: &synTrue},
+			TCP:      &ruleset.TCPMatch{Flags: &ruleset.TCPFlags{SYN: &synTrue}},
 		}, Response: ruleset.Response{Action: "alert"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
@@ -1262,7 +1262,7 @@ func TestMatchICMPEchoRequest(t *testing.T) {
 	objs := loadObjects(t)
 
 	rules := []ruleset.Rule{
-		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "icmp", ICMPType: "echo_request"}, Response: ruleset.Response{Action: "alert"}},
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "icmp", ICMP: &ruleset.ICMPMatch{Type: "echo_request"}}, Response: ruleset.Response{Action: "alert"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
 
@@ -1279,7 +1279,7 @@ func TestMatchARPRequest(t *testing.T) {
 	objs := loadObjects(t)
 
 	rules := []ruleset.Rule{
-		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp", ARPOP: "request"}, Response: ruleset.Response{Action: "alert"}},
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp", ARP: &ruleset.ARPMatch{Op: "request"}}, Response: ruleset.Response{Action: "alert"}},
 	}
 	compileAndWrite(t, objs, rules, "pass")
 

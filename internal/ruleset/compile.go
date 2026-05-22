@@ -111,46 +111,35 @@ func compileRequiredMask(m Match) uint32 {
 		mask |= abi.CondDstPort
 	}
 
-	if m.TCPFlags != nil {
-		if m.TCPFlags.SYN != nil && *m.TCPFlags.SYN {
-			mask |= abi.CondTCPSyn
-		}
-		if m.TCPFlags.ACK != nil && *m.TCPFlags.ACK {
-			mask |= abi.CondTCPAck
-		}
-		if m.TCPFlags.RST != nil && *m.TCPFlags.RST {
-			mask |= abi.CondTCPRst
-		}
-		if m.TCPFlags.FIN != nil && *m.TCPFlags.FIN {
-			mask |= abi.CondTCPFin
-		}
-		if m.TCPFlags.PSH != nil && *m.TCPFlags.PSH {
-			mask |= abi.CondTCPPsh
-		}
+	if m.TCP != nil && m.TCP.Flags != nil {
+		mask = addFlagCondition(mask, m.TCP.Flags.SYN, abi.CondTCPSyn)
+		mask = addFlagCondition(mask, m.TCP.Flags.ACK, abi.CondTCPAck)
+		mask = addFlagCondition(mask, m.TCP.Flags.RST, abi.CondTCPRst)
+		mask = addFlagCondition(mask, m.TCP.Flags.FIN, abi.CondTCPFin)
+		mask = addFlagCondition(mask, m.TCP.Flags.PSH, abi.CondTCPPsh)
 	}
 
-	if m.ICMPType != "" {
-		switch m.ICMPType {
+	if m.ICMP != nil {
+		switch m.ICMP.Type {
 		case "echo_request":
 			mask |= abi.CondICMPEchoRequest
-		case "echo_reply":
-			mask |= abi.CondICMPEchoReply
 		}
 	}
 
-	if m.ARPOP != "" {
-		switch m.ARPOP {
+	if m.ARP != nil {
+		switch m.ARP.Op {
 		case "request":
 			mask |= abi.CondARPRequest
-		case "reply":
-			mask |= abi.CondARPReply
 		}
 	}
 
-	if m.HasL4Payload != nil && *m.HasL4Payload {
-		mask |= abi.CondL4Payload
-	}
+	return mask
+}
 
+func addFlagCondition(mask uint32, enabled *bool, condition uint32) uint32 {
+	if enabled != nil && *enabled {
+		return mask | condition
+	}
 	return mask
 }
 

@@ -39,14 +39,8 @@ static __always_inline void apply_condition_masks(struct mask_t *candidates, con
 		mask_and(candidates, &cfg->condition_optional_rules[13]);
 	if (!(pkt_conds & COND_ICMP_ECHO_REQUEST))
 		mask_and(candidates, &cfg->condition_optional_rules[14]);
-	if (!(pkt_conds & COND_ICMP_ECHO_REPLY))
-		mask_and(candidates, &cfg->condition_optional_rules[15]);
 	if (!(pkt_conds & COND_ARP_REQUEST))
-		mask_and(candidates, &cfg->condition_optional_rules[16]);
-	if (!(pkt_conds & COND_ARP_REPLY))
-		mask_and(candidates, &cfg->condition_optional_rules[17]);
-	if (!(pkt_conds & COND_L4_PAYLOAD))
-		mask_and(candidates, &cfg->condition_optional_rules[18]);
+		mask_and(candidates, &cfg->condition_optional_rules[15]);
 }
 
 static __always_inline struct rule_meta *match_rule(struct packet_ctx *pkt, __u32 *matched_slot)
