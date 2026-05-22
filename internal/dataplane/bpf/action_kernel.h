@@ -6,6 +6,7 @@
 
 #define TCPHDR_LEN      20
 #define IPHDR_LEN       20
+#define RST_FLAGS       0x04
 #define RST_ACK_FLAGS   0x14
 #define TCP_DOFF_5      0x50
 #define DEFAULT_TTL     64
@@ -36,12 +37,19 @@ static __always_inline int apply_tcp_reset(struct xdp_md *ctx, const struct pack
 	__u8 smac[6], dmac[6];
 	__be32 tmp_ip;
 	__be16 tmp_port;
+	__be32 orig_seq;
+	__be32 orig_ack_seq;
 	__u32 csum;
+	__u32 ip_hdr_len;
+	__u32 tcp_hdr_len;
+	__u32 tcp_seg_len;
+	__u32 ack_delta;
 	const __u16 *p;
 	int has_vlan = 0;
 	__be16 vlan_encap_proto = 0;
 	__u32 key = 0;
 	struct tx_config *txc;
+	__u8 orig_ack;
 
 	if (!ptr_ok(eth, data_end, sizeof(*eth)))
 		goto fail;
@@ -78,14 +86,32 @@ static __always_inline int apply_tcp_reset(struct xdp_md *ctx, const struct pack
 		goto fail;
 	if (ip->ihl < 5)
 		goto fail;
-	if (!ptr_ok(ip, data_end, ip->ihl * 4))
+	ip_hdr_len = ip->ihl * 4;
+	if (!ptr_ok(ip, data_end, ip_hdr_len))
 		goto fail;
-	offset += ip->ihl * 4;
+	offset += ip_hdr_len;
 
 	/* Verify TCP header access. */
 	tcp = data + offset;
 	if (!ptr_ok(tcp, data_end, sizeof(*tcp)))
 		goto fail;
+	if (tcp->doff < 5)
+		goto fail;
+	tcp_hdr_len = tcp->doff * 4;
+	if (!ptr_ok(tcp, data_end, tcp_hdr_len))
+		goto fail;
+
+	if (bpf_ntohs(ip->tot_len) < ip_hdr_len + tcp_hdr_len)
+		goto fail;
+	tcp_seg_len = bpf_ntohs(ip->tot_len) - ip_hdr_len;
+	ack_delta = tcp_seg_len - tcp_hdr_len;
+	if (tcp->syn)
+		ack_delta += 1;
+	if (tcp->fin)
+		ack_delta += 1;
+	orig_seq = tcp->seq;
+	orig_ack_seq = tcp->ack_seq;
+	orig_ack = tcp->ack;
 
 	/* Swap IP addresses. */
 	tmp_ip = ip->saddr;
@@ -97,20 +123,26 @@ static __always_inline int apply_tcp_reset(struct xdp_md *ctx, const struct pack
 	tcp->source = tcp->dest;
 	tcp->dest = tmp_port;
 
-	/* Set ACK number: original seq + 1 if ACK was set. */
-	if (tcp->ack)
-		tcp->ack_seq = bpf_htonl(bpf_ntohl(tcp->seq) + 1);
-	else
+	/* RFC 793 reset generation: ACKed segments use SEG.ACK as RST SEQ.
+	 * Non-ACK segments use RST|ACK with ACK = SEG.SEQ + SEG.LEN.
+	 */
+	if (orig_ack) {
+		tcp->seq = orig_ack_seq;
 		tcp->ack_seq = 0;
+		*((__u8 *)tcp + 13) = RST_FLAGS;
+	} else {
+		tcp->seq = 0;
+		tcp->ack_seq = bpf_htonl(bpf_ntohl(orig_seq) + ack_delta);
+		*((__u8 *)tcp + 13) = RST_ACK_FLAGS;
+	}
 
-	/* Clear sequence number, checksum, urgent pointer. */
-	tcp->seq = 0;
+	/* Clear checksum and urgent pointer. */
 	tcp->check = 0;
+	tcp->window = 0;
 	tcp->urg_ptr = 0;
 
-	/* Set data offset = 5 (20 bytes), flags = RST | ACK. */
+	/* Set data offset = 5 (20 bytes). */
 	*((__u8 *)tcp + 12) = TCP_DOFF_5;
-	*((__u8 *)tcp + 13) = RST_ACK_FLAGS;
 
 	/* Update IPv4 header. */
 	ip->tot_len = bpf_htons(IPHDR_LEN + TCPHDR_LEN);

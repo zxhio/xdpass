@@ -149,6 +149,15 @@ func buildTCPSYN(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP net.IP, srcPort, 
 	return buf.Bytes()
 }
 
+func tcpSeqAck(t *testing.T, pkt []byte) (uint32, uint32) {
+	t.Helper()
+	parsed := gopacket.NewPacket(pkt, layers.LayerTypeEthernet, gopacket.NoCopy)
+	tcpLayer := parsed.Layer(layers.LayerTypeTCP)
+	require.NotNil(t, tcpLayer, "packet should have TCP layer")
+	tcp := tcpLayer.(*layers.TCP)
+	return tcp.Seq, tcp.Ack
+}
+
 // testPacket returns a standard test TCP SYN packet fixture.
 func testPacket() []byte {
 	srcMAC := net.HardwareAddr{0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
@@ -516,6 +525,9 @@ func TestTcpResetXdpTx(t *testing.T) {
 	assert.Equal(t, layers.TCPPort(12345), tcp.DstPort, "dst port should be original src")
 	assert.True(t, tcp.RST, "RST flag should be set")
 	assert.True(t, tcp.ACK, "ACK flag should be set")
+	origSeq, _ := tcpSeqAck(t, pkt)
+	assert.Equal(t, origSeq+1, tcp.Ack, "ACK should advance original SYN seq")
+	assert.Equal(t, uint32(0), tcp.Seq, "SEQ should be zero for RST+ACK")
 
 	// Stats.
 	assertStatsSum(t, objs, abi.StatIngressPackets, 1)
