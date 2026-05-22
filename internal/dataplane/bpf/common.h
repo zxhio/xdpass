@@ -11,6 +11,8 @@
 #define ETH_P_ARP     0x0806
 #define ETH_P_8021Q   0x8100
 #define ETH_P_8021AD  0x88A8
+#define ARPHRD_ETHER  1
+#define ETH_ALEN      6
 #define ICMP_ECHO     8
 #define ARPOP_REQUEST 1
 

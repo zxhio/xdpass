@@ -60,7 +60,7 @@ static __always_inline struct rule_meta *match_rule(struct packet_ctx *pkt, __u3
 	apply_index_mask(&candidates, &src_port_index_map, &pkt->sport, &cfg->src_port_optional_rules);
 	apply_index_mask(&candidates, &dst_port_index_map, &pkt->dport, &cfg->dst_port_optional_rules);
 
-	if (pkt->pkt_conds & (COND_PROTO_TCP | COND_PROTO_UDP | COND_PROTO_ICMP)) {
+	if (pkt->pkt_conds & (COND_PROTO_TCP | COND_PROTO_UDP | COND_PROTO_ICMP | COND_PROTO_ARP)) {
 		struct ipv4_lpm_key src_key = {.prefixlen = 32, .addr = pkt->sip};
 		struct ipv4_lpm_key dst_key = {.prefixlen = 32, .addr = pkt->dip};
 		apply_index_mask(&candidates, &src_prefix_lpm_map, &src_key, &cfg->src_prefix_optional_rules);

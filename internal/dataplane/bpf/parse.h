@@ -103,6 +103,16 @@ static __always_inline int parse_packet(struct xdp_md *ctx, struct packet_ctx *p
 		if (!ptr_ok(arp, data_end, sizeof(*arp) + arp_payload))
 			return -1;
 		pkt->pkt_conds |= COND_PROTO_ARP;
+		if (arp->ar_hrd == bpf_htons(ARPHRD_ETHER) && arp->ar_pro == bpf_htons(ETH_P_IP) &&
+		    arp->ar_hln == ETH_ALEN && arp->ar_pln == 4) {
+			if (!ptr_ok(arp, data_end, sizeof(*arp) + 2 * ETH_ALEN + 2 * sizeof(pkt->sip)))
+				return -1;
+			__builtin_memcpy(&pkt->sip, (void *)arp + sizeof(*arp) + ETH_ALEN,
+					 sizeof(pkt->sip));
+			__builtin_memcpy(&pkt->dip,
+					 (void *)arp + sizeof(*arp) + 2 * ETH_ALEN + sizeof(pkt->sip),
+					 sizeof(pkt->dip));
+		}
 		if (bpf_ntohs(arp->ar_op) == ARPOP_REQUEST)
 			pkt->pkt_conds |= COND_ARP_REQUEST;
 		return 0;

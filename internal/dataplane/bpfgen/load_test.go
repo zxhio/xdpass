@@ -1144,6 +1144,23 @@ func TestMatchCIDRDstPrefix(t *testing.T) {
 	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
 }
 
+func TestMatchARPDstPrefix(t *testing.T) {
+	skipUnlessBPF(t)
+	removeMemlock(t)
+	objs := loadObjects(t)
+
+	rules := []ruleset.Rule{
+		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "arp", DstCIDRs: []string{"192.168.1.1/32"}}, Response: ruleset.Response{Action: "alert"}},
+	}
+	compileAndWrite(t, objs, rules, "pass")
+
+	pkt := testARPPacket()
+	ret, _, err := objs.XdpassProg.Test(pkt)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(2), ret)
+	assertStatsSum(t, objs, abi.StatMatchHitPackets, 1)
+}
+
 func TestMatchCIDRDstPrefixMiss(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
