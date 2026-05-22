@@ -351,6 +351,20 @@ func TestCompileCIDRLPMIndexCanonicalizesNetworkAddress(t *testing.T) {
 	assert.Equal(t, binary.LittleEndian.Uint32(net.IP{10, 0, 0, 0}.To4()), compiled.Indexes.SrcPrefixLPM[0].Addr)
 }
 
+func TestCompileCIDRLPMIndexMergesDuplicatePrefixes(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Priority: 10, Match: Match{DstCIDRs: []string{"10.0.1.5/32"}}, Response: Response{Action: "alert"}},
+		{RuleID: 2, Priority: 20, Match: Match{DstCIDRs: []string{"10.0.1.5/32"}}, Response: Response{Action: "alert"}},
+	}
+	compiled, err := Compile(rules, "pass")
+	require.NoError(t, err)
+
+	require.Len(t, compiled.Indexes.DstPrefixLPM, 1)
+	expected := slotBit(0)
+	maskOr(&expected, slotBit(1))
+	assert.Equal(t, expected, compiled.Indexes.DstPrefixLPM[0].Mask)
+}
+
 func TestCompileOptionalBitmaps(t *testing.T) {
 	// Rule with no VLAN, no ports, no CIDRs -> all optional
 	rules := []Rule{

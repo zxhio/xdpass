@@ -162,11 +162,11 @@ func compileIndexes(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRulese
 	}
 	for _, cidr := range rule.Match.SrcCIDRs {
 		entries := compileCIDR(cidr, bit)
-		compiled.Indexes.SrcPrefixLPM = append(compiled.Indexes.SrcPrefixLPM, entries...)
+		compiled.Indexes.SrcPrefixLPM = mergeLPMEntries(compiled.Indexes.SrcPrefixLPM, entries)
 	}
 	for _, cidr := range rule.Match.DstCIDRs {
 		entries := compileCIDR(cidr, bit)
-		compiled.Indexes.DstPrefixLPM = append(compiled.Indexes.DstPrefixLPM, entries...)
+		compiled.Indexes.DstPrefixLPM = mergeLPMEntries(compiled.Indexes.DstPrefixLPM, entries)
 	}
 }
 
@@ -182,6 +182,23 @@ func compileCIDR(cidr string, bit [8]uint64) []LPMEntry {
 		Addr:      ipv4LPMAddr(ipNet.IP),
 		Mask:      bit,
 	}}
+}
+
+func mergeLPMEntries(existing []LPMEntry, entries []LPMEntry) []LPMEntry {
+	for _, entry := range entries {
+		merged := false
+		for i := range existing {
+			if existing[i].Prefixlen == entry.Prefixlen && existing[i].Addr == entry.Addr {
+				maskOr(&existing[i].Mask, entry.Mask)
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			existing = append(existing, entry)
+		}
+	}
+	return existing
 }
 
 // ipv4LPMAddr returns the uint32 value whose little-endian in-memory bytes
