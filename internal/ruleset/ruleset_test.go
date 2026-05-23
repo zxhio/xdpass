@@ -26,10 +26,10 @@ func TestValidateMaxRules(t *testing.T) {
 	err := Validate(rules)
 	var ve *ValidationError
 	require.ErrorAs(t, err, &ve)
-	assert.Contains(t, ve.Detail, "512")
+	assert.Contains(t, ve.Detail, "4096")
 }
 
-func TestValidateExactly512Rules(t *testing.T) {
+func TestValidateExactlyMaxRuleSlots(t *testing.T) {
 	rules := make([]Rule, abi.MaxRuleSlots)
 	for i := range rules {
 		rules[i] = Rule{RuleID: uint32(i + 1), Response: Response{Action: "alert"}}
@@ -378,7 +378,7 @@ func TestCompileWildcardBitmaps(t *testing.T) {
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPortWildcardRules)
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPrefixWildcardRules)
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPrefixWildcardRules)
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[0])
+	assert.Equal(t, RuleMask{}, compiled.GlobalCfg.ConditionWildcardRules[0])
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionWildcardRules[1])
 }
 
@@ -393,9 +393,9 @@ func TestCompileWildcardBitmapsPartial(t *testing.T) {
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.VlanWildcardRules)
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortWildcardRules)
 	// DstPorts is set, so NOT wildcard
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.DstPortWildcardRules)
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[0])
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[8])
+	assert.Equal(t, RuleMask{}, compiled.GlobalCfg.DstPortWildcardRules)
+	assert.Equal(t, RuleMask{}, compiled.GlobalCfg.ConditionWildcardRules[0])
+	assert.Equal(t, RuleMask{}, compiled.GlobalCfg.ConditionWildcardRules[8])
 	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionWildcardRules[7])
 }
 

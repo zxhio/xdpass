@@ -64,7 +64,7 @@ func WriteMaps(maps attachment.MapAccessor, compiled *CompiledRuleset) error {
 
 // ClearMaps clears all ruleset-related BPF maps for an attachment.
 func ClearMaps(maps attachment.MapAccessor) error {
-	if err := clearArrayMap(maps.RuleIndexMap(), 512); err != nil {
+	if err := clearArrayMap(maps.RuleIndexMap(), abi.MaxRuleSlots); err != nil {
 		return fmt.Errorf("clear rule_index_map: %w", err)
 	}
 	if err := clearGlobalCfgMap(maps.GlobalCfgMap()); err != nil {
@@ -99,13 +99,13 @@ type bpfRuleMeta struct {
 }
 
 type bpfGlobalCfg struct {
-	AllActiveRules         [8]uint64
-	VlanWildcardRules      [8]uint64
-	SrcPortWildcardRules   [8]uint64
-	DstPortWildcardRules   [8]uint64
-	SrcPrefixWildcardRules [8]uint64
-	DstPrefixWildcardRules [8]uint64
-	ConditionWildcardRules [16][8]uint64
+	AllActiveRules         RuleMask
+	VlanWildcardRules      RuleMask
+	SrcPortWildcardRules   RuleMask
+	DstPortWildcardRules   RuleMask
+	SrcPrefixWildcardRules RuleMask
+	DstPrefixWildcardRules RuleMask
+	ConditionWildcardRules [abi.ConditionBits]RuleMask
 	IngressVerdict         uint32
 	_                      [4]byte
 }
@@ -120,10 +120,10 @@ func writeRuleIndexMap(m *ebpf.Map, rules []CompiledRule) error {
 	logrus.WithFields(logrus.Fields{
 		"map":        "rule_index_map",
 		"slot_start": 0,
-		"slot_end":   511,
-		"slots":      512,
+		"slot_end":   abi.MaxRuleSlots - 1,
+		"slots":      abi.MaxRuleSlots,
 	}).Debug("Clear BPF rules")
-	for i := range 512 {
+	for i := range abi.MaxRuleSlots {
 		if err := m.Put(uint32(i), zero); err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func logBPFGlobalCfg(cfg bpfGlobalCfg) {
 	}).Debug("Write BPF ingress verdict")
 }
 
-func logGlobalCfgMask(message, field string, mask [8]uint64, logEmpty bool) {
+func logGlobalCfgMask(message, field string, mask RuleMask, logEmpty bool) {
 	if !logEmpty && maskEmpty(mask) {
 		return
 	}
@@ -238,7 +238,7 @@ func clearGlobalCfgMap(m *ebpf.Map) error {
 	return m.Put(uint32(0), bpfGlobalCfg{})
 }
 
-func writePortIndexMap(name string, m *ebpf.Map, index map[uint16][8]uint64) error {
+func writePortIndexMap(name string, m *ebpf.Map, index map[uint16]RuleMask) error {
 	if err := clearHashMap(name, m); err != nil {
 		return fmt.Errorf("clear: %w", err)
 	}
@@ -255,7 +255,7 @@ func writePortIndexMap(name string, m *ebpf.Map, index map[uint16][8]uint64) err
 	return nil
 }
 
-func writeVlanIndexMap(m *ebpf.Map, index map[uint16][8]uint64) error {
+func writeVlanIndexMap(m *ebpf.Map, index map[uint16]RuleMask) error {
 	if err := clearHashMap("vlan_index_map", m); err != nil {
 		return fmt.Errorf("clear: %w", err)
 	}
@@ -309,8 +309,9 @@ func clearArrayMap(m *ebpf.Map, size int) error {
 func clearHashMap(name string, m *ebpf.Map) error {
 	var keys []uint16
 	var key uint16
+	var value RuleMask
 	iter := m.Iterate()
-	for iter.Next(&key, &[8]uint64{}) {
+	for iter.Next(&key, &value) {
 		keys = append(keys, key)
 	}
 	if err := iter.Err(); err != nil {
@@ -331,8 +332,9 @@ func clearHashMap(name string, m *ebpf.Map) error {
 func clearLpmMap(name string, m *ebpf.Map) error {
 	var keys []bpfIpv4LpmKey
 	var key bpfIpv4LpmKey
+	var value RuleMask
 	iter := m.Iterate()
-	for iter.Next(&key, &[8]uint64{}) {
+	for iter.Next(&key, &value) {
 		keys = append(keys, key)
 	}
 	if err := iter.Err(); err != nil {
@@ -367,7 +369,7 @@ func ingressVerdictLogValue(verdict uint32) string {
 	}
 }
 
-func maskEmpty(mask [8]uint64) bool {
+func maskEmpty(mask RuleMask) bool {
 	for _, group := range mask {
 		if group != 0 {
 			return false
@@ -376,7 +378,7 @@ func maskEmpty(mask [8]uint64) bool {
 	return true
 }
 
-func maskSlots(mask [8]uint64) []uint32 {
+func maskSlots(mask RuleMask) []uint32 {
 	count := 0
 	for _, group := range mask {
 		count += bits.OnesCount64(group)

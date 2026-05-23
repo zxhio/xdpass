@@ -26,9 +26,9 @@ func Compile(rules []Rule, ingressVerdict string) (*CompiledRuleset, error) {
 	compiled := &CompiledRuleset{
 		Rules: make([]CompiledRule, len(sorted)),
 		Indexes: IndexData{
-			SrcPortIndex: make(map[uint16][8]uint64),
-			DstPortIndex: make(map[uint16][8]uint64),
-			VlanIndex:    make(map[uint16][8]uint64),
+			SrcPortIndex: make(map[uint16]RuleMask),
+			DstPortIndex: make(map[uint16]RuleMask),
+			VlanIndex:    make(map[uint16]RuleMask),
 		},
 	}
 
@@ -63,16 +63,16 @@ func Compile(rules []Rule, ingressVerdict string) (*CompiledRuleset, error) {
 	return compiled, nil
 }
 
-// slotBit returns the 512-bit mask with the bit for the given slot set.
-func slotBit(slot uint32) [8]uint64 {
-	var mask [8]uint64
+// slotBit returns the rule mask with the bit for the given slot set.
+func slotBit(slot uint32) RuleMask {
+	var mask RuleMask
 	group := slot / 64
 	bit := slot % 64
 	mask[group] = 1 << bit
 	return mask
 }
 
-func maskOr(dst *[8]uint64, src [8]uint64) {
+func maskOr(dst *RuleMask, src RuleMask) {
 	for i := range dst {
 		dst[i] |= src[i]
 	}
@@ -144,7 +144,7 @@ func addFlagCondition(mask uint32, enabled *bool, condition uint32) uint32 {
 }
 
 // compileIndexes populates inverted indexes for a rule.
-func compileIndexes(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRuleset) {
+func compileIndexes(rule Rule, _ uint32, bit RuleMask, compiled *CompiledRuleset) {
 	for _, port := range rule.Match.SrcPorts {
 		existing := compiled.Indexes.SrcPortIndex[port]
 		maskOr(&existing, bit)
@@ -171,7 +171,7 @@ func compileIndexes(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRulese
 }
 
 // compileCIDR converts a CIDR string to LPM entries with the given bit mask.
-func compileCIDR(cidr string, bit [8]uint64) []LPMEntry {
+func compileCIDR(cidr string, bit RuleMask) []LPMEntry {
 	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil || ipNet.IP.To4() == nil {
 		return nil
@@ -208,7 +208,7 @@ func ipv4LPMAddr(ip net.IP) uint32 {
 }
 
 // compileWildcardBitmaps populates wildcard bitmaps for rules missing condition fields.
-func compileWildcardBitmaps(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRuleset) {
+func compileWildcardBitmaps(rule Rule, _ uint32, bit RuleMask, compiled *CompiledRuleset) {
 	if len(rule.Match.VLANS) == 0 {
 		maskOr(&compiled.GlobalCfg.VlanWildcardRules, bit)
 	}

@@ -97,7 +97,7 @@
 - 规则数组
 - 只包含需要实际生效的规则
 - 不包含 `enabled=false` 的规则
-- 最多 `512` 条，对齐 BPF `MAX_RULE_SLOTS`
+- 最多 `4096` 条，对齐 BPF `MAX_RULE_SLOTS`
 
 ### `rules[].rule_id`
 

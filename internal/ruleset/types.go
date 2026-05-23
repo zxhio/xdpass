@@ -1,6 +1,8 @@
 // Package ruleset implements ruleset validation, compilation, and BPF map writing.
 package ruleset
 
+import "xdpass/internal/dataplane/abi"
+
 // Rule is the internal representation of a ruleset rule.
 type Rule struct {
 	RuleID   uint32
@@ -75,23 +77,26 @@ type RuleMetaData struct {
 	Flags        uint8
 }
 
+// RuleMask is the userspace equivalent of BPF mask_t.
+type RuleMask [abi.RuleGroups]uint64
+
 // GlobalCfgData holds the compiled global_cfg map data.
 type GlobalCfgData struct {
-	AllActiveRules         [8]uint64
-	VlanWildcardRules      [8]uint64
-	SrcPortWildcardRules   [8]uint64
-	DstPortWildcardRules   [8]uint64
-	SrcPrefixWildcardRules [8]uint64
-	DstPrefixWildcardRules [8]uint64
-	ConditionWildcardRules [16][8]uint64
+	AllActiveRules         RuleMask
+	VlanWildcardRules      RuleMask
+	SrcPortWildcardRules   RuleMask
+	DstPortWildcardRules   RuleMask
+	SrcPrefixWildcardRules RuleMask
+	DstPrefixWildcardRules RuleMask
+	ConditionWildcardRules [abi.ConditionBits]RuleMask
 	IngressVerdict         uint32
 }
 
 // IndexData holds all compiled inverted indexes.
 type IndexData struct {
-	SrcPortIndex map[uint16][8]uint64
-	DstPortIndex map[uint16][8]uint64
-	VlanIndex    map[uint16][8]uint64
+	SrcPortIndex map[uint16]RuleMask
+	DstPortIndex map[uint16]RuleMask
+	VlanIndex    map[uint16]RuleMask
 	SrcPrefixLPM []LPMEntry
 	DstPrefixLPM []LPMEntry
 }
@@ -100,5 +105,5 @@ type IndexData struct {
 type LPMEntry struct {
 	Prefixlen uint32
 	Addr      uint32
-	Mask      [8]uint64
+	Mask      RuleMask
 }

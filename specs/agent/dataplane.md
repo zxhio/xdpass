@@ -148,7 +148,7 @@ MVP 固定为：
 
 1. 过滤非运行态字段。
 2. 按 `priority ASC, rule_id ASC` 排序。
-3. 分配 rule slot，最多 `512` 条。
+3. 分配 rule slot，最多 `4096` 条。
 4. 写入 rule metadata。
 5. 写入倒排索引。
 6. 写入全局配置。

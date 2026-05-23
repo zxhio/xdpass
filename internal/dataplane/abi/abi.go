@@ -2,9 +2,9 @@
 package abi
 
 const (
-	RuleGroups    = 8
 	RulesPerGroup = 64
-	MaxRuleSlots  = 512
+	MaxRuleSlots  = 4096
+	RuleGroups    = MaxRuleSlots / RulesPerGroup
 	ConditionBits = 16
 	StatCount     = 17
 )

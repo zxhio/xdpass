@@ -17,14 +17,14 @@
 
 rule slots：
 
-- `RULE_GROUPS=8`
 - `RULES_PER_GROUP=64`
-- `MAX_RULE_SLOTS=512`
+- `MAX_RULE_SLOTS=4096`
+- `RULE_GROUPS=MAX_RULE_SLOTS / RULES_PER_GROUP = 64`
 
-`mask_t` 是 512 bit 的规则槽位 bitmap。
+`mask_t` 是 4096 bit 的规则槽位 bitmap。
 
 ```text
-bits[0..7] uint64
+bits[0..63] uint64
 slot = group * 64 + bit
 ```
 
@@ -36,9 +36,10 @@ slot = group * 64 + bit
 
 | map | type | max entries | key | value | 用途 |
 |---|---|---:|---|---|---|
-| `rule_index_map` | `ARRAY` | `512` | `uint32 slot` | `rule_meta` | slot 到规则运行态元数据 |
+| `rule_index_map` | `ARRAY` | `4096` | `uint32 slot` | `rule_meta` | slot 到规则运行态元数据 |
 | `global_cfg_map` | `ARRAY` | `1` | `uint32 0` | `global_cfg` | 全局候选规则和 wildcard bitmap |
 | `tx_config_map` | `ARRAY` | `1` | `uint32 0` | `tx_config` | BPF kernel response TX 配置 |
+| `match_scratch_map` | `PERCPU_ARRAY` | `1` | `uint32 0` | `mask_t` | BPF 匹配候选 bitmap 工作区 |
 | `src_port_index_map` | `HASH` | `4096` | `uint16 port` | `mask_t` | 源端口倒排索引 |
 | `dst_port_index_map` | `HASH` | `4096` | `uint16 port` | `mask_t` | 目的端口倒排索引 |
 | `vlan_index_map` | `HASH` | `4096` | `uint16 vlan` | `mask_t` | VLAN 倒排索引 |
@@ -106,6 +107,7 @@ struct rule_meta {
 - `src_prefix_lpm_map` 和 `dst_prefix_lpm_map` value 是累计候选 bitmap。
 - LPM lookup 使用 `/32` key 查找，userspace 必须生成和 BPF lookup 一致的 key 字节布局。
 - `ipv4_lpm_key.addr` 的内存字节必须是 IPv4 network-order bytes；在 bpfel Go 结构里该字段是 `uint32`，因此 userspace 写入的数值以“落到内存后的 4 字节”为准，而不是 dotted IP 的 big-endian 数值。
+- `match_scratch_map` 是 BPF 内部 per-CPU 工作区，不由 userspace 写入规则数据。
 - 索引命中时 BPF 使用 `indexed | wildcard`，确保字段 wildcard 规则仍可命中。
 - BPF 先通过倒排索引和字段 wildcard bitmap 缩小候选规则，再通过
   `condition_wildcard_rules` 过滤非索引条件，最后取候选 bitmap 中 slot 最小的规则。

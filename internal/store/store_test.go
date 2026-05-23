@@ -15,6 +15,7 @@ import (
 
 	"xdpass/internal/api"
 	"xdpass/internal/attachment"
+	"xdpass/internal/dataplane/abi"
 	"xdpass/internal/dispatch"
 	"xdpass/internal/events"
 	"xdpass/internal/response"
@@ -209,7 +210,7 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 		Type:       ebpf.Array,
 		KeySize:    4,
 		ValueSize:  12, // sizeof(bpfRuleMeta)
-		MaxEntries: 512,
+		MaxEntries: abi.MaxRuleSlots,
 	})
 	if err != nil {
 		return nil, err
@@ -218,7 +219,7 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 	globalCfgMap, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.Array,
 		KeySize:    4,
-		ValueSize:  1416, // sizeof(bpfGlobalCfg)
+		ValueSize:  22*abi.RuleGroups*8 + 8, // sizeof(bpfGlobalCfg)
 		MaxEntries: 1,
 	})
 	if err != nil {
@@ -230,7 +231,7 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 		return ebpf.NewMap(&ebpf.MapSpec{
 			Type:       ebpf.Hash,
 			KeySize:    2,
-			ValueSize:  64,
+			ValueSize:  abi.RuleGroups * 8,
 			MaxEntries: 256,
 		})
 	}
@@ -263,7 +264,7 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 		return ebpf.NewMap(&ebpf.MapSpec{
 			Type:       ebpf.LPMTrie,
 			KeySize:    8,
-			ValueSize:  64,
+			ValueSize:  abi.RuleGroups * 8,
 			MaxEntries: 256,
 			Flags:      unix.BPF_F_NO_PREALLOC,
 		})

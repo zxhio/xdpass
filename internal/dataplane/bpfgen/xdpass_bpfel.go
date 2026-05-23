@@ -34,7 +34,7 @@ type XdpassIpv4LpmKey struct {
 
 type XdpassMaskT struct {
 	_    structs.HostLayout
-	Bits [8]uint64
+	Bits [64]uint64
 }
 
 type XdpassRuleMeta struct {
@@ -107,6 +107,7 @@ type XdpassMapSpecs struct {
 	DstPrefixLpmMap *ebpf.MapSpec `ebpf:"dst_prefix_lpm_map"`
 	EventRingbuf    *ebpf.MapSpec `ebpf:"event_ringbuf"`
 	GlobalCfgMap    *ebpf.MapSpec `ebpf:"global_cfg_map"`
+	MatchScratchMap *ebpf.MapSpec `ebpf:"match_scratch_map"`
 	RuleIndexMap    *ebpf.MapSpec `ebpf:"rule_index_map"`
 	SrcPortIndexMap *ebpf.MapSpec `ebpf:"src_port_index_map"`
 	SrcPrefixLpmMap *ebpf.MapSpec `ebpf:"src_prefix_lpm_map"`
@@ -146,6 +147,7 @@ type XdpassMaps struct {
 	DstPrefixLpmMap *ebpf.Map `ebpf:"dst_prefix_lpm_map"`
 	EventRingbuf    *ebpf.Map `ebpf:"event_ringbuf"`
 	GlobalCfgMap    *ebpf.Map `ebpf:"global_cfg_map"`
+	MatchScratchMap *ebpf.Map `ebpf:"match_scratch_map"`
 	RuleIndexMap    *ebpf.Map `ebpf:"rule_index_map"`
 	SrcPortIndexMap *ebpf.Map `ebpf:"src_port_index_map"`
 	SrcPrefixLpmMap *ebpf.Map `ebpf:"src_prefix_lpm_map"`
@@ -161,6 +163,7 @@ func (m *XdpassMaps) Close() error {
 		m.DstPrefixLpmMap,
 		m.EventRingbuf,
 		m.GlobalCfgMap,
+		m.MatchScratchMap,
 		m.RuleIndexMap,
 		m.SrcPortIndexMap,
 		m.SrcPrefixLpmMap,

@@ -84,7 +84,9 @@ func zeroMask() XdpassMaskT {
 
 // slot0Mask returns a mask_t with bit 0 set (slot 0 active).
 func slot0Mask() XdpassMaskT {
-	return XdpassMaskT{Bits: [8]uint64{1}}
+	mask := XdpassMaskT{}
+	mask.Bits[0] = 1
+	return mask
 }
 
 // setupGlobalCfg writes a global_cfg to global_cfg_map[0].
@@ -354,6 +356,7 @@ func TestXdpassSpecParse(t *testing.T) {
 		"rule_index_map",
 		"global_cfg_map",
 		"tx_config_map",
+		"match_scratch_map",
 		"src_port_index_map",
 		"dst_port_index_map",
 		"vlan_index_map",
@@ -383,9 +386,10 @@ func TestXdpassMapSpecs(t *testing.T) {
 		valueSize  uint32
 		maxEntries uint32
 	}{
-		{"rule_index_map", ebpf.Array, 4, uint32(unsafe.Sizeof(XdpassRuleMeta{})), 512},
+		{"rule_index_map", ebpf.Array, 4, uint32(unsafe.Sizeof(XdpassRuleMeta{})), 4096},
 		{"global_cfg_map", ebpf.Array, 4, uint32(unsafe.Sizeof(XdpassGlobalCfg{})), 1},
 		{"tx_config_map", ebpf.Array, 4, uint32(unsafe.Sizeof(XdpassTxConfig{})), 1},
+		{"match_scratch_map", ebpf.PerCPUArray, 4, maskTSize, 1},
 		{"src_port_index_map", ebpf.Hash, 2, maskTSize, 4096},
 		{"dst_port_index_map", ebpf.Hash, 2, maskTSize, 4096},
 		{"vlan_index_map", ebpf.Hash, 2, maskTSize, 4096},
@@ -699,8 +703,8 @@ func TestTcpResetRedirectNoIfindex(t *testing.T) {
 
 func TestABIStructSizes(t *testing.T) {
 	// Verify Go struct sizes match BPF C struct sizes.
-	// mask_t: 8 * uint64 = 64 bytes.
-	assert.Equal(t, uintptr(64), unsafe.Sizeof(XdpassMaskT{}), "mask_t size")
+	// mask_t: 64 * uint64 = 512 bytes.
+	assert.Equal(t, uintptr(512), unsafe.Sizeof(XdpassMaskT{}), "mask_t size")
 	// rule_meta: uint32 + uint32 + uint16 + uint8 + pad = 12 bytes.
 	assert.Equal(t, uintptr(12), unsafe.Sizeof(XdpassRuleMeta{}), "rule_meta size")
 	// tx_config: 4 * uint32 = 16 bytes.
@@ -708,8 +712,8 @@ func TestABIStructSizes(t *testing.T) {
 	// ipv4_lpm_key: uint32 + uint32 = 8 bytes.
 	assert.Equal(t, uintptr(8), unsafe.Sizeof(XdpassIpv4LpmKey{}), "ipv4_lpm_key size")
 
-	// global_cfg: 6 mask_t + 16 mask_t + uint32 + 4 pad = 22*64 + 4 + 4 = 1416.
-	expectedGlobalCfg := uintptr(22*64 + 4 + 4)
+	// global_cfg: 6 mask_t + 16 mask_t + uint32 + 4 pad = 22*512 + 4 + 4 = 11272.
+	expectedGlobalCfg := uintptr(22*512 + 4 + 4)
 	assert.Equal(t, expectedGlobalCfg, unsafe.Sizeof(XdpassGlobalCfg{}), "global_cfg size")
 }
 
@@ -1783,10 +1787,16 @@ func BenchmarkMatch512RulesLateHit(b *testing.B) {
 	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
 }
 
-func BenchmarkMatch512RulesMiss(b *testing.B) {
+func BenchmarkMatch4096RulesLateHit(b *testing.B) {
 	skipUnlessBPF_b(b)
-	rules := make([]ruleset.Rule, 512)
-	for i := range 512 {
+	s := newBenchmarkSetup(b, generateRules(4096), "pass", testPacket())
+	b.ResetTimer()
+	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
+}
+
+func benchmarkMatchRulesMiss(b *testing.B, n int) {
+	rules := make([]ruleset.Rule, n)
+	for i := range n {
 		rules[i] = ruleset.Rule{
 			RuleID:   uint32(i + 1),
 			Priority: uint32((i + 1) * 10),
@@ -1797,4 +1807,24 @@ func BenchmarkMatch512RulesMiss(b *testing.B) {
 	s := newBenchmarkSetup(b, rules, "pass", testPacket())
 	b.ResetTimer()
 	benchmarkMatchRun(b, s.objs.XdpassProg, s.pkt)
+}
+
+func BenchmarkMatch512RulesMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	benchmarkMatchRulesMiss(b, 512)
+}
+
+func BenchmarkMatch1024RulesMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	benchmarkMatchRulesMiss(b, 1024)
+}
+
+func BenchmarkMatch2048RulesMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	benchmarkMatchRulesMiss(b, 2048)
+}
+
+func BenchmarkMatch4096RulesMiss(b *testing.B) {
+	skipUnlessBPF_b(b)
+	benchmarkMatchRulesMiss(b, 4096)
 }

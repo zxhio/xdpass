@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"xdpass/internal/attachment"
+	"xdpass/internal/dataplane/abi"
 )
 
 // fakeMapAccessor implements attachment.MapAccessor with injectable maps.
@@ -60,7 +61,7 @@ func newRuleIndexMap(t *testing.T) *ebpf.Map {
 		Type:       ebpf.Array,
 		KeySize:    4,
 		ValueSize:  12, // sizeof(bpfRuleMeta): RuleID(4)+RequiredMask(4)+Action(2)+Flags(1)+pad(1)
-		MaxEntries: 512,
+		MaxEntries: abi.MaxRuleSlots,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { m.Close() })
@@ -72,7 +73,7 @@ func newGlobalCfgMap(t *testing.T) *ebpf.Map {
 	m, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.Array,
 		KeySize:    4,
-		ValueSize:  1416, // sizeof(bpfGlobalCfg): 22*[8]uint64 + uint32 + pad
+		ValueSize:  22*abi.RuleGroups*8 + 8, // sizeof(bpfGlobalCfg): 22*mask_t + uint32 + pad
 		MaxEntries: 1,
 	})
 	require.NoError(t, err)
@@ -85,7 +86,7 @@ func newLPMMap(t *testing.T) *ebpf.Map {
 	m, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.LPMTrie,
 		KeySize:    8,
-		ValueSize:  64,
+		ValueSize:  abi.RuleGroups * 8,
 		MaxEntries: 1024,
 		Flags:      unix.BPF_F_NO_PREALLOC,
 	})
@@ -99,13 +100,13 @@ func newClosedHashMapWithData(t *testing.T) *ebpf.Map {
 	m, err := ebpf.NewMap(&ebpf.MapSpec{
 		Type:       ebpf.Hash,
 		KeySize:    2,
-		ValueSize:  64,
+		ValueSize:  abi.RuleGroups * 8,
 		MaxEntries: 1024,
 	})
 	require.NoError(t, err)
 	// Insert an entry so clearHashMap has something to delete.
 	var key uint16 = 80
-	var val [8]uint64
+	var val RuleMask
 	require.NoError(t, m.Put(key, val))
 	m.Close()
 	return m
@@ -114,7 +115,7 @@ func newClosedHashMapWithData(t *testing.T) *ebpf.Map {
 func TestWriteMapsPropagatesClearError(t *testing.T) {
 	ruleMap := newRuleIndexMap(t)
 	cfgMap := newGlobalCfgMap(t)
-	portMap := newHashMap(t, 2, 64) // key=uint16, value=[8]uint64
+	portMap := newHashMap(t, 2, abi.RuleGroups*8) // key=uint16, value=RuleMask
 	lpmMap := newLPMMap(t)
 	closedPortMap := newClosedHashMapWithData(t)
 
@@ -142,7 +143,7 @@ func TestWriteMapsPropagatesClearError(t *testing.T) {
 func TestClearMapsPropagatesError(t *testing.T) {
 	ruleMap := newRuleIndexMap(t)
 	cfgMap := newGlobalCfgMap(t)
-	portMap := newHashMap(t, 2, 64)
+	portMap := newHashMap(t, 2, abi.RuleGroups*8)
 	lpmMap := newLPMMap(t)
 	closedPortMap := newClosedHashMapWithData(t)
 
@@ -164,7 +165,7 @@ func TestClearMapsPropagatesError(t *testing.T) {
 func TestWriteMapsSuccess(t *testing.T) {
 	ruleMap := newRuleIndexMap(t)
 	cfgMap := newGlobalCfgMap(t)
-	portMap := newHashMap(t, 2, 64)
+	portMap := newHashMap(t, 2, abi.RuleGroups*8)
 	lpmMap := newLPMMap(t)
 
 	rules := []Rule{
@@ -190,7 +191,7 @@ func TestWriteMapsSuccess(t *testing.T) {
 func TestClearMapsSuccess(t *testing.T) {
 	ruleMap := newRuleIndexMap(t)
 	cfgMap := newGlobalCfgMap(t)
-	portMap := newHashMap(t, 2, 64)
+	portMap := newHashMap(t, 2, abi.RuleGroups*8)
 	lpmMap := newLPMMap(t)
 
 	maps := &fakeMapAccessor{
