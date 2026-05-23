@@ -48,6 +48,7 @@ rule meta         | rule 0  | rule 1  | rule 2  |   ...   | rule N  |
 - index map 本身是 `HASH` 或 `LPM_TRIE`。
 - index map 的 value 是 `mask_t`。
 - wildcard bitmap 本身也是 `mask_t`。
+- `match_scratch_map` 是 BPF 内部 per-CPU `mask_t` 工作区，用来保存当前包的候选 slot。
 
 它们都不保存规则内容，只保存“哪些 slot 还可能匹配”。
 
