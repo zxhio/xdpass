@@ -57,7 +57,7 @@ func Compile(rules []Rule, ingressVerdict string) (*CompiledRuleset, error) {
 		maskOr(&compiled.GlobalCfg.AllActiveRules, bit)
 
 		compileIndexes(rule, slot, bit, compiled)
-		compileOptionalBitmaps(rule, slot, bit, compiled)
+		compileWildcardBitmaps(rule, slot, bit, compiled)
 	}
 
 	return compiled, nil
@@ -207,27 +207,27 @@ func ipv4LPMAddr(ip net.IP) uint32 {
 	return binary.LittleEndian.Uint32(ip.To4())
 }
 
-// compileOptionalBitmaps populates optional bitmaps for rules missing condition fields.
-func compileOptionalBitmaps(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRuleset) {
+// compileWildcardBitmaps populates wildcard bitmaps for rules missing condition fields.
+func compileWildcardBitmaps(rule Rule, _ uint32, bit [8]uint64, compiled *CompiledRuleset) {
 	if len(rule.Match.VLANS) == 0 {
-		maskOr(&compiled.GlobalCfg.VlanOptionalRules, bit)
+		maskOr(&compiled.GlobalCfg.VlanWildcardRules, bit)
 	}
 	if len(rule.Match.SrcPorts) == 0 {
-		maskOr(&compiled.GlobalCfg.SrcPortOptionalRules, bit)
+		maskOr(&compiled.GlobalCfg.SrcPortWildcardRules, bit)
 	}
 	if len(rule.Match.DstPorts) == 0 {
-		maskOr(&compiled.GlobalCfg.DstPortOptionalRules, bit)
+		maskOr(&compiled.GlobalCfg.DstPortWildcardRules, bit)
 	}
 	if len(rule.Match.SrcCIDRs) == 0 {
-		maskOr(&compiled.GlobalCfg.SrcPrefixOptionalRules, bit)
+		maskOr(&compiled.GlobalCfg.SrcPrefixWildcardRules, bit)
 	}
 	if len(rule.Match.DstCIDRs) == 0 {
-		maskOr(&compiled.GlobalCfg.DstPrefixOptionalRules, bit)
+		maskOr(&compiled.GlobalCfg.DstPrefixWildcardRules, bit)
 	}
 	requiredMask := compileRequiredMask(rule.Match)
-	for cond := range compiled.GlobalCfg.ConditionOptionalRules {
+	for cond := range compiled.GlobalCfg.ConditionWildcardRules {
 		if requiredMask&(1<<cond) == 0 {
-			maskOr(&compiled.GlobalCfg.ConditionOptionalRules[cond], bit)
+			maskOr(&compiled.GlobalCfg.ConditionWildcardRules[cond], bit)
 		}
 	}
 }

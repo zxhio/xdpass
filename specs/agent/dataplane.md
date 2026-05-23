@@ -159,8 +159,8 @@ MVP 固定为：
 
 - `rule_id` 必须是 `uint32`
 - `response.params` 不进入 BPF rule metadata
-- wildcard 规则必须进入对应 optional bitmap
-- optional 规则也要进入每个具体索引值的 bitmap
+- wildcard 规则必须进入对应 wildcard bitmap
+- 配置了具体字段值的规则必须进入对应索引值的 bitmap
 - 任一步或任一 attachment map set 更新失败时保留旧 ruleset
 
 ### 规则顺序
@@ -182,8 +182,8 @@ MVP 固定为：
 BPF 运行时匹配：
 
 - BPF 使用索引 maps 得到候选 slot bitmap
-- 索引命中时保留字段 wildcard 规则，即使用 `indexed | optional`
-- BPF 使用 condition optional bitmap 过滤非索引条件
+- 索引命中时保留字段 wildcard 规则，即使用 `indexed | wildcard`
+- BPF 使用 condition wildcard bitmap 过滤非索引条件
 - BPF 取候选 bitmap 中 slot 最小的规则
 - 多条规则同时满足条件时，slot 最小的规则获胜
 
@@ -194,10 +194,10 @@ BPF 运行时匹配：
 - 具体值匹配先由索引 maps 完成，例如端口、VLAN、CIDR
 - `required_mask` 不保存端口号、CIDR、VLAN ID 等具体值
 - BPF 不逐条读取规则执行 `(pkt_conds & required_mask) == required_mask`
-- `required_mask` 语义由 userspace 编译出的索引 bitmap、optional bitmap 和
-  `condition_optional_rules` 共同表达
+- `required_mask` 语义由 userspace 编译出的索引 bitmap、wildcard bitmap 和
+  `condition_wildcard_rules` 共同表达
 - `tcp.flags`、`icmp.type`、`arp.op` 这类协议子字段会被编译成对应的
-  `required_mask` bit 和 `condition_optional_rules` 条目，不进入 `rule_meta.flags`
+  `required_mask` bit 和 `condition_wildcard_rules` 条目，不进入 `rule_meta.flags`
 
 ---
 

@@ -365,24 +365,24 @@ func TestCompileCIDRLPMIndexMergesDuplicatePrefixes(t *testing.T) {
 	assert.Equal(t, expected, compiled.Indexes.DstPrefixLPM[0].Mask)
 }
 
-func TestCompileOptionalBitmaps(t *testing.T) {
-	// Rule with no VLAN, no ports, no CIDRs -> all optional
+func TestCompileWildcardBitmaps(t *testing.T) {
+	// Rule with no VLAN, no ports, no CIDRs -> all wildcard
 	rules := []Rule{
 		{RuleID: 1, Match: Match{Protocol: "tcp"}, Response: Response{Action: "alert"}},
 	}
 	compiled, err := Compile(rules, "pass")
 	require.NoError(t, err)
 
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.VlanOptionalRules)
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortOptionalRules)
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPortOptionalRules)
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPrefixOptionalRules)
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPrefixOptionalRules)
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[0])
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionOptionalRules[1])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.VlanWildcardRules)
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortWildcardRules)
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPortWildcardRules)
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPrefixWildcardRules)
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.DstPrefixWildcardRules)
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[0])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionWildcardRules[1])
 }
 
-func TestCompileOptionalBitmapsPartial(t *testing.T) {
+func TestCompileWildcardBitmapsPartial(t *testing.T) {
 	// Rule with DstPorts but no VLAN, no SrcPorts, no CIDRs
 	rules := []Rule{
 		{RuleID: 1, Match: Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: Response{Action: "tcp_reset"}},
@@ -390,13 +390,13 @@ func TestCompileOptionalBitmapsPartial(t *testing.T) {
 	compiled, err := Compile(rules, "pass")
 	require.NoError(t, err)
 
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.VlanOptionalRules)
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortOptionalRules)
-	// DstPorts is set, so NOT optional
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.DstPortOptionalRules)
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[0])
-	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionOptionalRules[8])
-	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionOptionalRules[7])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.VlanWildcardRules)
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.SrcPortWildcardRules)
+	// DstPorts is set, so NOT wildcard
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.DstPortWildcardRules)
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[0])
+	assert.Equal(t, [8]uint64{}, compiled.GlobalCfg.ConditionWildcardRules[8])
+	assert.Equal(t, slotBit(0), compiled.GlobalCfg.ConditionWildcardRules[7])
 }
 
 func TestCompileMultipleRulesSamePort(t *testing.T) {

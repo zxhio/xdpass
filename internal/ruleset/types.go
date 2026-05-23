@@ -78,12 +78,12 @@ type RuleMetaData struct {
 // GlobalCfgData holds the compiled global_cfg map data.
 type GlobalCfgData struct {
 	AllActiveRules         [8]uint64
-	VlanOptionalRules      [8]uint64
-	SrcPortOptionalRules   [8]uint64
-	DstPortOptionalRules   [8]uint64
-	SrcPrefixOptionalRules [8]uint64
-	DstPrefixOptionalRules [8]uint64
-	ConditionOptionalRules [16][8]uint64
+	VlanWildcardRules      [8]uint64
+	SrcPortWildcardRules   [8]uint64
+	DstPortWildcardRules   [8]uint64
+	SrcPrefixWildcardRules [8]uint64
+	DstPrefixWildcardRules [8]uint64
+	ConditionWildcardRules [16][8]uint64
 	IngressVerdict         uint32
 }
 

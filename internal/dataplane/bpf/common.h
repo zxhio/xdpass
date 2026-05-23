@@ -34,12 +34,12 @@ struct rule_meta {
 
 struct global_cfg {
 	struct mask_t all_active_rules;
-	struct mask_t vlan_optional_rules;
-	struct mask_t src_port_optional_rules;
-	struct mask_t dst_port_optional_rules;
-	struct mask_t src_prefix_optional_rules;
-	struct mask_t dst_prefix_optional_rules;
-	struct mask_t condition_optional_rules[CONDITION_BITS];
+	struct mask_t vlan_wildcard_rules;
+	struct mask_t src_port_wildcard_rules;
+	struct mask_t dst_port_wildcard_rules;
+	struct mask_t src_prefix_wildcard_rules;
+	struct mask_t dst_prefix_wildcard_rules;
+	struct mask_t condition_wildcard_rules[CONDITION_BITS];
 	__u32 ingress_verdict;
 };
 

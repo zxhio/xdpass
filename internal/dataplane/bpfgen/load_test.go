@@ -98,20 +98,20 @@ func emptyGlobalCfg() XdpassGlobalCfg {
 	return XdpassGlobalCfg{}
 }
 
-// wildcardGlobalCfg returns a global_cfg with slot 0 active and all optional bits set.
+// wildcardGlobalCfg returns a global_cfg with slot 0 active and all wildcard bits set.
 func wildcardGlobalCfg(ingressVerdict uint32) XdpassGlobalCfg {
 	s0 := slot0Mask()
 	cfg := XdpassGlobalCfg{
 		AllActiveRules:         s0,
-		VlanOptionalRules:      s0,
-		SrcPortOptionalRules:   s0,
-		DstPortOptionalRules:   s0,
-		SrcPrefixOptionalRules: s0,
-		DstPrefixOptionalRules: s0,
+		VlanWildcardRules:      s0,
+		SrcPortWildcardRules:   s0,
+		DstPortWildcardRules:   s0,
+		SrcPrefixWildcardRules: s0,
+		DstPrefixWildcardRules: s0,
 		IngressVerdict:         ingressVerdict,
 	}
-	for i := range cfg.ConditionOptionalRules {
-		cfg.ConditionOptionalRules[i] = s0
+	for i := range cfg.ConditionWildcardRules {
+		cfg.ConditionWildcardRules[i] = s0
 	}
 	return cfg
 }
@@ -475,7 +475,7 @@ func TestTcpResetXdpTx(t *testing.T) {
 
 	objs := loadObjects(t)
 
-	// Wildcard rule: slot 0 active, all optional bits set.
+	// Wildcard rule: slot 0 active, all wildcard bits set.
 	setupGlobalCfg(t, objs, wildcardGlobalCfg(0))
 
 	// Rule: slot 0 = tcp_reset.
@@ -1363,13 +1363,13 @@ func TestMatchWildcardRule(t *testing.T) {
 	assertStatsSum(t, objs, abi.StatMatchHitPackets, 2)
 }
 
-func TestMatchOptionalBitmap(t *testing.T) {
+func TestMatchWildcardBitmap(t *testing.T) {
 	skipUnlessBPF(t)
 	removeMemlock(t)
 	objs := loadObjects(t)
 
 	// Rule: protocol=tcp, dst_port=80. No src_port, no VLAN, no CIDR.
-	// Optional bitmaps should allow this rule to match.
+	// Wildcard bitmaps should allow this rule to match.
 	rules := []ruleset.Rule{
 		{RuleID: 1, Priority: 10, Match: ruleset.Match{Protocol: "tcp", DstPorts: []uint16{80}}, Response: ruleset.Response{Action: "alert"}},
 	}

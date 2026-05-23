@@ -100,12 +100,12 @@ type bpfRuleMeta struct {
 
 type bpfGlobalCfg struct {
 	AllActiveRules         [8]uint64
-	VlanOptionalRules      [8]uint64
-	SrcPortOptionalRules   [8]uint64
-	DstPortOptionalRules   [8]uint64
-	SrcPrefixOptionalRules [8]uint64
-	DstPrefixOptionalRules [8]uint64
-	ConditionOptionalRules [16][8]uint64
+	VlanWildcardRules      [8]uint64
+	SrcPortWildcardRules   [8]uint64
+	DstPortWildcardRules   [8]uint64
+	SrcPrefixWildcardRules [8]uint64
+	DstPrefixWildcardRules [8]uint64
+	ConditionWildcardRules [16][8]uint64
 	IngressVerdict         uint32
 	_                      [4]byte
 }
@@ -178,12 +178,12 @@ func requiredMaskLogValue(mask uint32) string {
 func writeGlobalCfgMap(m *ebpf.Map, cfg *GlobalCfgData) error {
 	val := bpfGlobalCfg{
 		AllActiveRules:         cfg.AllActiveRules,
-		VlanOptionalRules:      cfg.VlanOptionalRules,
-		SrcPortOptionalRules:   cfg.SrcPortOptionalRules,
-		DstPortOptionalRules:   cfg.DstPortOptionalRules,
-		SrcPrefixOptionalRules: cfg.SrcPrefixOptionalRules,
-		DstPrefixOptionalRules: cfg.DstPrefixOptionalRules,
-		ConditionOptionalRules: cfg.ConditionOptionalRules,
+		VlanWildcardRules:      cfg.VlanWildcardRules,
+		SrcPortWildcardRules:   cfg.SrcPortWildcardRules,
+		DstPortWildcardRules:   cfg.DstPortWildcardRules,
+		SrcPrefixWildcardRules: cfg.SrcPrefixWildcardRules,
+		DstPrefixWildcardRules: cfg.DstPrefixWildcardRules,
+		ConditionWildcardRules: cfg.ConditionWildcardRules,
 		IngressVerdict:         cfg.IngressVerdict,
 	}
 	logBPFGlobalCfg(val)
@@ -192,13 +192,13 @@ func writeGlobalCfgMap(m *ebpf.Map, cfg *GlobalCfgData) error {
 
 func logBPFGlobalCfg(cfg bpfGlobalCfg) {
 	logGlobalCfgMask("Write BPF active rules", "all_active_rules", cfg.AllActiveRules, true)
-	logGlobalCfgMask("Write BPF optional rules", "vlan_optional_rules", cfg.VlanOptionalRules, false)
-	logGlobalCfgMask("Write BPF optional rules", "src_port_optional_rules", cfg.SrcPortOptionalRules, false)
-	logGlobalCfgMask("Write BPF optional rules", "dst_port_optional_rules", cfg.DstPortOptionalRules, false)
-	logGlobalCfgMask("Write BPF optional rules", "src_prefix_optional_rules", cfg.SrcPrefixOptionalRules, false)
-	logGlobalCfgMask("Write BPF optional rules", "dst_prefix_optional_rules", cfg.DstPrefixOptionalRules, false)
+	logGlobalCfgMask("Write BPF wildcard rules", "vlan_wildcard_rules", cfg.VlanWildcardRules, false)
+	logGlobalCfgMask("Write BPF wildcard rules", "src_port_wildcard_rules", cfg.SrcPortWildcardRules, false)
+	logGlobalCfgMask("Write BPF wildcard rules", "dst_port_wildcard_rules", cfg.DstPortWildcardRules, false)
+	logGlobalCfgMask("Write BPF wildcard rules", "src_prefix_wildcard_rules", cfg.SrcPrefixWildcardRules, false)
+	logGlobalCfgMask("Write BPF wildcard rules", "dst_prefix_wildcard_rules", cfg.DstPrefixWildcardRules, false)
 
-	for i, mask := range cfg.ConditionOptionalRules {
+	for i, mask := range cfg.ConditionWildcardRules {
 		if maskEmpty(mask) {
 			continue
 		}
@@ -210,7 +210,7 @@ func logBPFGlobalCfg(cfg bpfGlobalCfg) {
 			"map":       "global_cfg_map",
 			"condition": condition,
 			"slots":     maskSlots(mask),
-		}).Debug("Write BPF condition optional rules")
+		}).Debug("Write BPF condition wildcard rules")
 	}
 
 	logrus.WithFields(logrus.Fields{

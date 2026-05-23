@@ -16,12 +16,12 @@ import (
 type XdpassGlobalCfg struct {
 	_                      structs.HostLayout
 	AllActiveRules         XdpassMaskT
-	VlanOptionalRules      XdpassMaskT
-	SrcPortOptionalRules   XdpassMaskT
-	DstPortOptionalRules   XdpassMaskT
-	SrcPrefixOptionalRules XdpassMaskT
-	DstPrefixOptionalRules XdpassMaskT
-	ConditionOptionalRules [16]XdpassMaskT
+	VlanWildcardRules      XdpassMaskT
+	SrcPortWildcardRules   XdpassMaskT
+	DstPortWildcardRules   XdpassMaskT
+	SrcPrefixWildcardRules XdpassMaskT
+	DstPrefixWildcardRules XdpassMaskT
+	ConditionWildcardRules [16]XdpassMaskT
 	IngressVerdict         uint32
 	_                      [4]byte
 }

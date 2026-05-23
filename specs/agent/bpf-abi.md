@@ -37,7 +37,7 @@ slot = group * 64 + bit
 | map | type | max entries | key | value | 用途 |
 |---|---|---:|---|---|---|
 | `rule_index_map` | `ARRAY` | `512` | `uint32 slot` | `rule_meta` | slot 到规则运行态元数据 |
-| `global_cfg_map` | `ARRAY` | `1` | `uint32 0` | `global_cfg` | 全局候选规则和 optional bitmap |
+| `global_cfg_map` | `ARRAY` | `1` | `uint32 0` | `global_cfg` | 全局候选规则和 wildcard bitmap |
 | `tx_config_map` | `ARRAY` | `1` | `uint32 0` | `tx_config` | BPF kernel response TX 配置 |
 | `src_port_index_map` | `HASH` | `4096` | `uint16 port` | `mask_t` | 源端口倒排索引 |
 | `dst_port_index_map` | `HASH` | `4096` | `uint16 port` | `mask_t` | 目的端口倒排索引 |
@@ -88,12 +88,12 @@ struct rule_meta {
 | 字段 | 类型 | 含义 |
 |---|---|---|
 | `all_active_rules` | `mask_t` | 所有已编译启用规则 |
-| `vlan_optional_rules` | `mask_t` | 未配置 VLAN 条件的规则 |
-| `src_port_optional_rules` | `mask_t` | 未配置源端口条件的规则 |
-| `dst_port_optional_rules` | `mask_t` | 未配置目的端口条件的规则 |
-| `src_prefix_optional_rules` | `mask_t` | 未配置源前缀条件的规则 |
-| `dst_prefix_optional_rules` | `mask_t` | 未配置目的前缀条件的规则 |
-| `condition_optional_rules[16]` | `mask_t[]` | 未要求对应 condition bit 的规则 |
+| `vlan_wildcard_rules` | `mask_t` | 未配置 VLAN 条件的规则 |
+| `src_port_wildcard_rules` | `mask_t` | 未配置源端口条件的规则 |
+| `dst_port_wildcard_rules` | `mask_t` | 未配置目的端口条件的规则 |
+| `src_prefix_wildcard_rules` | `mask_t` | 未配置源前缀条件的规则 |
+| `dst_prefix_wildcard_rules` | `mask_t` | 未配置目的前缀条件的规则 |
+| `condition_wildcard_rules[16]` | `mask_t[]` | 未要求对应 condition bit 的规则 |
 | `ingress_verdict` | `uint32` | `attachment.miss_verdict` 的编译值，`0=pass`，`1=drop` |
 
 ---
@@ -106,9 +106,9 @@ struct rule_meta {
 - `src_prefix_lpm_map` 和 `dst_prefix_lpm_map` value 是累计候选 bitmap。
 - LPM lookup 使用 `/32` key 查找，userspace 必须生成和 BPF lookup 一致的 key 字节布局。
 - `ipv4_lpm_key.addr` 的内存字节必须是 IPv4 network-order bytes；在 bpfel Go 结构里该字段是 `uint32`，因此 userspace 写入的数值以“落到内存后的 4 字节”为准，而不是 dotted IP 的 big-endian 数值。
-- 索引命中时 BPF 使用 `indexed | optional`，确保字段 wildcard 规则仍可命中。
-- BPF 先通过倒排索引和字段 optional bitmap 缩小候选规则，再通过
-  `condition_optional_rules` 过滤非索引条件，最后取候选 bitmap 中 slot 最小的规则。
+- 索引命中时 BPF 使用 `indexed | wildcard`，确保字段 wildcard 规则仍可命中。
+- BPF 先通过倒排索引和字段 wildcard bitmap 缩小候选规则，再通过
+  `condition_wildcard_rules` 过滤非索引条件，最后取候选 bitmap 中 slot 最小的规则。
 
 sentinel：
 
