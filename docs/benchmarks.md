@@ -15,7 +15,7 @@ BPF 程序，由 kernel 返回每次执行时间（`ns/run`），排除 Go 侧 s
 分配开销。
 
 ```sh
-XDPASS_RUN_BPF_TESTS=1 go test ./internal/dataplane/bpfgen -run '^$' -bench 'BenchmarkMatch' -benchmem -count=1
+XDPASS_RUN_BPF_TESTS=1 go test ./internal/dataplane/bpftest -run '^$' -bench 'BenchmarkMatch' -benchmem -count=1
 ```
 
 | case | rules | ns/run | notes |
