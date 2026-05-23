@@ -21,10 +21,6 @@
 #define MAX_RULE_SLOTS 512
 #define CONDITION_BITS 16
 
-#define XDPASS_IPPROTO_ICMP 1
-#define XDPASS_IPPROTO_TCP 6
-#define XDPASS_IPPROTO_UDP 17
-
 struct mask_t {
 	__u64 bits[RULE_GROUPS];
 };

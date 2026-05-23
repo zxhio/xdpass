@@ -158,7 +158,7 @@ static __always_inline int apply_tcp_reset(struct xdp_md *ctx, const struct pack
 	/* TCP checksum: pseudo-header + unrolled 20-byte TCP header. */
 	csum = (__u16)(ip->saddr >> 16) + (__u16)(ip->saddr & 0xffff);
 	csum += (__u16)(ip->daddr >> 16) + (__u16)(ip->daddr & 0xffff);
-	csum += bpf_htons(XDPASS_IPPROTO_TCP);
+	csum += bpf_htons(IPPROTO_TCP);
 	csum += bpf_htons(TCPHDR_LEN);
 	p = (const __u16 *)tcp;
 	csum += p[0] + p[1] + p[2] + p[3] + p[4] + p[5] + p[6] + p[7] + p[8] + p[9];
