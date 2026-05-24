@@ -289,9 +289,7 @@ func (s *Store) Status(_ context.Context) (api.StatusResponse, error) {
 		if !att.Enabled {
 			continue
 		}
-		if s.eventStream != nil && !s.eventStream.HasReader(att.IfIndex) {
-			// Only flag if the attachment should have an event reader.
-			// We conservatively report it since all enabled attachments get readers.
+		if s.eventStream != nil && s.attachments.HasEventRingbuf(att.IfIndex) && !s.eventStream.HasReader(att.IfIndex) {
 			issues = append(issues, api.StatusIssue{Component: "events", Code: "event_reader_missing", IfIndex: att.IfIndex})
 		}
 		if att.XSK.Enabled {

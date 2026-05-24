@@ -566,6 +566,18 @@ func (r *Runtime) Health() []HealthIssue {
 	return issues
 }
 
+// HasEventRingbuf reports whether an attachment has an event ringbuf map.
+func (r *Runtime) HasEventRingbuf(ifIndex uint32) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	res, ok := r.resources[ifIndex]
+	if !ok || res.coll == nil {
+		return false
+	}
+	return res.coll.Maps["event_ringbuf"] != nil
+}
+
 // MapAccessor provides access to BPF maps for ruleset operations.
 type MapAccessor interface {
 	RuleIndexMap() *ebpf.Map

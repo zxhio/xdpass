@@ -757,6 +757,37 @@ func TestStatusDegradedHealth(t *testing.T) {
 		assert.Empty(t, issuesWithCode(resp.Issues, "userspace_action_without_xsk"))
 	})
 
+	t.Run("no event reader issue without event ringbuf", func(t *testing.T) {
+		s := newTestStoreWithRulesetMaps(t)
+		ctx := t.Context()
+
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, issuesWithCode(resp.Issues, "event_reader_missing"))
+	})
+
+	t.Run("degraded with event ringbuf and missing reader", func(t *testing.T) {
+		ctx := t.Context()
+		attRuntime := attachment.New(mockStoreLoadBPFWithEventRingbuf, mockStoreAttachXDP)
+		disableTestPromiscuous(attRuntime)
+		eventStream := events.NewStreamWithFactory(ctx, fakeReaderFactory)
+		t.Cleanup(eventStream.Stop)
+		s := New(attRuntime, eventStream, nil, nil, nil)
+
+		_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+		require.NoError(t, err)
+
+		resp, err := s.Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "degraded", resp.Status)
+		matches := issuesWithCode(resp.Issues, "event_reader_missing")
+		require.Len(t, matches, 1)
+		assert.Equal(t, uint32(3), matches[0].IfIndex)
+	})
+
 	t.Run("running when ruleset applied and no ruleset issues", func(t *testing.T) {
 		s := newTestStoreWithRulesetMaps(t)
 		ctx := t.Context()
