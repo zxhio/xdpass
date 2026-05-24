@@ -656,11 +656,10 @@ func (s *Store) DeleteEgress(_ context.Context) error {
 	defer s.mu.Unlock()
 
 	// Write default tx_config (same-port) to all enabled attachments.
-	// Log errors but don't fail — DELETE is idempotent.
 	cfg := egressToTxConfig(0, "preserve")
 	written, err := s.writeTxConfigToAll(cfg)
 	if err != nil {
-		logrus.WithError(err).WithField("attachments", written).Warn("Fail to reset tx config")
+		return fmt.Errorf("reset tx config: %w", err)
 	}
 
 	s.egressConfigured = false

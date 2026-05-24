@@ -316,6 +316,22 @@ func mockStoreLoadBPFWithRulesetMaps() (*ebpf.Collection, error) {
 	}, nil
 }
 
+func mockStoreLoadBPFWithTxConfigMap() (*ebpf.Collection, error) {
+	txConfigMap, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.Array,
+		KeySize:    4,
+		ValueSize:  16,
+		MaxEntries: 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ebpf.Collection{
+		Programs: map[string]*ebpf.Program{},
+		Maps:     map[string]*ebpf.Map{"tx_config_map": txConfigMap},
+	}, nil
+}
+
 // newTestStoreWithRulesetMaps creates a store with BPF maps that support ruleset writes.
 func newTestStoreWithRulesetMaps(t *testing.T) *Store {
 	t.Helper()
@@ -527,6 +543,35 @@ func TestReplaceDispatchSenderFailurePreservesExistingRuntime(t *testing.T) {
 	assert.Equal(t, 16, resp.QueueSize)
 	assert.True(t, dispatchRuntime.IsEnabled())
 	assert.False(t, firstSender.closed)
+}
+
+func TestDeleteEgressTxConfigFailurePreservesState(t *testing.T) {
+	ctx := t.Context()
+	attRuntime := attachment.New(mockStoreLoadBPFWithTxConfigMap, mockStoreAttachXDP)
+	disableTestPromiscuous(attRuntime)
+	responseRuntime := response.NewRuntime(ctx, &response.RulesetRuleLookup{})
+	t.Cleanup(responseRuntime.Stop)
+
+	s := New(attRuntime, nil, responseRuntime, nil, nil)
+	_, err := s.CreateAttachment(ctx, api.AttachmentRequest{IfIndex: 3})
+	require.NoError(t, err)
+
+	_, err = s.ReplaceEgress(ctx, 9, "", "access")
+	require.NoError(t, err)
+
+	enabled := attRuntime.EnabledAttachments()
+	require.Len(t, enabled, 1)
+	require.NoError(t, enabled[0].Maps.TxConfigMap().Close())
+
+	err = s.DeleteEgress(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reset tx config")
+
+	resp, err := s.GetEgress(ctx)
+	require.NoError(t, err)
+	assert.True(t, resp.Configured)
+	assert.Equal(t, uint32(9), resp.IfIndex)
+	assert.Equal(t, "access", resp.VLANMode)
 }
 
 func TestDryRunRulesetValidatesResponseParams(t *testing.T) {
