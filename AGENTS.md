@@ -7,6 +7,7 @@
 | Skill | 功能 | 什么时候用 |
 |---|---|---|
 | `plan-workflow` | 写简短的文件化计划，包含目标、方案、边界情况、风险点和需要确认的地方。 | 用户要求写计划、先规划、拆步骤、checkpoint 或保存计划到文件时。 |
+| `review-workflow` | 先 review，不改代码；把 findings 给用户确认后，再转入 harness 执行。 | 用户要求 review、review-gate、先审查再确认修复、或根据 review 结果自动修复时。 |
 | `rest-api` | 约束 HTTP API 的路由、响应体、状态码、DTO、handler、service interface 和目录组织。 | 设计或实现 HTTP API，修改 router、handler、DTO、错误响应或分页时。 |
 | `go-coding-style` | 约束 Go 代码风格、goroutine、生命周期、config/options 和测试边界。 | 编写或 review Go 代码时。 |
 | `go-abstraction` | 约束 Go runtime 结构，强调具体 owner、小 helper、最小接口和对称命名。 | 状态 owner 不清楚、结构开始膨胀、命名混乱或需要抽象判断时。 |
@@ -36,6 +37,7 @@
 - 构建：`make build`
 - 测试：`make test`（包含 BPF 生成）
 - BPF 代码生成：`make generate`
+- Go 格式化：`gofmt -w <本次触达的 .go 文件>`
 - Go 代码改动后必须运行 `gofmt`；优先只格式化本次触达的 `.go` 文件。
 - 验证优先使用 `make check`；如果仓库尚未提供 `make check`，按顺序运行：
   - `gofmt`（本次触达的 `.go` 文件）

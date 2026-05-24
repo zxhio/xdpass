@@ -1,37 +1,81 @@
 ---
 name: plan-workflow
-description: 当用户要求把计划写入文件、先规划再执行，或需要明确目标、方案、边界、风险和确认项时使用。
+description: 当用户要求写计划、按 harness 执行、自动分解任务、checkpoint、人确认后继续、或把执行上下文写入文件时使用。
 ---
 
 ## 何时使用
 
-用户明确要求文件化计划、先看计划、拆步骤或 checkpoint 时使用。
+用户明确要求以下任一行为时使用：
 
-很小的编辑不要使用本 skill，除非用户要求写计划文件。
+- 文件化计划、先看计划、拆步骤或 checkpoint。
+- 按 harness / AI harness / 自动化交付流程执行。
+- 自动分解任务，减少人工投入。
+- 人确认关键决策后继续实现。
+- 把完成上下文、执行记录或 handoff 写入文件。
+- `review-workflow` 已确认 findings，需要进入执行阶段。
 
 ## 目标
 
-计划文件要短，并且能让人快速判断下一步是否可以执行。
+计划文件要短，并且能让人快速判断下一步是否可以执行。默认自动拆分任务，但只记录恢复和确认真正需要的信息。
 
-默认只写这些内容：
+本 workflow 产出的是交付单，不只是计划：
 
-- `目标`
-- `方案`
-- `边界情况`
-- `风险点`
-- `需要确认`
+- 需求和目标
+- 自动拆分后的 checkpoint
+- 需要用户确认的关键决策
+- 边界、风险和停止条件
+- 执行进度
+- 完成上下文
 
-不要默认写 `Context` / `上下文`。只有用户明确提供了需要保留的上下文时，才写入上下文 section。
+不要写长篇分析。优先使用 M 档 Lean Harness，只有高风险或长任务才展开详细上下文。
+
+## 任务分档
+
+先根据影响面自动判断任务大小：
+
+- `S`：0-30 分钟、低风险、小范围修改。除非用户要求落文件，否则可以不写计划文件；若写，只写目标、改动、验证和提交。
+- `M`：30-120 分钟或需要确认 1-3 个决策。默认档位，创建计划文件，拆 3-6 个 checkpoint。
+- `L`：2 小时以上、跨多个模块、涉及 API/BPF ABI/部署/持久化、可能分多次提交或高失败风险。创建详细计划，按 phase/checkpoint 推进，并在每个 checkpoint 回写上下文。
+
+不确定时选 `M`，不要默认升级到 `L`。
+
+## 自动拆分规则
+
+收到需求后自动拆分，不要等待用户要求“拆一下”。
+
+优先按以下顺序拆 checkpoint：
+
+1. 读 spec 和相关代码，确认现有边界。
+2. 明确外部合同：API、CLI、配置、事件、stats、BPF ABI 或部署语义。
+3. 实现最小骨架：DTO、接口、owner、route、配置结构或测试入口。
+4. 实现核心逻辑。
+5. 补测试，优先覆盖变化边界。
+6. 同步 spec/docs。
+7. 运行验证。
+8. 准备提交。
+
+每个 checkpoint 应该是可验证、可回滚、可 review 的小单元。避免把“实现功能”作为唯一大步骤。
+
+拆分时遵守：
+
+- `M` 档最多 6 个 checkpoint。
+- `L` 档按 phase 分组，每个 phase 3-6 个 checkpoint。
+- 每个 checkpoint 写一句完成标准或验证方式。
+- 如果某步需要人类业务判断，把它放入 `Confirm`，不要埋在 `Plan` 里。
+- 如果没有确认项，写 `Confirm: None`，并可继续自动执行，除非用户只要求计划。
 
 ## 工作流
 
 1. 先读相关文件和 spec，不凭空假设。
-2. 识别这次计划要解决的目标。
-3. 写出推荐方案，保持可执行。
-4. 写清楚边界情况：哪些做、哪些不做、哪些情况要停。
-5. 写出风险点：可能破坏什么、哪里不确定、哪里需要验证。
-6. 把需要用户确认的点列成 checkbox。
-7. 如果用户只要求计划，写完后停止，不继续实现。
+2. 判断任务分档：`S` / `M` / `L`。
+3. 自动拆分 checkpoint。
+4. 写出推荐方案、边界、风险和停止条件。
+5. 把需要用户确认的点列成 checkbox，并给出推荐和影响。
+6. 创建或更新计划文件。
+7. 有未确认 checkbox 时停止，等待用户确认。
+8. 用户确认后，将 `Status` 更新为 `In Progress` 并自动实现。
+9. 每完成一个 checkpoint，简短回写 `Progress`。
+10. 验证后回写 `Done`，包括改动摘要、验证命令、commit 信息和 open items。
 
 ## 文件位置
 
@@ -45,61 +89,132 @@ description: 当用户要求把计划写入文件、先规划再执行，或需�
 
 ## 计划模板
 
-```md
-# <短标题>
-
-## 目标
-
-- <这次计划要达成什么>
-
-## 方案
-
-- <推荐怎么做>
-- <关键步骤>
-
-## 边界情况
-
-- 做：<明确会处理的范围>
-- 不做：<明确不会处理的范围>
-- 停下确认：<遇到什么情况不继续>
-
-## 风险点
-
-- <主要风险>
-- <不确定点>
-- <需要验证的地方>
-
-## 需要确认
-
-- [ ] <需要用户确认的问题>
-```
-
-## 可选上下文
-
-只有用户明确提供上下文时，才添加：
+默认使用 Lean Harness 模板：
 
 ```md
-## 上下文
+# <title>
 
-- <用户明确给出的背景、约束或偏好>
+Status: Draft | Awaiting Confirmation | In Progress | Verified | Committed | Blocked
+
+Size: S | M | L
+
+Goal:
+- <one sentence>
+
+Plan:
+- [ ] <checkpoint 1>
+- [ ] <checkpoint 2>
+- [ ] <checkpoint 3>
+
+Confirm:
+- [ ] <decision>
+  - Rec: <recommended choice>
+  - Impact: <one sentence>
+
+Boundaries:
+- Do: <scope>
+- Don't: <scope>
+- Stop: <condition>
+
+Risk:
+- <main risk>
+
+Progress:
+- Pending
+
+Done:
+- Pending
 ```
 
-不要把自己从代码里推断出的内容写成用户上下文。代码和 spec 读取结果应放进 `方案`、`边界情况` 或 `风险点`。
+`S` 档可以使用最小记录：
+
+```md
+# <title>
+
+Status: Done
+
+Size: S
+
+Goal:
+- <one sentence>
+
+Changed:
+- `<file>`: <short summary>
+
+Verify:
+- `<command>` passed
+
+Commit:
+- `<hash or none>` <message or reason>
+```
+
+`L` 档可以在 Lean Harness 基础上增加：
+
+```md
+Phases:
+- [ ] Phase 1: <goal>
+- [ ] Phase 2: <goal>
+
+Context:
+- <only durable decisions, blockers, or handoff-critical facts>
+
+Commits:
+- <planned split>
+```
+
+## 上下文规则
+
+默认不要列“已读取上下文”流水账。只有以下情况才写 `Context`：
+
+- 用户明确给出的背景、约束或偏好。
+- 会影响后续恢复的关键事实。
+- 已确认的关键决策。
+- 当前未完成工作需要 handoff。
+- `L` 档任务的 phase 边界和失败原因。
+
+不要把普通代码阅读过程写成上下文。代码和 spec 读取结果应压缩进 `Plan`、`Boundaries`、`Risk` 或 `Done`。
 
 ## 确认规则
 
-遇到这些情况必须列入 `需要确认`，并在实现前等待确认：
+遇到这些情况必须列入 `Confirm`，并在实现前等待确认：
 
 - API、字段、语义或 BPF ABI 变化
 - 持久化、部署行为或运行态恢复语义变化
 - 用户没有决定的业务含义
 - 文件边界不清楚
 - 方案会引入新依赖、新服务或新长期维护成本
+- 会改变提交拆分或需要跨多个 commit 发布
+
+确认项最多 3 个。每个确认项必须包含：
+
+- 推荐选择
+- 一句话原因或影响
+
+用户确认后，把 checkbox 改为 `[x]`，将 `Status` 改为 `In Progress`，然后继续执行。
+
+## 进度和完成上下文
+
+执行中必须回写同一个计划文件：
+
+- `Progress` 只记录最近的重要 checkpoint，不写完整流水账。
+- checkpoint 完成后勾选对应 `Plan` 项。
+- 验证失败时写失败命令、错误摘要和下一步。
+- 任务结束时必须更新 `Done`。
+
+`Done` 至少包含：
+
+- 完成了什么
+- 关键修改文件或区域
+- 验证命令和结果
+- commit hash/message；如果未提交，写 `None`
+- open items；如果没有，写 `None`
 
 ## 输出规则
 
 - 保持短，不写长篇分析。
-- 计划是决策辅助，不是产品合同。
+- 计划是执行辅助，不是产品合同。
 - 不要从代码反推产品合同；有 spec 时以 spec 为准。
-- 如果没有需要确认的问题，写 `无`。
+- 如果没有需要确认的问题，写 `Confirm: None`。
 - 如果用户要求继续实现，先确认没有未完成 checkbox。
+- 用户要求“自动分解”时，不要只给方案，必须拆 checkpoint。
+- 用户要求“自动完成”时，确认项通过后继续实现、自测并回写 `Done`。
