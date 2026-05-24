@@ -35,8 +35,10 @@ dispatch 只做分发，不做审计、存储、采样或下游协议适配。
 
 ### `enabled`
 
-- 可写
+- 只读
 - 表示是否启用 dispatch
+- `PUT /api/v1/dispatch` 成功后为 `true`
+- `DELETE /api/v1/dispatch` 后为 `false`
 - `false` 时不分发 packet
 
 ### `configured`
@@ -87,7 +89,9 @@ dispatch 只做分发，不做审计、存储、采样或下游协议适配。
 - 校验 `ifindex`
 - 如果传入 `ifname`，必须和 `ifindex` 匹配
 - 校验并规范化 `queue_size`
+- 请求体中的 `enabled` 不作为开关；成功的 `PUT` 总是启用 dispatch
 - 成功后返回规范化后的 dispatch 配置
+- 返回中 `enabled=true`
 - 返回中 `configured=true`
 
 请求示例：
@@ -107,6 +111,7 @@ dispatch 只做分发，不做审计、存储、采样或下游协议适配。
 
 - 删除后停止 dispatch worker
 - 清空待分发 queue
+- 删除是禁用 dispatch 的唯一 API 入口
 - 成功时返回 `204`
 - 未配置时也返回 `204`
 
