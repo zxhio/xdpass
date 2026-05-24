@@ -54,7 +54,7 @@ func (m *mockStore) CreateAttachment(_ context.Context, req AttachmentRequest) (
 	if _, exists := m.attachments[req.IfIndex]; exists {
 		return AttachmentResponse{}, errors.New("already exists")
 	}
-	resp := AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "native", MissVerdict: "pass"}
+	resp := AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "generic", MissVerdict: "pass"}
 	m.attachments[req.IfIndex] = resp
 	return resp, nil
 }
@@ -81,7 +81,7 @@ func (m *mockStore) DryRunAttachment(_ context.Context, req AttachmentRequest) (
 	if req.IfIndex == 0 {
 		return AttachmentResponse{}, &ServiceValidationError{Detail: "ifindex must be greater than 0"}
 	}
-	return AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "native", MissVerdict: "pass"}, nil
+	return AttachmentResponse{IfIndex: req.IfIndex, Enabled: true, AttachMode: "generic", MissVerdict: "pass"}, nil
 }
 
 func (m *mockStore) GetRuleset(_ context.Context) (RulesetResponse, error) {
@@ -215,7 +215,7 @@ func TestCreateAttachment(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, uint32(3), resp.IfIndex)
 	assert.True(t, resp.Enabled)
-	assert.Equal(t, "native", resp.AttachMode)
+	assert.Equal(t, "generic", resp.AttachMode)
 	assert.Equal(t, "pass", resp.MissVerdict)
 }
 

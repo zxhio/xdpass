@@ -42,6 +42,7 @@ func TestDryRunDoesNotPersist(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), att.IfIndex)
 	assert.True(t, att.Enabled)
+	assert.Equal(t, "generic", att.AttachMode)
 
 	_, err = rt.Get(3)
 	var nfe *NotFoundError

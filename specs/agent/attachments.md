@@ -17,7 +17,7 @@
 ```json
 {
   "ifindex": 3,
-  "attach_mode": "native",
+  "attach_mode": "generic",
   "enabled": true,
   "miss_verdict": "pass",
   "channels": {
@@ -58,7 +58,7 @@
 ### `attach_mode`
 
 - 可选
-- 默认值：`native`
+- 默认值：`generic`
 - 可选值：`generic` / `native` / `driver`
 - 表示 XDP 挂载模式
 

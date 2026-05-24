@@ -169,6 +169,6 @@ sudo scripts/xdpass-netns.sh cleanup
 
 ## 已知约束
 
-- `attach_mode` MVP 仅支持 `generic`。
+- `attach_mode` 支持 `generic` / `native` / `driver`，默认 `generic`。
 - XSK（AF_XDP）需要 root 权限和真实网卡（driver mode XDP）。
 - 运行态无持久化，重启后需重新下发配置。

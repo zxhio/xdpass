@@ -117,7 +117,7 @@ var validAttachModes = map[string]bool{"generic": true, "native": true, "driver"
 
 func (r *Runtime) normalize(req *Request) {
 	if req.AttachMode == "" {
-		req.AttachMode = "native"
+		req.AttachMode = "generic"
 	}
 	if req.MissVerdict == "" {
 		req.MissVerdict = "pass"
