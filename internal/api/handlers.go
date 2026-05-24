@@ -313,7 +313,7 @@ func handleDeleteEgress(svc EgressService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := svc.DeleteEgress(r.Context()); err != nil {
 			logrus.WithError(err).Error("Fail to delete response egress")
-			writeInternalError(w, "fail to delete response egress")
+			writeRuntimeFailed(w, err.Error())
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

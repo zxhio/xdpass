@@ -20,6 +20,7 @@ type mockStore struct {
 	rules       []RuleResponse
 	dispatch    *DispatchResponse
 	patchErr    error
+	egressErr   error
 }
 
 func newMockStore() *mockStore {
@@ -119,6 +120,9 @@ func (m *mockStore) ReplaceEgress(_ context.Context, ifIndex uint32, _, vlanMode
 }
 
 func (m *mockStore) DeleteEgress(_ context.Context) error {
+	if m.egressErr != nil {
+		return m.egressErr
+	}
 	return nil
 }
 
@@ -455,6 +459,21 @@ func TestEgressDeleteIdempotent(t *testing.T) {
 	// DELETE when not configured should still return 204.
 	w := doRequest(router, "DELETE", "/api/v1/response/egress", nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestEgressDeleteRuntimeFailure(t *testing.T) {
+	s := newMockStore()
+	s.egressErr = errors.New("reset tx config: map closed")
+	router := NewRouter(RouterDeps{
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Dispatch: s, Events: s,
+	})
+
+	w := doRequest(router, "DELETE", "/api/v1/response/egress", nil)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	var resp ProblemDetails
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, CodeRuntimeFailed, resp.Code)
+	assert.Contains(t, resp.Detail, "reset tx config")
 }
 
 // mockEgressValidator returns validation errors for invalid vlan_mode.

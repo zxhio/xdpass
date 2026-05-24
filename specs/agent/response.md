@@ -110,6 +110,8 @@
 `DELETE /api/v1/response/egress` 删除 response egress 配置。
 
 - 删除后恢复默认同口发送
+- 将默认同口发送 tx config 写入所有 enabled attachment
+- tx config 写入失败时返回 `500 runtime_failed`，并保留旧 response egress 状态
 - 成功时返回 `204`
 - 未配置时也返回 `204`
 
