@@ -124,6 +124,16 @@ func handlePatchAttachment(svc AttachmentService) http.HandlerFunc {
 
 		resp, err := svc.PatchAttachment(r.Context(), ifIndex, *req.Enabled)
 		if err != nil {
+			var validationErr *ServiceValidationError
+			if errors.As(err, &validationErr) {
+				writeValidationFailed(w, validationErr.Detail)
+				return
+			}
+			if isRuntimeFailed(err) {
+				logrus.WithError(err).Error("Fail to patch attachment")
+				writeRuntimeFailed(w, err.Error())
+				return
+			}
 			writeNotFound(w, "attachment not found")
 			return
 		}
@@ -379,5 +389,9 @@ func isRuntimeFailed(err error) bool {
 		strings.Contains(msg, "clear maps") ||
 		strings.Contains(msg, "load bpf") ||
 		strings.Contains(msg, "attach xdp") ||
-		strings.Contains(msg, "xsk start")
+		strings.Contains(msg, "enable promiscuous mode") ||
+		strings.Contains(msg, "event reader start") ||
+		strings.Contains(msg, "xsk start") ||
+		strings.Contains(msg, "bpf resources not found") ||
+		strings.Contains(msg, "ruleset apply")
 }

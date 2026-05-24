@@ -19,6 +19,7 @@ type mockStore struct {
 	attachments map[uint32]AttachmentResponse
 	rules       []RuleResponse
 	dispatch    *DispatchResponse
+	patchErr    error
 }
 
 func newMockStore() *mockStore {
@@ -60,6 +61,9 @@ func (m *mockStore) CreateAttachment(_ context.Context, req AttachmentRequest) (
 }
 
 func (m *mockStore) PatchAttachment(_ context.Context, ifIndex uint32, enabled bool) (AttachmentResponse, error) {
+	if m.patchErr != nil {
+		return AttachmentResponse{}, m.patchErr
+	}
 	a, ok := m.attachments[ifIndex]
 	if !ok {
 		return AttachmentResponse{}, errors.New("not found")
@@ -269,6 +273,36 @@ func TestPatchAttachment(t *testing.T) {
 func TestPatchAttachmentNotFound(t *testing.T) {
 	w := doRequest(newTestRouter(), "PATCH", "/api/v1/attachments/999", map[string]any{"enabled": true})
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPatchAttachmentRuntimeFailure(t *testing.T) {
+	s := newMockStore()
+	s.patchErr = errors.New("attach xdp: operation not permitted")
+	router := NewRouter(RouterDeps{
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Dispatch: s, Events: s,
+	})
+
+	w := doRequest(router, "PATCH", "/api/v1/attachments/3", map[string]any{"enabled": true})
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var resp ProblemDetails
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, CodeRuntimeFailed, resp.Code)
+}
+
+func TestPatchAttachmentValidationFailure(t *testing.T) {
+	s := newMockStore()
+	s.patchErr = &ServiceValidationError{Detail: "enabled is invalid"}
+	router := NewRouter(RouterDeps{
+		Status: s, Attachments: s, Ruleset: s, Stats: s, Egress: s, Dispatch: s, Events: s,
+	})
+
+	w := doRequest(router, "PATCH", "/api/v1/attachments/3", map[string]any{"enabled": true})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp ProblemDetails
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, CodeValidationFailed, resp.Code)
 }
 
 func TestRulesetCRUD(t *testing.T) {
