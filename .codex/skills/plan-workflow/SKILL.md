@@ -25,6 +25,7 @@ description: 当用户要求写计划、按 harness 执行、自动分解任务�
 - 需要用户确认的关键决策
 - 边界、风险和停止条件
 - 执行进度
+- checkpoint 对应提交
 - 完成上下文
 
 不要写长篇分析。优先使用 M 档 Lean Harness，只有高风险或长任务才展开详细上下文。
@@ -54,15 +55,38 @@ description: 当用户要求写计划、按 harness 执行、自动分解任务�
 7. 运行验证。
 8. 准备提交。
 
-每个 checkpoint 应该是可验证、可回滚、可 review 的小单元。避免把“实现功能”作为唯一大步骤。
+每个 checkpoint 应该是可实现、可验证、可提交、可回滚、可 review 的小单元。避免把“实现功能”作为唯一大步骤。
 
 拆分时遵守：
 
 - `M` 档最多 6 个 checkpoint。
 - `L` 档按 phase 分组，每个 phase 3-6 个 checkpoint。
 - 每个 checkpoint 写一句完成标准或验证方式。
+- 每个 checkpoint 要能对应一个聚焦 commit；如果不能独立提交，继续拆小或把原因写入 `Commits`。
 - 如果某步需要人类业务判断，把它放入 `Confirm`，不要埋在 `Plan` 里。
 - 如果没有确认项，写 `Confirm: None`，并可继续自动执行，除非用户只要求计划。
+
+## Checkpoint 提交规则
+
+默认每完成一个 checkpoint 就自动提交，然后再进入下一个 checkpoint。
+
+执行顺序：
+
+1. 实现当前 checkpoint 的最小改动。
+2. 运行该 checkpoint 对应的最小验证；Go 代码改动至少运行 `gofmt` 和相关包测试。
+3. 按 `git-workflow` stage 仅属于当前 checkpoint 的文件或 hunk。
+4. 检查 `git diff --cached --check` 和 staged diff。
+5. 使用 Conventional Commit 创建提交。
+6. 在计划文件 `Progress` 或 `Commits` 记录 `<hash> <message>`，再继续下一 checkpoint。
+
+提交边界：
+
+- 一个 checkpoint 一个 commit 是默认行为。
+- 不要把无关文件、未确认用户改动、build artifacts 或本地 `.agent/plans/` 文件放入 commit。
+- 如果一个文件同时包含多个 checkpoint 的 hunk，必须拆 hunk stage。
+- 如果 checkpoint 验证失败，不提交；在 `Progress` 写失败命令、错误摘要和下一步。
+- 只有用户明确说“不要提交”“先不提交”“只改不提交”，或当前 checkpoint 不能形成可工作状态时，才允许推迟提交，并要在 `Progress` 写明原因。
+- 如果用户要求最终统一提交，这会覆盖本规则；但计划里必须记录这个提交策略。
 
 ## 工作流
 
@@ -74,8 +98,8 @@ description: 当用户要求写计划、按 harness 执行、自动分解任务�
 6. 创建或更新计划文件。
 7. 有未确认 checkbox 时停止，等待用户确认。
 8. 用户确认后，将 `Status` 更新为 `In Progress` 并自动实现。
-9. 每完成一个 checkpoint，简短回写 `Progress`。
-10. 验证后回写 `Done`，包括改动摘要、验证命令、commit 信息和 open items。
+9. 每完成一个 checkpoint，验证、提交并简短回写 `Progress`。
+10. 所有 checkpoint 完成后运行最终验证，回写 `Done`，包括改动摘要、验证命令、commit 列表和 open items。
 
 ## 文件位置
 
@@ -120,6 +144,9 @@ Risk:
 - <main risk>
 
 Progress:
+- Pending
+
+Commits:
 - Pending
 
 Done:
@@ -197,7 +224,7 @@ Commits:
 执行中必须回写同一个计划文件：
 
 - `Progress` 只记录最近的重要 checkpoint，不写完整流水账。
-- checkpoint 完成后勾选对应 `Plan` 项。
+- checkpoint 完成后勾选对应 `Plan` 项，并记录对应 commit。
 - 验证失败时写失败命令、错误摘要和下一步。
 - 任务结束时必须更新 `Done`。
 
@@ -206,7 +233,7 @@ Commits:
 - 完成了什么
 - 关键修改文件或区域
 - 验证命令和结果
-- commit hash/message；如果未提交，写 `None`
+- commit hash/message 列表；如果某个 checkpoint 未提交，写原因
 - open items；如果没有，写 `None`
 
 ## 输出规则
