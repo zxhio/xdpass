@@ -131,6 +131,7 @@ func main() {
 	s := store.New(attRuntime, eventStream, responseRuntime, xskRuntime, dispatchRuntime)
 	s.WireXSKCallbacks()
 	s.WireEventCallbacks()
+	s.WireRulesetCallbacks()
 	handler := api.NewRouter(api.RouterDeps{
 		Status:      s,
 		Attachments: s,
