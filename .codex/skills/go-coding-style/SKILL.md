@@ -76,22 +76,25 @@ module.NewService(opt)
 
 ## Tests
 
-- 测稳定行为，不测实现细节。
-- 优先测边界，不优先测内部 helper。
-- 不要只为了覆盖率加测试。
-- 重构时优先更新已有测试，不要大量新增测试。
-- 测试保持小而聚焦。
+- 新增测试不是 checkpoint 的默认产物。
+- 如果用户没有明确要求加测试，不要新增测试。
+- 如果认为必须新增测试，先停止实现并手动确认；确认前不要写测试。
+- 不要只为了覆盖率、流程或提交完整性加测试。
+- 不要为了测试给生产代码增加 wrapper、seam、mock hook 或注入点。
 
-优先测试：
+硬性测试只默认保留以下范围：
 
-- API 响应格式和错误映射
-- config 解析和校验后的 Options
-- ruleset 校验、排序、原子 apply 和 rollback
-- dataplane / BPF ABI 常量和 packet-path 行为
-- 生命周期取消和重要错误传播
+- BPF / dataplane：BPF ABI、map layout、struct size、action code、event code、stats index、packet parse/match/action/verdict/redirect。
+- ruleset：validate、action compatibility、compile、bitmap/index、map write/clear、apply 到 BPF map 的正确性。
+- response：packet builder、userspace response correctness，以及相关 benchmark 的 correctness 前置。
+- 基础库不变量：ring/buffer/cursor/wraparound、binary encode/decode、ABI decode 这类 review 容易漏 off-by-one、endian 或 index 语义的代码。
 
-避免测试：
+默认不新增或保留：
 
+- API handler 映射、HTTP CRUD 流程和路由注册测试
+- store / attachment / dispatch / event stream 这类流程状态拼装测试
+- config/options 默认值和简单字段校验测试
+- stats snapshot、DTO 转换和普通响应字段测试
 - 简单构造函数
 - 字段赋值
 - 单行 wrapper
@@ -100,11 +103,11 @@ module.NewService(opt)
 - 内部调用顺序
 - 调用次数 bookkeeping
 
-新增或保留测试前，先问：
+保留或新增测试前，先问：
 
-> 如果这个测试失败，哪个边界会被破坏？
+> 这是否属于 BPF/dataplane、ruleset、response correctness 或基础库不变量？
 
-只有答案是 protocol、ABI、packet-path、rollback、lifecycle 或 error boundary 时才保留。
+如果答案不是明确的“是”，默认不加测试；如果仍认为必须加，先向用户确认。
 
 ## 快速检查
 
