@@ -11,6 +11,13 @@ import (
 	"xdpass/internal/dataplane/abi"
 )
 
+func validARPReplyParams() map[string]any {
+	return map[string]any{
+		"hardware_addr": "02:00:00:00:00:20",
+		"sender_ipv4":   "192.0.2.10",
+	}
+}
+
 // --- Validation tests ---
 
 func TestValidateEmptyRuleset(t *testing.T) {
@@ -149,6 +156,41 @@ func TestCompatTCPResetWithUDP(t *testing.T) {
 	assert.Contains(t, ve.Detail, "tcp")
 }
 
+func TestCompatTCPResetWithoutProtocol(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Response: Response{Action: "tcp_reset"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "protocol tcp")
+}
+
+func TestCompatTCPSynAckWithTCPSYN(t *testing.T) {
+	syn := true
+	rules := []Rule{
+		{
+			RuleID: 1,
+			Match:  Match{Protocol: "tcp", TCP: &TCPMatch{Flags: &TCPFlags{SYN: &syn}}},
+			Response: Response{
+				Action: "tcp_syn_ack",
+				Params: map[string]any{"tcp_seq": uint32(1)},
+			},
+		},
+	}
+	assert.NoError(t, Validate(rules))
+}
+
+func TestCompatTCPSynAckWithoutSYN(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Match: Match{Protocol: "tcp"}, Response: Response{Action: "tcp_syn_ack"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "tcp.flags.syn")
+}
+
 func TestCompatICMPEchoReplyWithICMP(t *testing.T) {
 	rules := []Rule{
 		{RuleID: 1, Match: Match{Protocol: "icmp", ICMP: &ICMPMatch{Type: "echo_request"}}, Response: Response{Action: "icmp_echo_reply"}},
@@ -166,16 +208,57 @@ func TestCompatICMPEchoReplyWithTCP(t *testing.T) {
 	assert.Contains(t, ve.Detail, "icmp")
 }
 
+func TestCompatICMPEchoReplyWithoutType(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Match: Match{Protocol: "icmp"}, Response: Response{Action: "icmp_echo_reply"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "icmp.type")
+}
+
 func TestCompatARPReplyWithARPRequest(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{Protocol: "arp", ARP: &ARPMatch{Op: "request"}}, Response: Response{Action: "arp_reply"}},
+		{
+			RuleID: 1,
+			Match:  Match{Protocol: "arp", ARP: &ARPMatch{Op: "request"}},
+			Response: Response{
+				Action: "arp_reply",
+				Params: validARPReplyParams(),
+			},
+		},
 	}
 	assert.NoError(t, Validate(rules))
 }
 
 func TestCompatARPReplyWithARPReply(t *testing.T) {
 	rules := []Rule{
-		{RuleID: 1, Match: Match{Protocol: "arp", ARP: &ARPMatch{Op: "reply"}}, Response: Response{Action: "arp_reply"}},
+		{
+			RuleID: 1,
+			Match:  Match{Protocol: "arp", ARP: &ARPMatch{Op: "reply"}},
+			Response: Response{
+				Action: "arp_reply",
+				Params: validARPReplyParams(),
+			},
+		},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "arp.op")
+}
+
+func TestCompatARPReplyWithoutRequestOp(t *testing.T) {
+	rules := []Rule{
+		{
+			RuleID: 1,
+			Match:  Match{Protocol: "arp"},
+			Response: Response{
+				Action: "arp_reply",
+				Params: validARPReplyParams(),
+			},
+		},
 	}
 	err := Validate(rules)
 	var ve *ValidationError
@@ -200,6 +283,46 @@ func TestCompatDNSRefusedWithTCP(t *testing.T) {
 	assert.Contains(t, ve.Detail, "udp")
 }
 
+func TestCompatDNSRefusedWithoutPort53(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Match: Match{Protocol: "udp"}, Response: Response{Action: "dns_refused"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "dst_ports")
+}
+
+func TestCompatUDPEchoReplyWithoutProtocol(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Response: Response{Action: "udp_echo_reply"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "protocol udp")
+}
+
+func TestCompatICMPPortUnreachableRequiresUDP(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Match: Match{Protocol: "tcp"}, Response: Response{Action: "icmp_port_unreachable"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "protocol udp")
+}
+
+func TestCompatICMPHostUnreachableRequiresIPProtocol(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Response: Response{Action: "icmp_host_unreachable"}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "protocol tcp, udp, or icmp")
+}
+
 func TestCompatNoneWithAnyProtocol(t *testing.T) {
 	for _, proto := range []string{"tcp", "udp", "icmp", "arp", ""} {
 		rules := []Rule{
@@ -214,6 +337,210 @@ func TestCompatAlertWithAnyProtocol(t *testing.T) {
 		{RuleID: 1, Response: Response{Action: "alert"}},
 	}
 	assert.NoError(t, Validate(rules))
+}
+
+// --- Response params tests ---
+
+func TestValidateRejectsParamsForNoParamActions(t *testing.T) {
+	rules := []Rule{
+		{RuleID: 1, Response: Response{Action: "alert", Params: map[string]any{"unused": true}}},
+	}
+	err := Validate(rules)
+	var ve *ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Detail, "must be empty")
+}
+
+func TestValidateTCPSynAckParams(t *testing.T) {
+	syn := true
+	baseRule := Rule{
+		RuleID: 1,
+		Match:  Match{Protocol: "tcp", TCP: &TCPMatch{Flags: &TCPFlags{SYN: &syn}}},
+		Response: Response{
+			Action: "tcp_syn_ack",
+		},
+	}
+
+	t.Run("valid omitted", func(t *testing.T) {
+		assert.NoError(t, Validate([]Rule{baseRule}))
+	})
+
+	t.Run("valid uint32", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{"tcp_seq": uint32(123)}
+		assert.NoError(t, Validate([]Rule{rule}))
+	})
+
+	t.Run("invalid type", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{"tcp_seq": "123"}
+		err := Validate([]Rule{rule})
+		var ve *ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Contains(t, ve.Detail, "tcp_seq")
+	})
+}
+
+func TestValidateDNSRefusedParams(t *testing.T) {
+	baseRule := Rule{
+		RuleID: 1,
+		Match:  Match{Protocol: "udp", DstPorts: []uint16{53}},
+		Response: Response{
+			Action: "dns_refused",
+		},
+	}
+
+	t.Run("valid omitted", func(t *testing.T) {
+		assert.NoError(t, Validate([]Rule{baseRule}))
+	})
+
+	t.Run("valid refused", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{"rcode": "refused"}
+		assert.NoError(t, Validate([]Rule{rule}))
+	})
+
+	t.Run("invalid rcode", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{"rcode": "noerror"}
+		err := Validate([]Rule{rule})
+		var ve *ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Contains(t, ve.Detail, "rcode")
+	})
+}
+
+func TestValidateDNSSinkholeParams(t *testing.T) {
+	baseRule := Rule{
+		RuleID: 1,
+		Match:  Match{Protocol: "udp", DstPorts: []uint16{53}},
+		Response: Response{
+			Action: "dns_sinkhole",
+		},
+	}
+
+	t.Run("valid ipv4", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{
+			"family":     "ipv4",
+			"answers_v4": []any{"192.0.2.10"},
+			"ttl":        float64(60),
+		}
+		assert.NoError(t, Validate([]Rule{rule}))
+	})
+
+	t.Run("valid dual stack", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = map[string]any{
+			"family":     "dual_stack",
+			"answers_v4": []string{"192.0.2.10"},
+			"answers_v6": []string{"2001:db8::10"},
+			"ttl":        uint32(60),
+		}
+		assert.NoError(t, Validate([]Rule{rule}))
+	})
+
+	tests := []struct {
+		name     string
+		params   map[string]any
+		contains string
+	}{
+		{
+			name:     "missing family",
+			params:   map[string]any{"answers_v4": []any{"192.0.2.10"}, "ttl": float64(60)},
+			contains: "family",
+		},
+		{
+			name:     "missing ttl",
+			params:   map[string]any{"family": "ipv4", "answers_v4": []any{"192.0.2.10"}},
+			contains: "ttl",
+		},
+		{
+			name:     "ttl zero",
+			params:   map[string]any{"family": "ipv4", "answers_v4": []any{"192.0.2.10"}, "ttl": float64(0)},
+			contains: "ttl",
+		},
+		{
+			name:     "invalid family",
+			params:   map[string]any{"family": "ipv10", "answers_v4": []any{"192.0.2.10"}, "ttl": float64(60)},
+			contains: "family",
+		},
+		{
+			name:     "missing answers",
+			params:   map[string]any{"family": "ipv4", "ttl": float64(60)},
+			contains: "answers_v4",
+		},
+		{
+			name:     "invalid ipv4",
+			params:   map[string]any{"family": "ipv4", "answers_v4": []any{"2001:db8::10"}, "ttl": float64(60)},
+			contains: "answers_v4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := baseRule
+			rule.Response.Params = tt.params
+			err := Validate([]Rule{rule})
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve)
+			assert.Contains(t, ve.Detail, tt.contains)
+		})
+	}
+}
+
+func TestValidateARPReplyParams(t *testing.T) {
+	baseRule := Rule{
+		RuleID: 1,
+		Match:  Match{Protocol: "arp", ARP: &ARPMatch{Op: "request"}},
+		Response: Response{
+			Action: "arp_reply",
+		},
+	}
+
+	t.Run("valid", func(t *testing.T) {
+		rule := baseRule
+		rule.Response.Params = validARPReplyParams()
+		assert.NoError(t, Validate([]Rule{rule}))
+	})
+
+	tests := []struct {
+		name     string
+		params   map[string]any
+		contains string
+	}{
+		{
+			name:     "missing hardware address",
+			params:   map[string]any{"sender_ipv4": "192.0.2.10"},
+			contains: "hardware_addr",
+		},
+		{
+			name:     "invalid hardware address",
+			params:   map[string]any{"hardware_addr": "invalid", "sender_ipv4": "192.0.2.10"},
+			contains: "hardware_addr",
+		},
+		{
+			name:     "missing sender ipv4",
+			params:   map[string]any{"hardware_addr": "02:00:00:00:00:20"},
+			contains: "sender_ipv4",
+		},
+		{
+			name:     "invalid sender ipv4",
+			params:   map[string]any{"hardware_addr": "02:00:00:00:00:20", "sender_ipv4": "2001:db8::10"},
+			contains: "sender_ipv4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := baseRule
+			rule.Response.Params = tt.params
+			err := Validate([]Rule{rule})
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve)
+			assert.Contains(t, ve.Detail, tt.contains)
+		})
+	}
 }
 
 // --- Compiler tests ---

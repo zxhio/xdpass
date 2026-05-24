@@ -2,10 +2,13 @@ package ruleset
 
 import (
 	"fmt"
+	"math"
 	"net"
 
 	"xdpass/internal/dataplane/abi"
 )
+
+const maxUint32Value = uint64(^uint32(0))
 
 var validProtocols = map[string]bool{
 	"tcp": true, "udp": true, "icmp": true, "arp": true,
@@ -156,46 +159,345 @@ func validateResponse(r Response) error {
 	if _, ok := actionCodeMap[r.Action]; !ok {
 		return fmt.Errorf("invalid action: %s", r.Action)
 	}
+	if err := validateResponseParams(r); err != nil {
+		return err
+	}
 	return nil
 }
 
 // validateCompatibility checks match/action compatibility per spec.
 func validateCompatibility(m Match, r Response) error {
 	switch r.Action {
-	case "tcp_reset", "tcp_syn_ack":
-		if m.Protocol != "" && m.Protocol != "tcp" {
+	case "tcp_reset":
+		if m.Protocol != "tcp" {
 			return fmt.Errorf("action %s requires protocol tcp", r.Action)
 		}
+	case "tcp_syn_ack":
+		if m.Protocol != "tcp" {
+			return fmt.Errorf("action tcp_syn_ack requires protocol tcp")
+		}
+		if m.TCP == nil || m.TCP.Flags == nil || m.TCP.Flags.SYN == nil || !*m.TCP.Flags.SYN {
+			return fmt.Errorf("action tcp_syn_ack requires tcp.flags.syn true")
+		}
 	case "icmp_echo_reply":
-		if m.Protocol != "" && m.Protocol != "icmp" {
+		if m.Protocol != "icmp" {
 			return fmt.Errorf("action icmp_echo_reply requires protocol icmp")
 		}
-		if m.ICMP != nil && m.ICMP.Type != "" && m.ICMP.Type != "echo_request" {
+		if m.ICMP == nil || m.ICMP.Type != "echo_request" {
 			return fmt.Errorf("action icmp_echo_reply requires icmp.type echo_request")
 		}
 	case "icmp_port_unreachable":
-		// Primarily for UDP, but no strict protocol requirement.
+		if m.Protocol != "udp" {
+			return fmt.Errorf("action icmp_port_unreachable requires protocol udp")
+		}
 	case "icmp_host_unreachable", "icmp_admin_prohibited":
-		// Compatible with IPv4 TCP/UDP/ICMP.
+		if m.Protocol != "tcp" && m.Protocol != "udp" && m.Protocol != "icmp" {
+			return fmt.Errorf("action %s requires protocol tcp, udp, or icmp", r.Action)
+		}
 	case "udp_echo_reply":
-		if m.Protocol != "" && m.Protocol != "udp" {
+		if m.Protocol != "udp" {
 			return fmt.Errorf("action udp_echo_reply requires protocol udp")
 		}
 	case "dns_refused", "dns_sinkhole":
-		if m.Protocol != "" && m.Protocol != "udp" {
+		if m.Protocol != "udp" {
 			return fmt.Errorf("action %s requires protocol udp", r.Action)
 		}
+		if !containsPort(m.DstPorts, 53) {
+			return fmt.Errorf("action %s requires dst_ports to include 53", r.Action)
+		}
 	case "arp_reply":
-		if m.Protocol != "" && m.Protocol != "arp" {
+		if m.Protocol != "arp" {
 			return fmt.Errorf("action arp_reply requires protocol arp")
 		}
-		if m.ARP != nil && m.ARP.Op != "" && m.ARP.Op != "request" {
+		if m.ARP == nil || m.ARP.Op != "request" {
 			return fmt.Errorf("action arp_reply requires arp.op request")
 		}
 	case "none", "alert":
 		// No protocol requirements.
 	}
 	return nil
+}
+
+func validateResponseParams(r Response) error {
+	params := r.Params
+	switch r.Action {
+	case "none", "alert", "tcp_reset", "icmp_echo_reply",
+		"icmp_port_unreachable", "icmp_host_unreachable",
+		"icmp_admin_prohibited", "udp_echo_reply":
+		if len(params) > 0 {
+			return fmt.Errorf("response.params must be empty for action %s", r.Action)
+		}
+	case "tcp_syn_ack":
+		return validateTCPSynAckParams(params)
+	case "dns_refused":
+		return validateDNSRefusedParams(params)
+	case "dns_sinkhole":
+		return validateDNSSinkholeParams(params)
+	case "arp_reply":
+		return validateARPReplyParams(params)
+	}
+	return nil
+}
+
+func validateTCPSynAckParams(params map[string]any) error {
+	for key, value := range params {
+		switch key {
+		case "tcp_seq":
+			if _, ok := toUint32(value); !ok {
+				return fmt.Errorf("response.params.tcp_seq must be uint32")
+			}
+		default:
+			return fmt.Errorf("unknown response.params.%s for action tcp_syn_ack", key)
+		}
+	}
+	return nil
+}
+
+func validateDNSRefusedParams(params map[string]any) error {
+	for key, value := range params {
+		switch key {
+		case "rcode":
+			rcode, ok := value.(string)
+			if !ok || rcode != "refused" {
+				return fmt.Errorf("response.params.rcode must be refused")
+			}
+		default:
+			return fmt.Errorf("unknown response.params.%s for action dns_refused", key)
+		}
+	}
+	return nil
+}
+
+func validateDNSSinkholeParams(params map[string]any) error {
+	family, err := stringParam(params, "family")
+	if err != nil {
+		return err
+	}
+	ttl, ok := toUint32(params["ttl"])
+	if !ok || ttl == 0 {
+		return fmt.Errorf("response.params.ttl must be uint32 greater than 0")
+	}
+
+	for key := range params {
+		switch key {
+		case "family":
+			// Already validated above.
+		case "answers_v4", "answers_v6":
+			if _, err := stringArrayParam(params, key); err != nil {
+				return err
+			}
+		case "ttl":
+			// Already validated above.
+		default:
+			return fmt.Errorf("unknown response.params.%s for action dns_sinkhole", key)
+		}
+	}
+
+	switch family {
+	case "ipv4":
+		if err := validateIPAnswers(params, "answers_v4", true, false); err != nil {
+			return err
+		}
+	case "ipv6":
+		if err := validateIPAnswers(params, "answers_v6", true, true); err != nil {
+			return err
+		}
+	case "dual_stack":
+		if err := validateIPAnswers(params, "answers_v4", true, false); err != nil {
+			return err
+		}
+		if err := validateIPAnswers(params, "answers_v6", true, true); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("response.params.family must be ipv4, ipv6, or dual_stack")
+	}
+	return nil
+}
+
+func validateARPReplyParams(params map[string]any) error {
+	for key := range params {
+		switch key {
+		case "hardware_addr", "sender_ipv4":
+		default:
+			return fmt.Errorf("unknown response.params.%s for action arp_reply", key)
+		}
+	}
+	if _, err := hardwareAddrParam(params, "hardware_addr"); err != nil {
+		return err
+	}
+	if _, err := ipv4Param(params, "sender_ipv4"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateIPAnswers(params map[string]any, key string, required bool, ipv6 bool) error {
+	answers, err := stringArrayParam(params, key)
+	if err != nil {
+		if required {
+			return err
+		}
+		return nil
+	}
+	if required && len(answers) == 0 {
+		return fmt.Errorf("response.params.%s must contain at least one address", key)
+	}
+	for _, answer := range answers {
+		ip := net.ParseIP(answer)
+		if ip == nil {
+			return fmt.Errorf("response.params.%s contains invalid IP address %q", key, answer)
+		}
+		if ipv6 {
+			if ip.To4() != nil || ip.To16() == nil {
+				return fmt.Errorf("response.params.%s contains non-IPv6 address %q", key, answer)
+			}
+		} else if ip.To4() == nil {
+			return fmt.Errorf("response.params.%s contains non-IPv4 address %q", key, answer)
+		}
+	}
+	return nil
+}
+
+func stringArrayParam(params map[string]any, key string) ([]string, error) {
+	value, ok := params[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required response.params.%s", key)
+	}
+	switch arr := value.(type) {
+	case []string:
+		return append([]string(nil), arr...), nil
+	case []any:
+		result := make([]string, 0, len(arr))
+		for _, item := range arr {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("response.params.%s items must be strings", key)
+			}
+			result = append(result, s)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("response.params.%s must be an array of strings", key)
+	}
+}
+
+func stringParam(params map[string]any, key string) (string, error) {
+	value, ok := params[key]
+	if !ok {
+		return "", fmt.Errorf("missing required response.params.%s", key)
+	}
+	s, ok := value.(string)
+	if !ok || s == "" {
+		return "", fmt.Errorf("response.params.%s must be a string", key)
+	}
+	return s, nil
+}
+
+func hardwareAddrParam(params map[string]any, key string) (net.HardwareAddr, error) {
+	value, ok := params[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required response.params.%s", key)
+	}
+	switch hw := value.(type) {
+	case net.HardwareAddr:
+		if len(hw) != 6 {
+			return nil, fmt.Errorf("response.params.%s must be a MAC address", key)
+		}
+		return hw, nil
+	case []byte:
+		if len(hw) != 6 {
+			return nil, fmt.Errorf("response.params.%s must be a MAC address", key)
+		}
+		return net.HardwareAddr(hw), nil
+	case string:
+		mac, err := net.ParseMAC(hw)
+		if err != nil {
+			return nil, fmt.Errorf("response.params.%s must be a MAC address", key)
+		}
+		if len(mac) != 6 {
+			return nil, fmt.Errorf("response.params.%s must be a MAC address", key)
+		}
+		return mac, nil
+	default:
+		return nil, fmt.Errorf("response.params.%s must be a MAC address", key)
+	}
+}
+
+func ipv4Param(params map[string]any, key string) (net.IP, error) {
+	value, ok := params[key]
+	if !ok {
+		return nil, fmt.Errorf("missing required response.params.%s", key)
+	}
+	switch ip := value.(type) {
+	case net.IP:
+		ip4 := ip.To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("response.params.%s must be an IPv4 address", key)
+		}
+		return ip4, nil
+	case []byte:
+		ip4 := net.IP(ip).To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("response.params.%s must be an IPv4 address", key)
+		}
+		return ip4, nil
+	case string:
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			return nil, fmt.Errorf("response.params.%s must be an IPv4 address", key)
+		}
+		ip4 := parsed.To4()
+		if ip4 == nil {
+			return nil, fmt.Errorf("response.params.%s must be an IPv4 address", key)
+		}
+		return ip4, nil
+	default:
+		return nil, fmt.Errorf("response.params.%s must be an IPv4 address", key)
+	}
+}
+
+func toUint32(value any) (uint32, bool) {
+	switch n := value.(type) {
+	case float64:
+		if n < 0 || n > float64(maxUint32Value) || math.Trunc(n) != n {
+			return 0, false
+		}
+		return uint32(n), true
+	case int:
+		if n < 0 {
+			return 0, false
+		}
+		return uint32(n), uint64(n) <= maxUint32Value
+	case int64:
+		if n < 0 || uint64(n) > maxUint32Value {
+			return 0, false
+		}
+		return uint32(n), true
+	case uint:
+		if uint64(n) > maxUint32Value {
+			return 0, false
+		}
+		return uint32(n), true
+	case uint32:
+		return n, true
+	case uint64:
+		if n > maxUint32Value {
+			return 0, false
+		}
+		return uint32(n), true
+	default:
+		return 0, false
+	}
+}
+
+func containsPort(ports []uint16, want uint16) bool {
+	for _, port := range ports {
+		if port == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ActionToCode converts an action name to its BPF action code.

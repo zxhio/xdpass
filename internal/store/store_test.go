@@ -488,6 +488,37 @@ func TestRulesetLifecycleApply(t *testing.T) {
 	})
 }
 
+func TestDryRunRulesetValidatesResponseParams(t *testing.T) {
+	s := newTestStoreWithRulesetMaps(t)
+	ctx := t.Context()
+
+	apiRules := []api.RuleResponse{
+		{
+			RuleID: 1001,
+			Match: &api.MatchResponse{
+				Protocol: "udp",
+				DstPorts: []uint16{53},
+			},
+			Response: api.ResponseResponse{
+				Action: "dns_sinkhole",
+				Params: map[string]any{
+					"family":     "ipv4",
+					"answers_v4": []any{"192.0.2.10"},
+					"ttl":        float64(0),
+				},
+			},
+		},
+	}
+
+	_, err := s.DryRunRuleset(ctx, apiRules)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ttl")
+
+	resp, err := s.GetRuleset(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, resp.Rules)
+}
+
 // issuesWithCode returns issues matching the given code.
 func issuesWithCode(issues []api.StatusIssue, code string) []api.StatusIssue {
 	var result []api.StatusIssue
@@ -518,7 +549,12 @@ func TestStatusDegradedHealth(t *testing.T) {
 
 		// icmp_echo_reply is a userspace action.
 		apiRules := []api.RuleResponse{
-			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "icmp_echo_reply"}},
+			{
+				RuleID:   1001,
+				Priority: 10,
+				Match:    &api.MatchResponse{Protocol: "icmp", ICMP: &api.ICMPMatch{Type: "echo_request"}},
+				Response: api.ResponseResponse{Action: "icmp_echo_reply"},
+			},
 		}
 		_, err := s.ReplaceRuleset(ctx, apiRules)
 		require.NoError(t, err)
@@ -593,7 +629,12 @@ func TestStatusDegradedHealth(t *testing.T) {
 		ctx := t.Context()
 
 		apiRules := []api.RuleResponse{
-			{RuleID: 1001, Priority: 10, Response: api.ResponseResponse{Action: "icmp_echo_reply"}},
+			{
+				RuleID:   1001,
+				Priority: 10,
+				Match:    &api.MatchResponse{Protocol: "icmp", ICMP: &api.ICMPMatch{Type: "echo_request"}},
+				Response: api.ResponseResponse{Action: "icmp_echo_reply"},
+			},
 		}
 		_, err := s.ReplaceRuleset(ctx, apiRules)
 		require.NoError(t, err)

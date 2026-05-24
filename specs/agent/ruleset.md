@@ -209,12 +209,13 @@
 
 基础规则：
 
-- `tcp_reset` 和 `tcp_syn_ack` 只兼容 TCP 包。
+- `tcp_reset` 只兼容 TCP 包。
+- `tcp_syn_ack` 只兼容 TCP SYN 包，必须约束 `protocol=tcp` 和 `tcp.flags.syn=true`。
 - `icmp_echo_reply` 只兼容 ICMP echo request。
-- `icmp_port_unreachable` 主要用于 UDP 包。
-- `icmp_host_unreachable` / `icmp_admin_prohibited` 兼容 IPv4 TCP / UDP / ICMP。
+- `icmp_port_unreachable` 只兼容 UDP 包。
+- `icmp_host_unreachable` / `icmp_admin_prohibited` 兼容 IPv4 TCP / UDP / ICMP，必须约束 `protocol` 为 `tcp` / `udp` / `icmp`。
 - `udp_echo_reply` 只兼容 UDP 包。
-- `dns_sinkhole` / `dns_refused` 只兼容 UDP DNS 请求，通常要求 `dst_ports` 包含 `53`。
+- `dns_sinkhole` / `dns_refused` 只兼容 UDP DNS 请求，必须约束 `protocol=udp` 且 `dst_ports` 包含 `53`。
 - `arp_reply` 只兼容 ARP request。
 - `none` / `alert` 不要求特定协议。
 
@@ -269,8 +270,8 @@
 
 - `tcp_syn_ack`：`tcp_seq` 可选，省略时使用默认值
 - `dns_refused`：`rcode` 可选，默认 `refused`
-- `dns_sinkhole`：`family`、`answers_v4`、`answers_v6`、`ttl`
-- `arp_reply`：`hardware_addr`、`sender_ipv4`
+- `dns_sinkhole`：`family`、`ttl` 必填；`answers_v4` 在 `family=ipv4` / `dual_stack` 时必填；`answers_v6` 在 `family=ipv6` / `dual_stack` 时必填
+- `arp_reply`：`hardware_addr`、`sender_ipv4` 必填
 
 参数范围：
 

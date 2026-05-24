@@ -286,7 +286,13 @@ def cmd_ruleset_put(addr, args):
                     "rule_id": 2,
                     "priority": 200,
                     "match": {"protocol": "arp", "arp": {"op": "request"}},
-                    "response": {"action": "arp_reply"},
+                    "response": {
+                        "action": "arp_reply",
+                        "params": {
+                            "hardware_addr": "02:00:00:00:00:20",
+                            "sender_ipv4": "192.168.1.20",
+                        },
+                    },
                 },
             ]
         }
