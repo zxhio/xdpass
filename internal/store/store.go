@@ -40,8 +40,11 @@ type Store struct {
 	dispatchIfIndex   uint32
 	dispatchIfName    string
 	dispatchQueueSize int
+	dispatchSender    dispatchSenderFactory
 	applyGeneration   map[uint32]uint64 // ifindex -> applied ruleset generation
 }
+
+type dispatchSenderFactory func(ifIndex uint32) (dispatch.Sender, error)
 
 // New creates a new in-memory store.
 func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRuntime *response.Runtime, xskRuntime *xsk.Runtime, dispatchRuntime *dispatch.Runtime) *Store {
@@ -57,9 +60,14 @@ func New(attachments *attachment.Runtime, eventStream *events.Stream, responseRu
 		responseStats:   rs,
 		xskRuntime:      xskRuntime,
 		dispatchRuntime: dispatchRuntime,
+		dispatchSender:  newDispatchSender,
 		egressVLANMode:  "preserve",
 		applyGeneration: make(map[uint32]uint64),
 	}
+}
+
+func newDispatchSender(ifIndex uint32) (dispatch.Sender, error) {
+	return response.NewAFPacketSender(ifIndex)
 }
 
 // WireXSKCallbacks registers XSK lifecycle callbacks on the attachment runtime.
@@ -757,13 +765,8 @@ func (s *Store) ReplaceDispatch(_ context.Context, req api.PutDispatchRequest) (
 		return api.DispatchResponse{}, &api.ServiceValidationError{Detail: err.Error()}
 	}
 
-	// Stop existing dispatch if running.
-	if s.dispatchRuntime != nil {
-		s.dispatchRuntime.Stop()
-	}
-
 	// Create AF_PACKET sender for the dispatch interface.
-	sender, err := response.NewAFPacketSender(req.IfIndex)
+	sender, err := s.dispatchSender(req.IfIndex)
 	if err != nil {
 		return api.DispatchResponse{}, fmt.Errorf("create dispatch sender: %w", err)
 	}

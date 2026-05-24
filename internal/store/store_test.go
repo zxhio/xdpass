@@ -51,6 +51,17 @@ type noopPromiscuousHandle struct{}
 
 func (noopPromiscuousHandle) Close() error { return nil }
 
+type storeDispatchSender struct {
+	closed bool
+}
+
+func (s *storeDispatchSender) Send([]byte) error { return nil }
+
+func (s *storeDispatchSender) Close() error {
+	s.closed = true
+	return nil
+}
+
 func disableTestPromiscuous(rt *attachment.Runtime) {
 	rt.SetPromiscuousOpen(func(uint32) (attachment.PromiscuousHandle, error) {
 		return noopPromiscuousHandle{}, nil
@@ -486,6 +497,36 @@ func TestRulesetLifecycleApply(t *testing.T) {
 		_, gen := s.rulesetRuntime.CurrentCompiled()
 		assert.Equal(t, gen, s.applyGeneration[3])
 	})
+}
+
+func TestReplaceDispatchSenderFailurePreservesExistingRuntime(t *testing.T) {
+	ctx := t.Context()
+	dispatchRuntime := dispatch.NewRuntime(ctx)
+	t.Cleanup(dispatchRuntime.Stop)
+
+	s := New(nil, nil, nil, nil, dispatchRuntime)
+	firstSender := &storeDispatchSender{}
+	s.dispatchSender = func(uint32) (dispatch.Sender, error) {
+		return firstSender, nil
+	}
+
+	_, err := s.ReplaceDispatch(ctx, api.PutDispatchRequest{IfIndex: 3, QueueSize: 16})
+	require.NoError(t, err)
+
+	s.dispatchSender = func(uint32) (dispatch.Sender, error) {
+		return nil, assert.AnError
+	}
+	_, err = s.ReplaceDispatch(ctx, api.PutDispatchRequest{IfIndex: 4, QueueSize: 32})
+	require.Error(t, err)
+
+	resp, err := s.GetDispatch(ctx)
+	require.NoError(t, err)
+	assert.True(t, resp.Enabled)
+	assert.True(t, resp.Configured)
+	assert.Equal(t, uint32(3), resp.IfIndex)
+	assert.Equal(t, 16, resp.QueueSize)
+	assert.True(t, dispatchRuntime.IsEnabled())
+	assert.False(t, firstSender.closed)
 }
 
 func TestDryRunRulesetValidatesResponseParams(t *testing.T) {
