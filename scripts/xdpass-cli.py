@@ -559,8 +559,8 @@ def build_parser():
                "No direct netns/BPF/XSK/NIC operations.",
     )
     parser.add_argument(
-        "--addr", default="http://127.0.0.1:9527",
-        help="agent API address (default: http://127.0.0.1:9527)",
+        "--addr", default="http://127.0.0.1:9346",
+        help="agent API address (default: http://127.0.0.1:9346)",
     )
 
     sub = parser.add_subparsers(dest="command")

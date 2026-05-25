@@ -107,7 +107,7 @@ agent 进程重启后，运行态资源会回到空状态或默认状态，需�
 
 ```yaml
 server:
-  listen_addr: "127.0.0.1:9527"
+  listen_addr: "127.0.0.1:9346"
 
 logging:
   level: info
@@ -151,24 +151,24 @@ scripts/install-systemd.sh --help
 
 ## 使用示例
 
-请先按部署章节启动 agent。以下示例假设 agent 监听 `127.0.0.1:9527`。
+请先按部署章节启动 agent。以下示例假设 agent 监听 `127.0.0.1:9346`。
 
 健康检查：
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/health
+curl http://127.0.0.1:9346/api/v1/health
 ```
 
 查看运行态总览：
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/status
+curl http://127.0.0.1:9346/api/v1/status
 ```
 
 创建 attachment。请将示例中的 `ifindex` 替换为目标网卡的 ifindex，可通过 `ip link` 查看：
 
 ```bash
-curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
+curl -X POST 'http://127.0.0.1:9346/api/v1/attachments' \
   -H 'Content-Type: application/json' \
   -d '{
     "ifindex": 3,
@@ -187,7 +187,7 @@ curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
 下发 ruleset：
 
 ```bash
-curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
+curl -X PUT 'http://127.0.0.1:9346/api/v1/ruleset' \
   -H 'Content-Type: application/json' \
   -d '{
     "rules": [
@@ -210,13 +210,13 @@ curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
 查看统计：
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/stats
+curl http://127.0.0.1:9346/api/v1/stats
 ```
 
 查看事件流：
 
 ```bash
-curl -N http://127.0.0.1:9527/api/v1/events/stream
+curl -N http://127.0.0.1:9346/api/v1/events/stream
 ```
 
 更多 API 路由见 `specs/agent-api.md`。日常操作也可以参考 `scripts/xdpass-cli.py`，它封装了 agent HTTP API 调用。

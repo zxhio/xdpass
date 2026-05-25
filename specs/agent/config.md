@@ -23,7 +23,7 @@
 
 ```yaml
 server:
-  listen_addr: "127.0.0.1:9527"
+  listen_addr: "127.0.0.1:9346"
 
 logging:
   level: info

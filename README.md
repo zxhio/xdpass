@@ -107,7 +107,7 @@ Minimal configuration example:
 
 ```yaml
 server:
-  listen_addr: "127.0.0.1:9527"
+  listen_addr: "127.0.0.1:9346"
 
 logging:
   level: info
@@ -151,24 +151,24 @@ scripts/install-systemd.sh --help
 
 ## Usage Examples
 
-Start the agent by following the deployment section first. The examples below assume the agent is listening on `127.0.0.1:9527`.
+Start the agent by following the deployment section first. The examples below assume the agent is listening on `127.0.0.1:9346`.
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/health
+curl http://127.0.0.1:9346/api/v1/health
 ```
 
 View the runtime overview:
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/status
+curl http://127.0.0.1:9346/api/v1/status
 ```
 
 Create an attachment. Replace the example `ifindex` with the ifindex of the target NIC, which can be inspected with `ip link`:
 
 ```bash
-curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
+curl -X POST 'http://127.0.0.1:9346/api/v1/attachments' \
   -H 'Content-Type: application/json' \
   -d '{
     "ifindex": 3,
@@ -187,7 +187,7 @@ curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
 Push a ruleset:
 
 ```bash
-curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
+curl -X PUT 'http://127.0.0.1:9346/api/v1/ruleset' \
   -H 'Content-Type: application/json' \
   -d '{
     "rules": [
@@ -210,13 +210,13 @@ curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
 View statistics:
 
 ```bash
-curl http://127.0.0.1:9527/api/v1/stats
+curl http://127.0.0.1:9346/api/v1/stats
 ```
 
 View the event stream:
 
 ```bash
-curl -N http://127.0.0.1:9527/api/v1/events/stream
+curl -N http://127.0.0.1:9346/api/v1/events/stream
 ```
 
 See `specs/agent-api.md` for more API routes. For day-to-day operations, you can also refer to `scripts/xdpass-cli.py`, which wraps the agent HTTP API calls.

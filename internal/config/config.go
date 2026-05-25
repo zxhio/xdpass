@@ -10,7 +10,7 @@ import (
 	"xdpass/internal/logging"
 )
 
-const DefaultListenAddr = "127.0.0.1:9527"
+const DefaultListenAddr = "127.0.0.1:9346"
 
 // Config is the raw startup configuration parsed from YAML.
 type Config struct {
