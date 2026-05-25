@@ -1,10 +1,10 @@
 # xdpass
 
-English | [中文](README.zh-CN.md)
+中文 | [English](README.md)
 
-`xdpass` is an XDP-based bypass traffic processing service for rule matching, event reporting, statistics queries, and active responses.
+`xdpass` 是一个基于 XDP 的旁路流量处理服务，用于规则匹配、事件上报、统计查询和主动响应。
 
-## Agent Architecture
+## Agent 架构
 
 ```text
 +------------+         +----------------------------+
@@ -52,58 +52,58 @@ English | [中文](README.zh-CN.md)
                                        +---------------------+
 ```
 
-## Features
+## 功能
 
-xdpass-agent supports:
+xdpass-agent 支持：
 
-- Attaching, detaching, starting, and stopping XDP programs
-- Active response actions for TCP, ICMP, ARP, DNS, and related protocols
-- Hit event delivery over SSE
-- Dispatching userspace-path hit packets
+- XDP 程序挂载、卸载和启停控制
+- TCP、ICMP、ARP、DNS 等主动响应动作
+- 命中事件 SSE 推送
+- userspace path 命中包 dispatch 分发
 
-## Quick Start
+## 快速开始
 
-### Requirements
+### 环境要求
 
 - Linux kernel >= 5.8
 - Go >= 1.22
-- clang / llvm for BPF compilation
-- root privileges, or the runtime capabilities required by the deployment, such as `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_BPF`, and `CAP_SYS_ADMIN`
+- clang / llvm，用于 BPF 编译
+- root 权限，或具备 `CAP_NET_ADMIN`、`CAP_NET_RAW`、`CAP_BPF`、`CAP_SYS_ADMIN` 等运行所需 capability
 
-### Build
+### 构建
 
 ```bash
 make build
 ```
 
-The build artifact is:
+构建产物为：
 
 ```text
 build/xdpass-agent
 ```
 
-For release builds, set the version explicitly:
+发布构建可以显式写入版本号：
 
 ```bash
 make build VERSION=v0.1.0
 ./build/xdpass-agent --version
 ```
 
-### Test
+### 测试
 
 ```bash
 make test
 ```
 
-`make test` generates BPF code first, then runs the Go tests.
+`make test` 会先生成 BPF 代码，再运行 Go 测试。
 
-## Configuration
+## 配置
 
-The agent startup configuration is only used for the HTTP server and logging. Runtime resources such as attachments, rulesets, response egress, and dispatch are not stored in the configuration file and must be configured through the HTTP API.
+agent 启动配置只用于 HTTP server 和日志。attachments、ruleset、response egress、dispatch 等运行态资源不写入配置文件，需要通过 HTTP API 下发。
 
-After the agent process restarts, runtime resources return to an empty or default state and must be pushed again by the manager or caller.
+agent 进程重启后，运行态资源会回到空状态或默认状态，需要由 mgr 或调用方重新下发。
 
-Minimal configuration example:
+最小配置示例：
 
 ```yaml
 server:
@@ -118,11 +118,11 @@ logging:
   compress: true
 ```
 
-See `deploy/config/agent/config.yaml` for the default configuration template, and `specs/agent/config.md` for field semantics.
+默认配置模板见 `deploy/config/agent/config.yaml`，字段语义见 `specs/agent/config.md`。
 
-## Deployment
+## 部署
 
-The project provides a systemd deployment script. The recommended flow is to package first, then run the installer on the target machine:
+项目提供 systemd 部署脚本。推荐先打包，再在目标机器上执行安装脚本：
 
 ```bash
 make pack VERSION=v0.1.0
@@ -131,41 +131,41 @@ cd xdpass-v0.1.0-linux-amd64
 sudo scripts/install-systemd.sh --enable --start
 ```
 
-The installer writes:
+安装脚本会安装：
 
-- `bin/xdpass-agent` to `/usr/local/bin/xdpass-agent`
-- `deploy/config/agent/config.yaml` to `/etc/xdpass/agent/config.yaml`
-- `deploy/systemd/xdpass-agent.service` to `/etc/systemd/system/xdpass-agent.service`
+- `bin/xdpass-agent` 到 `/usr/local/bin/xdpass-agent`
+- `deploy/config/agent/config.yaml` 到 `/etc/xdpass/agent/config.yaml`
+- `deploy/systemd/xdpass-agent.service` 到 `/etc/systemd/system/xdpass-agent.service`
 
-Existing configuration files are not overwritten by default. Pass `--force` to overwrite them:
+默认不会覆盖已有配置文件；需要覆盖时传入 `--force`：
 
 ```bash
 sudo scripts/install-systemd.sh --force --enable --start
 ```
 
-View installer options:
+查看脚本参数：
 
 ```bash
 scripts/install-systemd.sh --help
 ```
 
-## Usage Examples
+## 使用示例
 
-Start the agent by following the deployment section first. The examples below assume the agent is listening on `127.0.0.1:9527`.
+请先按部署章节启动 agent。以下示例假设 agent 监听 `127.0.0.1:9527`。
 
-Health check:
+健康检查：
 
 ```bash
 curl http://127.0.0.1:9527/api/v1/health
 ```
 
-View the runtime overview:
+查看运行态总览：
 
 ```bash
 curl http://127.0.0.1:9527/api/v1/status
 ```
 
-Create an attachment. Replace the example `ifindex` with the ifindex of the target NIC, which can be inspected with `ip link`:
+创建 attachment。请将示例中的 `ifindex` 替换为目标网卡的 ifindex，可通过 `ip link` 查看：
 
 ```bash
 curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
@@ -184,7 +184,7 @@ curl -X POST 'http://127.0.0.1:9527/api/v1/attachments' \
   }'
 ```
 
-Push a ruleset:
+下发 ruleset：
 
 ```bash
 curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
@@ -207,16 +207,16 @@ curl -X PUT 'http://127.0.0.1:9527/api/v1/ruleset' \
   }'
 ```
 
-View statistics:
+查看统计：
 
 ```bash
 curl http://127.0.0.1:9527/api/v1/stats
 ```
 
-View the event stream:
+查看事件流：
 
 ```bash
 curl -N http://127.0.0.1:9527/api/v1/events/stream
 ```
 
-See `specs/agent-api.md` for more API routes. For day-to-day operations, you can also refer to `scripts/xdpass-cli.py`, which wraps the agent HTTP API calls.
+更多 API 路由见 `specs/agent-api.md`。日常操作也可以参考 `scripts/xdpass-cli.py`，它封装了 agent HTTP API 调用。
